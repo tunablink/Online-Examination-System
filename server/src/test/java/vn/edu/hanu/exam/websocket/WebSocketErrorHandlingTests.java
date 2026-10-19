@@ -15,7 +15,8 @@ import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 
 import tools.jackson.databind.json.JsonMapper;
-
+import vn.edu.hanu.exam.service.LoginService;
+import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
 /**
  * Unit test cho ExamWebSocketHandler – kiểm tra error handling.
  *
@@ -31,10 +32,16 @@ class WebSocketErrorHandlingTests {
 
     @BeforeEach
     void setUp() {
-        JsonMapper jsonMapper = JsonMapper.builder().build();
-        handler = new ExamWebSocketHandler(jsonMapper);
+        JsonMapper jsonMapper =JsonMapper.builder().build();
+
+        RegistrationMessageHandler registrationMessageHandler = mock(RegistrationMessageHandler.class);
+
+        LoginService loginService = mock(LoginService.class);
+
+        handler = new ExamWebSocketHandler(jsonMapper,registrationMessageHandler,loginService);
+
         fakeSession = new FakeWebSocketSession();
-    }
+}
 
     // -----------------------------------------------------------------------
     // INVALID_JSON

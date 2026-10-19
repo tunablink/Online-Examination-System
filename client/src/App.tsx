@@ -1,85 +1,123 @@
-import './App.css';
-
 import {
-  useExamWebSocket
-} from './websocket/useExamWebSocket';
+  Navigate,
+  Route,
+  Routes,
+} from 'react-router';
 
+import DevelopmentPage from './components/common/DevelopmentPage';
 
-function App(){
-  const {status, lastMessage, sendMessage} = useExamWebSocket();
+import LoginPage from './pages/LoginPage/LoginPage';
+import RegisterPage from './pages/RegisterPage/RegisterPage';
+import StudentDashboardPage from './pages/StudentDashboardPage/StudentDashboardPage';
+import { useExamWebSocket } from './websocket/useExamWebSocket';
 
-  const handlePing = () =>{
-    const requestId = sendMessage('PING', {clientTime: new Date().toISOString()});
-
-    if (requestId === null){
-      console.warn('Cannot send PING because WebSocket is not connected.');
-      return;
-    }
-    console.log('PING sent, requestId:', requestId);
-  };
+function App() {
+  const {
+    status,
+    lastMessage,
+    sendMessage,
+  } = useExamWebSocket();
 
   return (
-    <main className="app">
+    <Routes>
+      <Route
+        path="/"
+        element={
+          <Navigate
+            to="/login"
+            replace
+          />
+        }
+      />
 
-      <section className="connection-card">
-        <h1>Online Examination System</h1>
-        <p>
-          React client communicates with the Java server
-        through a persistent WebSocket connection.
-        </p>
-        <div className="connection-status">
-          <span>Status:</span>
-          <strong>{status}</strong>
-        </div>
+      <Route
+        path="/login"
+        element={
+          <LoginPage
+            connectionStatus={status}
+            lastMessage={lastMessage}
+            sendMessage={sendMessage}
+          />
+        }
+      />
 
-        <button
-        type="button" onClick={handlePing} disabled={status !== 'connected'}>
-          Send PING
-        </button>
+      <Route
+        path="/student/exams"
+        element={<StudentDashboardPage/>}
+      />
 
-        {lastMessage !== null && (
-          <section className='server-message'>
-            <strong>Server event:</strong>
-            <h2>Latest server message</h2>
-            
-            <p>
-              <strong>Type:</strong>{' '}
-              {lastMessage.type}
-            </p>
+      <Route
+        path="/student/exams/:examId"
+        element={
+          <DevelopmentPage
+            eyebrow="EXAMINATION DETAILS"
+            title="Examination information"
+            description="This page will display the exam schedule, duration, instructions, and participation status."
+            backTo="/student/exams"
+            backLabel="Back to examinations"
+          />
+        }
+      />
 
-            {lastMessage.requestId && (
-              <p>
-                <strong>Request ID:</strong>{' '}
-                {lastMessage.requestId}
-              </p>
-            )}
+      <Route
+        path="/student/exams/:examId/room"
+        element={
+          <DevelopmentPage
+            eyebrow="EXAMINATION ROOM"
+            title="Examination in progress"
+            description="This page will contain the timer, questions, answer navigation, autosave status, and anti-cheating event collection."
+            backTo="/student/exams"
+            backLabel="Back to examinations"
+          />
+        }
+      />
 
-            {lastMessage.data?.message && (
-              <p>
-                <strong>Message:</strong>{' '}
-                {lastMessage.data.message}
-              </p>
-            )}
+      <Route
+        path="/student/exams/:examId/result"
+        element={
+          <DevelopmentPage
+            eyebrow="EXAMINATION RESULT"
+            title="Your result"
+            description="This page will display the score and result after the lecturer releases them."
+            backTo="/student/exams"
+            backLabel="Back to examinations"
+          />
+        }
+      />
 
-            {lastMessage.data?.serverTime && (
-              <p>
-                <strong>Server time:</strong>{' '}
-                {lastMessage.data.serverTime}
-              </p>
-            )}
+      <Route
+        path="/teacher"
+        element={
+          <DevelopmentPage
+            eyebrow="LECTURER PORTAL"
+            title="Lecturer dashboard"
+            description="This page will provide access to exam creation, question management, assignments, and monitoring."
+          />
+        }
+      />
 
-            {lastMessage.error && (
-              <p>
-                <strong>
-                  {lastMessage.error.code}:
-                </strong>{' '}
-                {lastMessage.error.message}
-              </p>
-            )}
-          </section>
-        )}
-      </section>
-    </main>
+      <Route
+        path="/admin/students/new"
+        element={
+          <RegisterPage
+            connectionStatus={status}
+            lastMessage={lastMessage}
+            sendMessage={sendMessage}
+          />
+        }
+      />
+
+      <Route
+        path="*"
+        element={
+          <DevelopmentPage
+            eyebrow="404"
+            title="Page not found"
+            description="The requested page does not exist in the examination system."
+          />
+        }
+      />
+    </Routes>
   );
 }
 

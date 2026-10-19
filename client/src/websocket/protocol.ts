@@ -1,12 +1,30 @@
-export type ClientMessageType = "PING";
+export type ClientMessageType =
+  | "PING"
+  | "REGISTER"
+  | "LOGIN";
 
 export type ServerMessageType = 
-    | "CONNECTED"
-    | "PONG"
-    | "ERROR";
+  | "CONNECTED"
+  | "PONG"
+  | "REGISTERED"
+  | "LOGGED_IN"
+  | "ERROR";
 
-export interface Base {
-    requestId: string;
+export type UserRole =
+  | "STUDENT"
+  | "TEACHER";
+
+
+export interface RegisterPayload {
+  username: string;
+  password: string;
+  fullName: string;
+  email: string;
+}
+
+export interface LoginPayload {
+  username: string;
+  password: string;
 }
 
 export interface ClientMessage{
@@ -21,14 +39,21 @@ export interface ProtocolError{
 }
 
 export interface ServerMessageData{
-    message?: string;
-    sessionId?: string;
-    serverTime?: string;
+  message?: string;
+  sessionId?: string;
+  serverTime?: string;
+  id?: number;
+  username?: string;
+  fullName?: string;
+  email?: string;
+  role?: UserRole;
+  active?: boolean;
+  createdAt?: string;
 }
 
 export interface ServerMessage{
     requestId: string | null;
-    type: ServerMessageType | null;
+    type: ServerMessageType;
     data: ServerMessageData | null;
     error: ProtocolError | null;
 }
