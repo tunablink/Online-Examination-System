@@ -22,6 +22,6 @@ public record ServerMessage(
 
     //gui thong bao loi cho 1 request cu the
     public static ServerMessage error(String requestId, String code, String message){
-        return new ServerMessage(requestId, "Error", null, new ProtocolError(code, message));
+        return new ServerMessage(requestId, MessageType.ERROR.name(), null, new ProtocolError(code, message));
     }
 }
