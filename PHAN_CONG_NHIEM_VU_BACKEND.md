@@ -1,773 +1,572 @@
-# PHÂN CÔNG NHIỆM VỤ BACKEND – GIAI ĐOẠN EXAM MANAGEMENT
+# PHÂN CÔNG BACKEND – GIAI ĐOẠN TIẾP THEO
 
-## Online Examination System
+## 1. Mục tiêu của giai đoạn
 
-Tài liệu này thay thế toàn bộ bản phân công backend cũ. Trong giai đoạn hiện tại, hai thành viên được giao việc là **Phanh** và **Hải Yến**.
+Giai đoạn này tập trung hoàn thiện hai phần backend gần nhau nhưng có ranh giới rõ ràng:
 
-Mục tiêu của giai đoạn là chuyển hai khu vực quan trọng trên React client từ mock data sang dữ liệu PostgreSQL thật:
+- **Phanh:** hoàn thiện trọn vẹn `Teacher Exam Lifecycle Management`.
+- **Leader:** tự triển khai `Question Management`, giữ các file tích hợp trung tâm và kết nối frontend.
 
-1. Teacher tạo và xem đề thi.
-2. Teacher thêm và xem câu hỏi/lựa chọn của đề thi.
+Code Exam Management cơ bản của Phanh đã được merge vào `main`. Phần hiện có gồm:
 
-Phạm vi được giới hạn để hai thành viên có thể làm song song, viết test đầy đủ và hạn chế conflict. Các phần exam attempt, auto-save, submit, grading, recovery, monitoring, anti-cheating và randomization chưa thuộc nhiệm vụ của hai thành viên trong giai đoạn này.
+- Tạo kỳ thi.
+- Lấy danh sách kỳ thi do giáo viên hiện tại tạo.
+- Lấy chi tiết một kỳ thi theo ownership.
+- Repository dùng Spring JDBC.
+- Service validation cơ bản.
+- WebSocket message handler độc lập.
+- Unit test cho handler và integration test cho service.
 
----
-
-## 1. Trạng thái dự án trước khi bắt đầu
-
-Các foundation đã có trong source:
-
-- Java 21, Spring Boot, Maven và Spring WebSocket.
-- PostgreSQL, Spring JDBC và HikariCP.
-- WebSocket endpoint `/ws` trên cổng `8081`.
-- Message envelope gồm `requestId`, `type`, `payload`, `data` và `error`.
-- Các message `CONNECTED`, `PING`, `PONG`, `REGISTER`, `REGISTERED`, `LOGIN`, `LOGGED_IN`, `ERROR`.
-- `RegistrationService` và `LoginService`.
-- `AuthenticatedSessionRegistry` gắn user đã đăng nhập với WebSocket `sessionId`.
-- Schema và domain model cơ bản cho `users`, `exams`, `questions`, `choices`.
-- React client đã có `CreateExamPage`, `ExamManagementPage`, `ExamOverviewPage` và `QuestionManagementPage`, nhưng các trang nghiệp vụ exam/question vẫn đang dùng mock/local state.
-
-Giai đoạn này không thiết kế lại auth hoặc schema hiện có. Nếu phát hiện foundation có lỗi, thành viên phải báo leader trước khi mở rộng phạm vi.
+Nhiệm vụ tiếp theo của Phanh là mở rộng đúng module này, không chuyển sang một module mới.
 
 ---
 
-## 2. Bảng phân công
+## 2. Kiến trúc và nguyên tắc chung
 
-| Thành viên | Nhiệm vụ | Đầu ra chính | Branch đề xuất |
-| --- | --- | --- | --- |
-| Phanh | Exam Management Backend | Tạo đề, lấy danh sách đề của teacher, lấy chi tiết đề | `feature/exam-management-backend` |
-| Hải Yến | Question Management Backend | Tạo câu hỏi kèm choices, lấy danh sách câu hỏi của một đề | `feature/question-management-backend` |
-| Leader | Chốt contract, review, tích hợp protocol/dispatcher và nối frontend | `MessageType`, `ExamWebSocketHandler`, React protocol và thay mock | Thực hiện sau khi nhận hai nhánh |
-
-Thứ tự merge dự kiến:
-
-1. Phanh – Exam Management Backend.
-2. Chạy toàn bộ server test.
-3. Hải Yến – Question Management Backend.
-4. Chạy toàn bộ server test.
-5. Leader thêm message type, nối dispatcher và tích hợp React client.
-
-Hai thành viên có thể code song song, nhưng Exam Management nên được merge trước vì Question Management phụ thuộc khái niệm ownership và trạng thái của exam.
-
----
-
-## 3. Quy ước chung bắt buộc
-
-### 3.1. Authentication và authorization
-
-Mọi command trong tài liệu này chỉ dành cho teacher.
-
-Handler/service phải tuân theo thứ tự:
-
-1. Lấy user từ `AuthenticatedSessionRegistry` bằng WebSocket `sessionId`.
-2. Không tìm thấy user thì trả `AUTHENTICATION_REQUIRED`.
-3. User không có role `TEACHER` thì trả `FORBIDDEN`.
-4. Teacher ID/creator ID phải lấy từ authenticated session.
-5. Không tin `teacherId`, `createdBy` hoặc role do client gửi lên.
-6. Khi truy cập exam, phải kiểm tra exam thuộc teacher hiện tại.
-7. Nếu resource không tồn tại hoặc không thuộc teacher, trả `EXAM_NOT_FOUND`; không làm lộ rằng resource của người khác tồn tại.
-
-Ví dụ không được chấp nhận:
-
-```json
-{
-  "createdBy": 123,
-  "role": "TEACHER"
-}
-```
-
-Server phải dùng user đã được xác thực trong session registry.
-
-### 3.2. Message envelope
-
-Client command:
-
-```json
-{
-  "requestId": "uuid",
-  "type": "MESSAGE_TYPE",
-  "payload": {}
-}
-```
-
-Response thành công:
-
-```json
-{
-  "requestId": "uuid",
-  "type": "SUCCESS_TYPE",
-  "data": {},
-  "error": null
-}
-```
-
-Response lỗi:
-
-```json
-{
-  "requestId": "uuid",
-  "type": "ERROR",
-  "data": null,
-  "error": {
-    "code": "ERROR_CODE",
-    "message": "Safe error message"
-  }
-}
-```
-
-Không trả stack trace, SQL, password hash hoặc exception message nội bộ cho client.
-
-### 3.3. File trung tâm không được tự sửa
-
-Trong lúc làm việc riêng, Phanh và Hải Yến không tự sửa các file sau:
+Kiến trúc dự án:
 
 ```text
-server/src/main/java/vn/edu/hanu/exam/protocol/MessageType.java
-server/src/main/java/vn/edu/hanu/exam/websocket/ExamWebSocketHandler.java
-server/src/main/resources/schema.sql
-client/src/websocket/protocol.ts
-client/src/App.tsx
-README.md
+React client
+    ↕ WebSocket + JSON
+Java Spring Boot server
+    ↕ Spring JDBC
+PostgreSQL
 ```
 
-Lý do:
+Các nguyên tắc bắt buộc:
 
-- Cả hai cùng thêm enum sẽ conflict trong `MessageType.java`.
-- Cả hai cùng thêm `switch case` sẽ conflict trong `ExamWebSocketHandler.java`.
-- Schema `exams`, `questions`, `choices` đã tồn tại.
-- Leader chịu trách nhiệm đảm bảo contract client/server thống nhất.
-
-Mỗi người phải tạo message handler riêng. Leader sẽ nối các handler vào `ExamWebSocketHandler` sau khi merge.
-
-### 3.4. Coding và database
-
-- Dùng constructor injection.
-- Không dùng field injection.
-- Dùng named SQL parameters cho truy vấn có nhiều tham số.
-- Không nối chuỗi để tạo SQL.
-- Không trả trực tiếp exception database cho client.
-- Service giữ validation và business rule.
-- Repository chỉ giữ persistence/query logic.
-- WebSocket handler parse payload, gọi service và chuyển kết quả/lỗi thành `ServerMessage`.
-- Integration test phải dùng transaction/cleanup hợp lý để không để lại dữ liệu rác.
-- Không commit password database.
+1. Client không quyết định quyền, ownership hoặc trạng thái hợp lệ của kỳ thi.
+2. Mọi command phải được xác thực và phân quyền tại server.
+3. Không tin `teacherId` do client gửi; luôn lấy user từ `AuthenticatedSessionRegistry`.
+4. Mọi câu SQL phải dùng parameter binding, không nối chuỗi từ input.
+5. Không trả stack trace, SQL hoặc thông tin nhạy cảm về client.
+6. Không hard-code mật khẩu PostgreSQL.
+7. Không đưa business logic vào `ExamWebSocketHandler` trung tâm.
+8. Các thao tác gồm nhiều câu SQL và cần tính nguyên tử phải chạy trong transaction.
+9. Mỗi response phải giữ nguyên `requestId` của request khi request có `requestId`.
+10. Tất cả test cũ phải tiếp tục chạy sau thay đổi.
 
 ---
 
-## 4. Phanh – Exam Management Backend
+# 3. NHIỆM VỤ CỦA PHANH
 
-### 4.1. Mục tiêu
+## 3.1. Tên nhiệm vụ
 
-Hiện thực vertical slice cho teacher tạo và đọc đề thi bằng dữ liệu PostgreSQL thật:
+**Hoàn thiện Teacher Exam Lifecycle Management**
+
+Phanh tiếp tục phát triển module Exam Management đã được merge. Phạm vi cuối cùng của module gồm:
 
 ```text
-Authenticated Teacher
-        ↓
-CREATE_EXAM / GET_TEACHER_EXAMS / GET_EXAM
-        ↓
-ExamManagementMessageHandler
-        ↓
-ExamManagementService
-        ↓
-ExamRepository
-        ↓
-PostgreSQL exams
+Create exam
+List teacher exams
+Get exam details
+Update draft exam
+Publish exam
+Close exam
+Delete draft exam
 ```
 
-Sau nhiệm vụ này, leader phải có thể nối React `CreateExamPage`, `ExamManagementPage` và `ExamOverviewPage` vào backend.
+Luồng trạng thái hợp lệ:
 
-### 4.2. Phạm vi message
+```text
+DRAFT → PUBLISHED → CLOSED
+```
 
-| Client → Server | Server → Client | Chức năng |
-| --- | --- | --- |
-| `CREATE_EXAM` | `EXAM_CREATED` | Tạo exam mới ở trạng thái `DRAFT` |
-| `GET_TEACHER_EXAMS` | `TEACHER_EXAMS` | Lấy toàn bộ exam do teacher hiện tại tạo |
-| `GET_EXAM` | `EXAM_DETAILS` | Lấy chi tiết một exam thuộc teacher hiện tại |
+Không triển khai chuyển trạng thái ngược trong giai đoạn này:
 
-Không làm trong nhiệm vụ này:
+```text
+PUBLISHED → DRAFT       không hợp lệ
+CLOSED → PUBLISHED      không hợp lệ
+CLOSED → DRAFT          không hợp lệ
+```
 
-- `UPDATE_EXAM`.
-- `DELETE_EXAM`.
-- `PUBLISH_EXAM`.
-- `CLOSE_EXAM`.
-- Question CRUD.
-- Student exam list.
-- Exam attempt/session.
-- Scheduler, monitoring hoặc anti-cheating.
+---
 
-### 4.3. Contract `CREATE_EXAM`
+## 3.2. Phần đã có và phải được giữ ổn định
 
-Request:
+Các command/response hiện tại phải tiếp tục hoạt động:
+
+```text
+CREATE_EXAM
+EXAM_CREATED
+
+GET_TEACHER_EXAMS
+TEACHER_EXAMS
+
+GET_EXAM
+EXAM_DETAILS
+```
+
+Không được làm hỏng các test hiện tại của:
+
+- `ExamManagementServiceIntegrationTests`.
+- `ExamManagementMessageHandlerTests`.
+- Authentication và session registry.
+- Registration và login.
+- WebSocket error handling.
+
+---
+
+## 3.3. Cập nhật kỳ thi nháp
+
+### Protocol
+
+```text
+UPDATE_EXAM
+→ EXAM_UPDATED
+```
+
+Payload đề xuất:
 
 ```json
 {
-  "requestId": "uuid",
-  "type": "CREATE_EXAM",
+  "requestId": "req-update-exam-1",
+  "type": "UPDATE_EXAM",
   "payload": {
-    "title": "Java Programming Midterm",
-    "description": "Midterm examination for JSD",
-    "durationMinutes": 60
+    "examId": 12,
+    "title": "Advanced Java Programming",
+    "description": "Updated examination description",
+    "durationMinutes": 90
   }
 }
 ```
 
-`createdBy` không xuất hiện trong payload. Server lấy teacher ID từ authenticated session.
+Response thành công phải trả đầy đủ thông tin kỳ thi sau cập nhật và không trả dữ liệu không cần thiết.
 
-Response:
+### Validation bắt buộc
 
-```json
-{
-  "requestId": "uuid",
-  "type": "EXAM_CREATED",
-  "data": {
-    "id": 1,
-    "title": "Java Programming Midterm",
-    "description": "Midterm examination for JSD",
-    "durationMinutes": 60,
-    "status": "DRAFT",
-    "createdBy": 10,
-    "createdAt": "2026-10-22T10:00:00+07:00",
-    "updatedAt": "2026-10-22T10:00:00+07:00"
-  },
-  "error": null
-}
-```
-
-### 4.4. Contract `GET_TEACHER_EXAMS`
-
-Request:
-
-```json
-{
-  "requestId": "uuid",
-  "type": "GET_TEACHER_EXAMS",
-  "payload": {}
-}
-```
-
-Repository phải lọc theo:
-
-```sql
-created_by = :teacherId
-```
-
-Response:
-
-```json
-{
-  "requestId": "uuid",
-  "type": "TEACHER_EXAMS",
-  "data": {
-    "exams": [
-      {
-        "id": 1,
-        "title": "Java Programming Midterm",
-        "description": "Midterm examination for JSD",
-        "durationMinutes": 60,
-        "status": "DRAFT",
-        "createdBy": 10,
-        "createdAt": "2026-10-22T10:00:00+07:00",
-        "updatedAt": "2026-10-22T10:00:00+07:00"
-      }
-    ]
-  },
-  "error": null
-}
-```
-
-### 4.5. Contract `GET_EXAM`
-
-Request:
-
-```json
-{
-  "requestId": "uuid",
-  "type": "GET_EXAM",
-  "payload": {
-    "examId": 1
-  }
-}
-```
-
-Query phải kiểm tra đồng thời:
-
-```sql
-id = :examId
-AND created_by = :teacherId
-```
-
-Không được query chỉ bằng `examId` rồi trả resource cho bất kỳ teacher nào.
-
-### 4.6. File Phanh được tạo
-
-Cấu trúc gợi ý:
-
-```text
-server/src/main/java/vn/edu/hanu/exam/
-├── exception/
-│   └── ExamManagementException.java
-├── repository/
-│   ├── ExamRepository.java
-│   └── JdbcExamRepository.java
-├── service/exam/
-│   ├── CreateExamCommand.java
-│   ├── ExamDetails.java
-│   └── ExamManagementService.java
-└── websocket/
-    ├── dto/
-    │   ├── CreateExamPayload.java
-    │   └── GetExamPayload.java
-    └── handler/
-        └── ExamManagementMessageHandler.java
-```
-
-Test:
-
-```text
-server/src/test/java/vn/edu/hanu/exam/
-├── ExamManagementServiceIntegrationTests.java
-└── websocket/handler/
-    └── ExamManagementMessageHandlerTests.java
-```
-
-Tên DTO có thể điều chỉnh nếu vẫn giữ đúng trách nhiệm và không trùng class hiện có.
-
-### 4.7. Repository contract gợi ý
-
-```java
-public interface ExamRepository {
-
-    Exam create(
-            String title,
-            String description,
-            int durationMinutes,
-            long createdBy
-    );
-
-    List<Exam> findAllByCreatedBy(
-            long createdBy
-    );
-
-    Optional<Exam> findByIdAndCreatedBy(
-            long examId,
-            long createdBy
-    );
-}
-```
-
-Có thể dùng command object cho `create`, nhưng không thiết kế abstraction phức tạp hơn nhu cầu hiện tại.
-
-### 4.8. Validation bắt buộc
-
-- Session phải authenticated.
-- User phải có role `TEACHER`.
-- `title` không null, không blank và không vượt giới hạn database.
-- `description` có thể null.
+- Session đã đăng nhập.
+- User có role `TEACHER`.
+- `examId` hợp lệ.
+- Kỳ thi tồn tại và thuộc teacher hiện tại.
+- Kỳ thi đang ở trạng thái `DRAFT`.
+- `title` sau khi `strip()` không được rỗng.
+- `title` không dài quá 255 ký tự.
 - `durationMinutes > 0`.
-- Exam mới luôn có status `DRAFT`.
-- `createdBy` lấy từ authenticated session.
-- Teacher chỉ đọc được exam do chính mình tạo.
-- Không để SQL exception đi thẳng ra WebSocket response.
+- `description` có thể null hoặc rỗng.
+- Cập nhật `updated_at` khi update thành công.
 
-Error code đề xuất:
-
-```text
-AUTHENTICATION_REQUIRED
-FORBIDDEN
-INVALID_EXAM_TITLE
-INVALID_EXAM_DURATION
-EXAM_NOT_FOUND
-DATABASE_ERROR
-```
-
-Nếu muốn thêm hoặc đổi error code, Phanh phải báo leader để đồng bộ với React client.
-
-### 4.9. Test bắt buộc
-
-`ExamManagementServiceIntegrationTests` tối thiểu phải kiểm tra:
-
-1. Tạo exam hợp lệ và persist thành công.
-2. Exam mới có status `DRAFT`.
-3. `createdBy` đúng teacher đã authenticated.
-4. Title blank bị từ chối.
-5. Duration bằng `0` hoặc âm bị từ chối.
-6. `findAllByCreatedBy` không trả exam của teacher khác.
-7. `findByIdAndCreatedBy` không cho teacher khác đọc exam.
-
-`ExamManagementMessageHandlerTests` tối thiểu phải kiểm tra:
-
-1. Payload đúng trả `EXAM_CREATED`.
-2. Payload thiếu title trả `ERROR`.
-3. Duration sai trả error code đúng.
-4. Session chưa đăng nhập trả `AUTHENTICATION_REQUIRED`.
-5. Student gọi command dành cho teacher trả `FORBIDDEN`.
-6. Response giữ nguyên `requestId` của request.
-
-### 4.10. Điều kiện nghiệm thu
-
-Phanh chỉ báo hoàn thành khi:
-
-- [ ] Tạo exam thật trong PostgreSQL.
-- [ ] Query lại được exam vừa tạo.
-- [ ] Không nhận `createdBy` từ payload.
-- [ ] Có kiểm tra role `TEACHER`.
-- [ ] Teacher không đọc được exam của teacher khác.
-- [ ] Có integration test và handler test.
-- [ ] Test riêng chạy thành công.
-- [ ] Không sửa file trung tâm thuộc leader.
-- [ ] Không mở rộng sang question/attempt/monitoring.
-
-Lệnh test riêng trong PowerShell:
-
-```powershell
-cd server
-$env:DB_PASSWORD = '<database-password>'
-mvn "-Dtest=ExamManagementServiceIntegrationTests,ExamManagementMessageHandlerTests" test
-```
-
-Không ghi mật khẩu thật vào tài liệu hoặc source.
+Không được cho phép sửa kỳ thi `PUBLISHED` hoặc `CLOSED`.
 
 ---
 
-## 5. Hải Yến – Question Management Backend
+## 3.4. Publish kỳ thi
 
-### 5.1. Mục tiêu
-
-Hiện thực vertical slice cho teacher thêm và xem câu hỏi/lựa chọn bằng dữ liệu PostgreSQL thật:
+### Protocol
 
 ```text
-Authenticated Teacher
-        ↓
-CREATE_QUESTION / GET_EXAM_QUESTIONS
-        ↓
-QuestionManagementMessageHandler
-        ↓
-QuestionManagementService
-        ↓
-QuestionRepository
-        ↓
-PostgreSQL questions + choices
+PUBLISH_EXAM
+→ EXAM_PUBLISHED
 ```
 
-Sau nhiệm vụ này, leader phải có thể thay `MOCK_EDITOR_QUESTIONS` trong React `QuestionManagementPage` bằng dữ liệu backend.
-
-### 5.2. Phạm vi message
-
-| Client → Server | Server → Client | Chức năng |
-| --- | --- | --- |
-| `CREATE_QUESTION` | `QUESTION_CREATED` | Tạo question và toàn bộ choices trong một transaction |
-| `GET_EXAM_QUESTIONS` | `EXAM_QUESTIONS` | Lấy questions/choices của exam thuộc teacher hiện tại |
-
-Không làm trong nhiệm vụ này:
-
-- `UPDATE_QUESTION`.
-- `DELETE_QUESTION`.
-- Question bank/import file.
-- Student question DTO.
-- Randomization.
-- Save answer hoặc grading.
-- Exam attempt/session.
-
-### 5.3. Contract `CREATE_QUESTION`
-
-Request:
+Payload đề xuất:
 
 ```json
 {
-  "requestId": "uuid",
-  "type": "CREATE_QUESTION",
+  "requestId": "req-publish-exam-1",
+  "type": "PUBLISH_EXAM",
   "payload": {
-    "examId": 1,
-    "content": "Which keyword is used to inherit a class in Java?",
-    "points": 2,
-    "displayOrder": 0,
-    "choices": [
-      {
-        "content": "extends",
-        "correct": true,
-        "displayOrder": 0
-      },
-      {
-        "content": "implements",
-        "correct": false,
-        "displayOrder": 1
-      },
-      {
-        "content": "inherits",
-        "correct": false,
-        "displayOrder": 2
-      },
-      {
-        "content": "super",
-        "correct": false,
-        "displayOrder": 3
-      }
-    ]
+    "examId": 12
   }
 }
 ```
 
-Response dành cho teacher:
+### Điều kiện publish
 
-```json
-{
-  "requestId": "uuid",
-  "type": "QUESTION_CREATED",
-  "data": {
-    "id": 100,
-    "examId": 1,
-    "content": "Which keyword is used to inherit a class in Java?",
-    "points": 2,
-    "displayOrder": 0,
-    "choices": [
-      {
-        "id": 1001,
-        "content": "extends",
-        "correct": true,
-        "displayOrder": 0
-      },
-      {
-        "id": 1002,
-        "content": "implements",
-        "correct": false,
-        "displayOrder": 1
-      }
-    ]
-  },
-  "error": null
-}
-```
+Chỉ publish khi toàn bộ điều kiện sau đúng:
 
-Teacher response có thể chứa `correct` để phục vụ chỉnh sửa đề. Không được tái sử dụng DTO này cho Student Exam Room.
+- Session đã đăng nhập.
+- User có role `TEACHER`.
+- Kỳ thi thuộc teacher hiện tại.
+- Kỳ thi đang là `DRAFT`.
+- Kỳ thi có ít nhất một question.
+- Mỗi question có ít nhất hai choices.
+- Mỗi question có chính xác một choice có `correct = TRUE`.
 
-### 5.4. Contract `GET_EXAM_QUESTIONS`
+Phanh được phép đọc các bảng `questions` và `choices` để kiểm tra publish readiness, nhưng không triển khai chức năng tạo/sửa/xóa question.
 
-Request:
-
-```json
-{
-  "requestId": "uuid",
-  "type": "GET_EXAM_QUESTIONS",
-  "payload": {
-    "examId": 1
-  }
-}
-```
-
-Response:
-
-```json
-{
-  "requestId": "uuid",
-  "type": "EXAM_QUESTIONS",
-  "data": {
-    "examId": 1,
-    "questions": [
-      {
-        "id": 100,
-        "content": "Which keyword is used to inherit a class in Java?",
-        "points": 2,
-        "displayOrder": 0,
-        "choices": []
-      }
-    ]
-  },
-  "error": null
-}
-```
-
-Questions và choices phải được sắp xếp theo `display_order` để response ổn định.
-
-### 5.5. File Hải Yến được tạo
-
-Cấu trúc gợi ý:
-
-```text
-server/src/main/java/vn/edu/hanu/exam/
-├── exception/
-│   └── QuestionManagementException.java
-├── repository/
-│   ├── QuestionRepository.java
-│   └── JdbcQuestionRepository.java
-├── service/question/
-│   ├── CreateChoiceCommand.java
-│   ├── CreateQuestionCommand.java
-│   ├── QuestionDetails.java
-│   ├── TeacherChoiceDetails.java
-│   └── QuestionManagementService.java
-└── websocket/
-    ├── dto/
-    │   ├── CreateChoicePayload.java
-    │   ├── CreateQuestionPayload.java
-    │   └── GetExamQuestionsPayload.java
-    └── handler/
-        └── QuestionManagementMessageHandler.java
-```
-
-Test:
-
-```text
-server/src/test/java/vn/edu/hanu/exam/
-├── QuestionManagementServiceIntegrationTests.java
-└── websocket/handler/
-    └── QuestionManagementMessageHandlerTests.java
-```
-
-### 5.6. Transaction bắt buộc
-
-Tạo question và choices phải nằm trong cùng transaction:
-
-```java
-@Transactional
-public QuestionDetails createQuestion(
-        long teacherId,
-        CreateQuestionCommand command
-) {
-    // Validate ownership và exam status.
-    // Insert question.
-    // Insert toàn bộ choices.
-    // Trả QuestionDetails.
-}
-```
-
-Nếu insert một choice thất bại thì question và mọi choice đã insert trước đó phải rollback. Không được để database có question thiếu choices.
-
-### 5.7. Authorization và ownership
-
-Trước khi tạo hoặc đọc question, service/repository phải xác minh:
+Publish phải thay đổi trạng thái bằng câu update có điều kiện, ví dụ về ý tưởng:
 
 ```sql
-SELECT id, status
-FROM exams
+UPDATE exams
+SET status = 'PUBLISHED',
+    updated_at = CURRENT_TIMESTAMP
 WHERE id = :examId
   AND created_by = :teacherId
+  AND status = 'DRAFT';
 ```
 
-Quy tắc:
+Service không được chỉ đọc trạng thái rồi update vô điều kiện. Số dòng bị ảnh hưởng phải được kiểm tra để hạn chế race condition và phát hiện trạng thái đã thay đổi.
 
-- Không có kết quả thì trả `EXAM_NOT_FOUND`.
-- Chỉ exam `DRAFT` được thêm question.
-- Exam `PUBLISHED` hoặc `CLOSED` trả `EXAM_NOT_EDITABLE`.
-- Không tiết lộ exam thuộc teacher khác.
-
-### 5.8. Validation bắt buộc
-
-- Session phải authenticated.
-- User phải có role `TEACHER`.
-- `examId` phải hợp lệ.
-- Exam phải thuộc teacher hiện tại.
-- Exam phải có trạng thái `DRAFT` khi tạo question.
-- Question `content` không null/blank.
-- `points > 0`.
-- `displayOrder >= 0`.
-- Có ít nhất hai choices.
-- Choice content không null/blank.
-- Choice display order không âm.
-- Chính xác một choice có `correct = true`.
-
-Ví dụ kiểm tra số đáp án đúng:
-
-```java
-long correctChoiceCount = command.choices().stream()
-        .filter(CreateChoiceCommand::correct)
-        .count();
-
-if (correctChoiceCount != 1) {
-    throw new QuestionManagementException(
-            "INVALID_CORRECT_CHOICE_COUNT",
-            "A question must have exactly one correct choice."
-    );
-}
-```
-
-Error code đề xuất:
+### Các lỗi dự kiến
 
 ```text
 AUTHENTICATION_REQUIRED
 FORBIDDEN
 EXAM_NOT_FOUND
 EXAM_NOT_EDITABLE
-INVALID_QUESTION_CONTENT
-INVALID_QUESTION_POINTS
-INVALID_DISPLAY_ORDER
-TOO_FEW_CHOICES
-INVALID_CHOICE_CONTENT
-INVALID_CORRECT_CHOICE_COUNT
+EXAM_HAS_NO_QUESTIONS
+QUESTION_HAS_TOO_FEW_CHOICES
+QUESTION_HAS_INVALID_CORRECT_CHOICE_COUNT
 DATABASE_ERROR
+INTERNAL_SERVER_ERROR
 ```
-
-Nếu muốn thêm hoặc đổi error code, Hải Yến phải báo leader để đồng bộ React client.
-
-### 5.9. Bảo mật Choice DTO
-
-Domain record `Choice` có trường `correct`, là dữ liệu nhạy cảm khi Student làm bài.
-
-Quy tắc:
-
-- Teacher DTO được phép có `correct`.
-- Student DTO sau này phải là class/record riêng và không chứa `correct`.
-- Không serialize trực tiếp domain `Choice` cho Student.
-- Không tạo một DTO dùng chung cho cả Teacher Question Management và Student Exam Room.
-
-### 5.10. Test bắt buộc
-
-`QuestionManagementServiceIntegrationTests` tối thiểu phải kiểm tra:
-
-1. Tạo question và choices hợp lệ.
-2. `question_id` của choices đúng.
-3. Question blank bị từ chối.
-4. Points bằng `0` hoặc âm bị từ chối.
-5. Ít hơn hai choices bị từ chối.
-6. Không có correct choice bị từ chối.
-7. Có nhiều hơn một correct choice bị từ chối.
-8. Teacher không được tạo question cho exam của teacher khác.
-9. Không được thêm question khi exam là `PUBLISHED` hoặc `CLOSED`.
-10. Insert choice lỗi làm rollback cả question và choices.
-11. Danh sách trả questions/choices đúng `display_order`.
-
-`QuestionManagementMessageHandlerTests` tối thiểu phải kiểm tra:
-
-1. Payload đúng trả `QUESTION_CREATED`.
-2. Payload thiếu `examId` trả `ERROR`.
-3. Payload choices sai trả error code đúng.
-4. Session chưa đăng nhập trả `AUTHENTICATION_REQUIRED`.
-5. Student gọi command dành cho teacher trả `FORBIDDEN`.
-6. Response giữ nguyên `requestId` của request.
-
-### 5.11. Điều kiện nghiệm thu
-
-Hải Yến chỉ báo hoàn thành khi:
-
-- [ ] Question và choices được lưu thật trong PostgreSQL.
-- [ ] Insert question/choices chạy trong một transaction.
-- [ ] Chỉ teacher sở hữu exam `DRAFT` được thêm question.
-- [ ] Có ít nhất hai choices và chính xác một đáp án đúng.
-- [ ] Không serialize domain `Choice` cho Student.
-- [ ] Test ownership và transaction rollback pass.
-- [ ] Có integration test và handler test.
-- [ ] Test riêng chạy thành công.
-- [ ] Không sửa file trung tâm thuộc leader.
-- [ ] Không mở rộng sang update/delete/randomization/attempt/grading.
-
-Lệnh test riêng trong PowerShell:
-
-```powershell
-cd server
-$env:DB_PASSWORD = '<database-password>'
-mvn "-Dtest=QuestionManagementServiceIntegrationTests,QuestionManagementMessageHandlerTests" test
-```
-
-Không ghi mật khẩu thật vào tài liệu hoặc source.
 
 ---
 
-## 6. Phần leader chịu trách nhiệm
+## 3.5. Đóng kỳ thi
 
-Leader không giao hai thành viên tự tích hợp vào file trung tâm để tránh conflict. Sau khi review và merge, leader thực hiện:
+### Protocol
 
-### 6.1. Thêm message type phía Java
+```text
+CLOSE_EXAM
+→ EXAM_CLOSED
+```
 
-Các type dự kiến:
+Chỉ chấp nhận phép chuyển:
+
+```text
+PUBLISHED → CLOSED
+```
+
+Phải từ chối:
+
+- `DRAFT → CLOSED`.
+- `CLOSED → CLOSED`.
+- Teacher khác đóng kỳ thi.
+- Student gửi command.
+- Session chưa đăng nhập.
+
+Update trạng thái phải dùng điều kiện `status = 'PUBLISHED'` ngay trong câu SQL và kiểm tra số dòng bị ảnh hưởng.
+
+---
+
+## 3.6. Xóa kỳ thi nháp
+
+### Protocol
+
+```text
+DELETE_EXAM
+→ EXAM_DELETED
+```
+
+Chỉ được xóa khi:
+
+- User đã đăng nhập và có role `TEACHER`.
+- Kỳ thi thuộc teacher hiện tại.
+- Kỳ thi đang là `DRAFT`.
+
+Không được xóa:
+
+- Kỳ thi của teacher khác.
+- Kỳ thi `PUBLISHED`.
+- Kỳ thi `CLOSED`.
+
+Nếu draft exam đã có questions và choices, thao tác xóa phải chạy trong một transaction và theo thứ tự phù hợp với foreign key:
+
+```text
+DELETE choices
+→ DELETE questions
+→ DELETE exam
+```
+
+Nếu một bước thất bại thì toàn bộ transaction phải rollback. Không được để database còn dữ liệu mồ côi hoặc chỉ xóa một phần.
+
+Không tự ý sửa foreign key thành `ON DELETE CASCADE` trong `schema.sql`. Nếu muốn dùng cascade, phải trao đổi với leader trước.
+
+---
+
+## 3.7. Repository contract
+
+Phanh được mở rộng `ExamRepository` với các operation có tên rõ nghĩa. Ví dụ định hướng:
+
+```java
+Exam updateDraft(
+        long examId,
+        long teacherId,
+        String title,
+        String description,
+        int durationMinutes
+);
+
+ExamPublishReadiness getPublishReadiness(
+        long examId,
+        long teacherId
+);
+
+Exam publish(long examId, long teacherId);
+
+Exam close(long examId, long teacherId);
+
+void deleteDraft(long examId, long teacherId);
+```
+
+Tên và kiểu trả về cuối cùng có thể điều chỉnh cho phù hợp code hiện tại, nhưng phải bảo đảm:
+
+- Repository không phụ thuộc WebSocket DTO.
+- Service không viết SQL trực tiếp.
+- Handler không gọi JDBC trực tiếp.
+- Có cách phân biệt `not found`, sai ownership và sai state mà không tiết lộ dữ liệu của teacher khác.
+
+Có thể tạo một record chỉ dùng nội bộ server, ví dụ:
+
+```java
+public record ExamPublishReadiness(
+        int questionCount,
+        int invalidChoiceCount,
+        int invalidCorrectChoiceCount
+) {
+    public boolean canPublish() {
+        return questionCount > 0
+                && invalidChoiceCount == 0
+                && invalidCorrectChoiceCount == 0;
+    }
+}
+```
+
+Đây chỉ là gợi ý thiết kế, không bắt buộc sao chép nguyên văn nếu có thiết kế rõ ràng hơn.
+
+---
+
+## 3.8. Service contract
+
+`ExamManagementService` chịu trách nhiệm:
+
+- Validate input.
+- Kiểm tra ownership mà không lộ dữ liệu teacher khác.
+- Kiểm tra state transition.
+- Kiểm tra publish readiness.
+- Điều phối repository.
+- Chuyển lỗi database thành error code an toàn.
+- Bảo đảm delete nhiều bảng chạy trong transaction.
+
+Không truyền `LoggedInUser`, `WebSocketSession`, `ClientMessage` hoặc JSON object xuống repository.
+
+Không dùng exception message từ PostgreSQL làm message trả trực tiếp cho client.
+
+---
+
+## 3.9. WebSocket handler
+
+Mở rộng `ExamManagementMessageHandler` bằng các method độc lập:
+
+```text
+handleUpdate(...)
+handlePublish(...)
+handleClose(...)
+handleDelete(...)
+```
+
+Mỗi method phải:
+
+1. Lấy authenticated user từ `AuthenticatedSessionRegistry`.
+2. Từ chối session chưa đăng nhập.
+3. Từ chối user không phải `TEACHER`.
+4. Convert payload an toàn.
+5. Gọi service tương ứng.
+6. Giữ nguyên `requestId`.
+7. Trả response hoặc `ERROR` theo protocol.
+8. Không làm đóng WebSocket khi một request nghiệp vụ thất bại.
+
+Thống nhất mã lỗi không xác định là:
+
+```text
+INTERNAL_SERVER_ERROR
+```
+
+Không tạo thêm biến thể `INTERNAL_ERROR`.
+
+---
+
+## 3.10. Test bắt buộc
+
+### Service/repository integration tests
+
+Tối thiểu phải có các trường hợp:
+
+1. Update một `DRAFT` exam hợp lệ.
+2. Title blank bị từ chối.
+3. Title dài hơn 255 ký tự bị từ chối.
+4. Duration bằng `0` hoặc âm bị từ chối.
+5. Teacher không update được exam của teacher khác.
+6. Không update `PUBLISHED` hoặc `CLOSED`.
+7. Publish exam có question/choices hợp lệ.
+8. Không publish exam không có question.
+9. Không publish khi một question có ít hơn hai choices.
+10. Không publish khi một question không có correct choice.
+11. Không publish khi một question có nhiều correct choices.
+12. Teacher không publish được exam của teacher khác.
+13. Close `PUBLISHED` exam thành công.
+14. Không close trực tiếp một `DRAFT` exam.
+15. Không close lại exam đã `CLOSED`.
+16. Delete `DRAFT` exam không có question.
+17. Delete `DRAFT` exam cùng questions và choices.
+18. Lỗi ở giữa delete làm rollback toàn bộ transaction.
+19. Không delete `PUBLISHED` hoặc `CLOSED`.
+20. Teacher không delete được exam của teacher khác.
+
+### Handler unit tests
+
+Tối thiểu phải có:
+
+1. Update hợp lệ trả `EXAM_UPDATED`.
+2. Publish hợp lệ trả `EXAM_PUBLISHED`.
+3. Close hợp lệ trả `EXAM_CLOSED`.
+4. Delete hợp lệ trả `EXAM_DELETED`.
+5. Payload null hoặc sai kiểu trả `INVALID_PAYLOAD`.
+6. Thiếu `examId` trả error phù hợp.
+7. Session chưa đăng nhập trả `AUTHENTICATION_REQUIRED`.
+8. User `STUDENT` trả `FORBIDDEN`.
+9. Ownership/state error giữ đúng error code.
+10. Response giữ nguyên `requestId`.
+11. Internal exception trả `INTERNAL_SERVER_ERROR`, không trả stack trace.
+
+Không viết test chỉ để tăng số lượng. Mỗi test phải kiểm tra behavior quan trọng bằng assertion rõ ràng.
+
+---
+
+## 3.11. File Phanh được phép sửa
+
+```text
+server/src/main/java/vn/edu/hanu/exam/exception/ExamManagementException.java
+server/src/main/java/vn/edu/hanu/exam/repository/ExamRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcExamRepository.java
+server/src/main/java/vn/edu/hanu/exam/service/exam/**
+server/src/main/java/vn/edu/hanu/exam/websocket/dto/*Exam*.java
+server/src/main/java/vn/edu/hanu/exam/websocket/handler/ExamManagementMessageHandler.java
+server/src/test/java/**/exam/**
+server/src/test/java/**/ExamManagementMessageHandlerTests.java
+```
+
+Phanh có thể tạo thêm class/record trong đúng package Exam Management nếu cần.
+
+---
+
+## 3.12. File Phanh không được sửa
+
+Để tránh conflict, Phanh không sửa:
+
+```text
+server/src/main/java/vn/edu/hanu/exam/protocol/MessageType.java
+server/src/main/java/vn/edu/hanu/exam/websocket/ExamWebSocketHandler.java
+server/src/main/resources/schema.sql
+README.md
+PHAN_CONG_NHIEM_VU_BACKEND.md
+client/**
+```
+
+Phanh cũng không sửa:
+
+- Question Management của leader.
+- Attempt/session.
+- Auto-save answer.
+- Submission/grading.
+- Monitoring.
+- Anti-cheating.
+- Frontend React.
+
+Nếu phát hiện cần sửa file ngoài phạm vi, Phanh phải báo leader trước, không tự ý mở rộng scope.
+
+---
+
+## 3.13. Git workflow dành cho Phanh
+
+Trước khi bắt đầu, đồng bộ từ `main` và tạo branch riêng. Tên branch đề xuất:
+
+```text
+feature/phanh-exam-lifecycle
+```
+
+Không commit:
+
+- Mật khẩu database.
+- File IDE cá nhân.
+- `target/`.
+- Log runtime.
+- Thay đổi frontend.
+- Thay đổi ngoài phạm vi nhiệm vụ.
+
+Trước khi gửi Pull Request, chạy:
+
+```powershell
+cd server
+$env:DB_PASSWORD = '<local-database-password>'
+mvn test
+cd ..
+git diff --check
+git status
+```
+
+Phanh phải gửi cho leader:
+
+- Branch hoặc Pull Request.
+- Commit hash cuối cùng.
+- Danh sách file đã thay đổi.
+- Kết quả `mvn test`.
+- Mô tả protocol/request/response thực tế.
+- Mọi điểm khác so với tài liệu này, nếu có.
+
+Không merge trực tiếp vào `main` khi leader chưa review.
+
+---
+
+## 3.14. Definition of Done của Phanh
+
+Phanh chỉ báo hoàn thành khi tất cả mục sau đạt:
+
+- [ ] Create/list/get cũ vẫn hoạt động.
+- [ ] Update `DRAFT` exam hoạt động.
+- [ ] Publish validation kiểm tra dữ liệu questions/choices thật.
+- [ ] Chỉ cho phép `DRAFT → PUBLISHED`.
+- [ ] Chỉ cho phép `PUBLISHED → CLOSED`.
+- [ ] Delete chỉ cho phép với `DRAFT`.
+- [ ] Delete questions/choices/exam chạy trong một transaction.
+- [ ] Authentication, role và ownership được kiểm tra tại server.
+- [ ] Không nhận `teacherId` từ client làm nguồn quyền hạn.
+- [ ] SQL dùng parameter binding.
+- [ ] Handler giữ nguyên `requestId`.
+- [ ] Error code thống nhất, không lộ thông tin nội bộ.
+- [ ] Test mới bao phủ success, validation, authorization, state và rollback.
+- [ ] Toàn bộ test cũ và mới đều pass.
+- [ ] `git diff --check` không báo lỗi.
+- [ ] Không sửa các file bị cấm.
+- [ ] Không còn debug code hoặc dead code.
+- [ ] Pull Request mô tả rõ thay đổi và bằng chứng test.
+
+---
+
+# 4. PHẦN LEADER TỰ TRIỂN KHAI
+
+Leader tự chịu trách nhiệm cho:
+
+## 4.1. Question Management
+
+- Question repository và JDBC implementation.
+- Choice persistence.
+- Tạo question cùng choices trong transaction.
+- Danh sách questions của một exam.
+- Update/delete question nếu được đưa vào milestone.
+- Kiểm tra ownership của exam.
+- Chỉ cho sửa question khi exam còn `DRAFT`.
+- Validation ít nhất hai choices và chính xác một correct choice.
+- Teacher DTO có thể chứa `correct`; student DTO tuyệt đối không được chứa đáp án đúng.
+- Test service/repository/handler và rollback.
+
+## 4.2. Tích hợp trung tâm
+
+Leader giữ quyền sửa:
+
+```text
+MessageType.java
+ExamWebSocketHandler.java
+schema.sql
+README.md
+client/**
+```
+
+Sau khi review và merge module Exam Lifecycle cùng Question Management, leader mới thêm protocol vào `MessageType` và nối handler vào `ExamWebSocketHandler`.
+
+Các message dự kiến phải đồng bộ:
 
 ```text
 CREATE_EXAM
@@ -776,203 +575,72 @@ GET_TEACHER_EXAMS
 TEACHER_EXAMS
 GET_EXAM
 EXAM_DETAILS
-
+UPDATE_EXAM
+EXAM_UPDATED
+PUBLISH_EXAM
+EXAM_PUBLISHED
+CLOSE_EXAM
+EXAM_CLOSED
+DELETE_EXAM
+EXAM_DELETED
 CREATE_QUESTION
 QUESTION_CREATED
 GET_EXAM_QUESTIONS
 EXAM_QUESTIONS
 ```
 
-Leader phải đặt `acceptedFromClient` đúng:
-
-- Command client gửi: `true`.
-- Response server gửi: `false`.
-
-### 6.2. Nối `ExamWebSocketHandler`
-
-Pseudo-code tích hợp:
-
-```java
-case CREATE_EXAM ->
-        examManagementMessageHandler.handleCreate(session, clientMessage);
-
-case GET_TEACHER_EXAMS ->
-        examManagementMessageHandler.handleList(session, clientMessage);
-
-case GET_EXAM ->
-        examManagementMessageHandler.handleGet(session, clientMessage);
-
-case CREATE_QUESTION ->
-        questionManagementMessageHandler.handleCreate(session, clientMessage);
-
-case GET_EXAM_QUESTIONS ->
-        questionManagementMessageHandler.handleList(session, clientMessage);
-```
-
-Tên method cuối cùng phụ thuộc implementation đã review, nhưng không được đưa toàn bộ business logic vào `ExamWebSocketHandler`.
-
-### 6.3. Đồng bộ React protocol
-
-Leader thêm các message type tương ứng vào:
-
-```text
-client/src/websocket/protocol.ts
-```
-
-Sau đó nối frontend theo thứ tự:
-
-1. `CreateExamPage` gửi `CREATE_EXAM`.
-2. `ExamManagementPage` gửi `GET_TEACHER_EXAMS`.
-3. `ExamOverviewPage` gửi `GET_EXAM`.
-4. `QuestionManagementPage` gửi `GET_EXAM_QUESTIONS` và `CREATE_QUESTION`.
-5. Chỉ xóa mock ở từng trang sau khi flow server thật hoạt động và xử lý loading/error/empty state đầy đủ.
-
-### 6.4. Full test sau merge
-
-```powershell
-cd server
-$env:DB_PASSWORD = '<database-password>'
-mvn test
-```
-
-Sau đó kiểm tra client:
-
-```powershell
-cd ..\client
-npm.cmd run lint
-npm.cmd run build
-```
-
-Từ repository root:
-
-```powershell
-git diff --check
-```
+Leader chịu trách nhiệm cập nhật React sau khi backend contract đã ổn định.
 
 ---
 
-## 7. Quy trình làm việc và bàn giao
+# 5. Thứ tự phối hợp và merge
 
-### 7.1. Trước khi code
+Thứ tự thực hiện đề xuất:
 
-Mỗi thành viên phải:
-
-1. Đọc `README.md` phần architecture, protocol, database và current status.
-2. Đọc `schema.sql` và domain record hiện tại.
-3. Đọc `AuthenticatedSessionRegistry` và cách `ExamWebSocketHandler` xử lý login/error.
-4. Xác nhận lại payload/response/error code với leader trước khi tạo DTO.
-5. Không tự mở rộng scope.
-
-### 7.2. Trong khi code
-
-- Commit theo từng phần nhỏ: repository, service, handler, test.
-- Không trộn format/refactor file không liên quan.
-- Nếu cần thay file leader-owned, dừng và báo leader.
-- Nếu contract cần đổi, cập nhật leader trước khi frontend dựa vào contract cũ.
-- Không bỏ qua authorization chỉ để test chức năng nhanh.
-
-### 7.3. Khi bàn giao
-
-Mỗi thành viên gửi cho leader:
-
-1. Tên branch.
-2. Danh sách file đã tạo/sửa.
-3. Message contract cuối cùng.
-4. Error code cuối cùng.
-5. Lệnh test đã chạy.
-6. Output `BUILD SUCCESS` của test riêng.
-7. Các giới hạn/chưa làm.
-8. Hướng dẫn test thủ công nếu có.
-
-Không chỉ nhắn “xong rồi” mà không có bằng chứng test.
+1. Leader gửi tài liệu này cho Phanh.
+2. Phanh xác nhận payload, response và error code trước khi code.
+3. Phanh làm trên branch `feature/phanh-exam-lifecycle`.
+4. Song song, leader triển khai Question Management trên branch/worktree của leader.
+5. Phanh chạy toàn bộ test và mở Pull Request.
+6. Leader review file scope, SQL, transaction, authorization và test.
+7. Leader merge Exam Lifecycle vào `main`.
+8. Leader chạy toàn bộ backend test với PostgreSQL thật.
+9. Leader tích hợp `MessageType` và `ExamWebSocketHandler`.
+10. Leader kết nối các trang React Teacher với backend thật.
+11. Chỉ xóa mock data của từng trang sau khi flow thật đã hoạt động và có loading/error/empty state.
 
 ---
 
-## 8. Lịch triển khai đề xuất
+# 6. Những phần chưa giao trong giai đoạn này
 
-### Ngày 1
+Không tự mở rộng sang các phần sau:
 
-Phanh:
-
-- Chốt `ExamRepository` contract.
-- Viết test create/list/get.
-- Hiện thực `JdbcExamRepository`.
-
-Hải Yến:
-
-- Chốt nested DTO/command cho question và choices.
-- Viết validation test.
-- Hiện thực repository transaction cơ bản.
-
-### Ngày 2
-
-Phanh:
-
-- Hiện thực `ExamManagementService`.
-- Thêm ownership/role validation.
-- Hoàn thiện integration test.
-
-Hải Yến:
-
-- Hiện thực `QuestionManagementService`.
-- Thêm ownership/exam-status validation.
-- Hoàn thiện rollback test.
-
-### Ngày 3
-
-Cả hai:
-
-- Hoàn thiện message handler riêng.
-- Hoàn thiện handler unit test.
-- Chạy test riêng.
-- Tự review và bàn giao branch.
-
-Leader:
-
-- Review Phanh trước và merge Exam Management.
-- Chạy full server test.
-- Review Hải Yến và merge Question Management.
-- Chạy full server test lần nữa.
-- Tích hợp protocol/dispatcher/frontend.
-
----
-
-## 9. Definition of Done chung
-
-Một nhiệm vụ chỉ được coi là hoàn thành nếu đáp ứng tất cả điều kiện liên quan:
-
-- [ ] Code compile.
-- [ ] Test được viết và chạy thành công.
-- [ ] Có `BUILD SUCCESS`.
-- [ ] Không hard-code database password.
-- [ ] Không tin teacher ID/role từ payload.
-- [ ] Có authentication và authorization.
-- [ ] Có ownership check.
-- [ ] Không trả stack trace/SQL/internal exception cho client.
-- [ ] Response giữ nguyên request ID.
-- [ ] Không sửa file ngoài scope nếu chưa báo leader.
-- [ ] Không làm hỏng các test auth/registration/protocol hiện có.
-- [ ] `git diff --check` không báo lỗi whitespace.
-- [ ] Leader review và chấp nhận contract.
-
----
-
-## 10. Phần chưa giao trong giai đoạn này
-
-Các phần dưới đây vẫn do leader giữ hoặc sẽ phân công ở giai đoạn sau:
-
-- Exam update/publish/close/delete.
-- Question update/delete và question bank.
-- Student assigned-exam query.
+- Student available-exam query.
 - Exam attempt/session.
 - Question/choice randomization theo attempt.
 - Server-authoritative deadline.
 - Auto-save answer.
 - Reconnect và exam recovery.
 - Idempotent submit/finalization.
-- Grading/result/leaderboard.
+- Grading, result và leaderboard.
 - Real-time monitoring.
-- Suspicious-activity/anti-cheating rules.
-- Concurrency test và load test.
+- Suspicious activity và anti-cheating rules.
+- Concurrency/load test toàn hệ thống.
 
-Không tự triển khai các phần này trong branch hiện tại vì sẽ làm tăng conflict, thay đổi contract chưa chốt và vượt quá giới hạn nhiệm vụ.
+Các phần này sẽ được chia theo milestone sau khi Teacher Exam Lifecycle và Question Management chạy end-to-end.
+
+---
+
+# 7. Điều kiện trước khi bắt đầu milestone tiếp theo
+
+Chỉ chuyển sang attempt/submission/anti-cheating khi:
+
+- Teacher tạo được exam thật từ React.
+- Teacher xem và cập nhật exam thật.
+- Teacher tạo và xem questions/choices thật.
+- Publish validation hoạt động với dữ liệu PostgreSQL thật.
+- Teacher publish và close exam đúng state transition.
+- Delete draft rollback an toàn khi có lỗi.
+- Backend full test trả `BUILD SUCCESS`.
+- Client chạy `npm run lint` và `npm run build` thành công.
+- README phản ánh đúng trạng thái thực tế, không đánh dấu hoàn thành sớm.
