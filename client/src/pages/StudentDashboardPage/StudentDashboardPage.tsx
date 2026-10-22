@@ -1,21 +1,13 @@
-import { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router';
+import { useMemo, useState } from "react";
+import { Link } from "react-router";
+import StudentPortalHeader from "../../components/layout/StudentPortalHeader";
 
-import {
-  MOCK_STUDENT,
-  MOCK_STUDENT_EXAMS,
-} from '../../mocks/exams';
+import { MOCK_STUDENT_EXAMS } from "../../mocks/exams";
 
-import type {
-  ExamStatus,
-  StudentExam,
-} from '../../types/exam';
+import type { ExamStatus, StudentExam } from "../../types/exam";
+import { useAuth } from "../../auth/useAuth";
 
-type ExamFilter =
-  | 'ALL'
-  | 'ACTIVE'
-  | 'UPCOMING'
-  | 'COMPLETED';
+type ExamFilter = "ALL" | "ACTIVE" | "UPCOMING" | "COMPLETED";
 
 interface StatusAppearance {
   label: string;
@@ -23,43 +15,35 @@ interface StatusAppearance {
   dotClassName: string;
 }
 
-const STATUS_APPEARANCE: Record<
-  ExamStatus,
-  StatusAppearance
-> = {
+const STATUS_APPEARANCE: Record<ExamStatus, StatusAppearance> = {
   AVAILABLE: {
-    label: 'Available now',
-    badgeClassName:
-      'border-emerald-200 bg-emerald-50 text-emerald-800',
-    dotClassName: 'bg-emerald-500',
+    label: "Available now",
+    badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    dotClassName: "bg-emerald-500",
   },
 
   IN_PROGRESS: {
-    label: 'In progress',
-    badgeClassName:
-      'border-blue-200 bg-blue-50 text-blue-800',
-    dotClassName: 'bg-blue-500',
+    label: "In progress",
+    badgeClassName: "border-blue-200 bg-blue-50 text-blue-800",
+    dotClassName: "bg-blue-500",
   },
 
   UPCOMING: {
-    label: 'Upcoming',
-    badgeClassName:
-      'border-amber-200 bg-amber-50 text-amber-800',
-    dotClassName: 'bg-amber-500',
+    label: "Upcoming",
+    badgeClassName: "border-amber-200 bg-amber-50 text-amber-800",
+    dotClassName: "bg-amber-500",
   },
 
   SUBMITTED: {
-    label: 'Submitted',
-    badgeClassName:
-      'border-slate-200 bg-slate-50 text-slate-700',
-    dotClassName: 'bg-slate-500',
+    label: "Submitted",
+    badgeClassName: "border-slate-200 bg-slate-50 text-slate-700",
+    dotClassName: "bg-slate-500",
   },
 
   RESULT_RELEASED: {
-    label: 'Result released',
-    badgeClassName:
-      'border-violet-200 bg-violet-50 text-violet-800',
-    dotClassName: 'bg-violet-500',
+    label: "Result released",
+    badgeClassName: "border-violet-200 bg-violet-50 text-violet-800",
+    dotClassName: "bg-violet-500",
   },
 };
 
@@ -68,90 +52,75 @@ const FILTERS: Array<{
   label: string;
 }> = [
   {
-    value: 'ALL',
-    label: 'All examinations',
+    value: "ALL",
+    label: "All examinations",
   },
   {
-    value: 'ACTIVE',
-    label: 'Available',
+    value: "ACTIVE",
+    label: "Available",
   },
   {
-    value: 'UPCOMING',
-    label: 'Upcoming',
+    value: "UPCOMING",
+    label: "Upcoming",
   },
   {
-    value: 'COMPLETED',
-    label: 'Completed',
+    value: "COMPLETED",
+    label: "Completed",
   },
 ];
 
-const DATE_FORMATTER = new Intl.DateTimeFormat(
-  'en-GB',
-  {
-    weekday: 'short',
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  },
-);
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  weekday: "short",
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 
 function formatExamDate(value: string): string {
   return DATE_FORMATTER.format(new Date(value));
 }
 
-function matchesFilter(
-  exam: StudentExam,
-  filter: ExamFilter,
-): boolean {
-  if (filter === 'ALL') {
+function matchesFilter(exam: StudentExam, filter: ExamFilter): boolean {
+  if (filter === "ALL") {
     return true;
   }
 
-  if (filter === 'ACTIVE') {
-    return (
-      exam.status === 'AVAILABLE' ||
-      exam.status === 'IN_PROGRESS'
-    );
+  if (filter === "ACTIVE") {
+    return exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS";
   }
 
-  if (filter === 'UPCOMING') {
-    return exam.status === 'UPCOMING';
+  if (filter === "UPCOMING") {
+    return exam.status === "UPCOMING";
   }
 
-  return (
-    exam.status === 'SUBMITTED' ||
-    exam.status === 'RESULT_RELEASED'
-  );
+  return exam.status === "SUBMITTED" || exam.status === "RESULT_RELEASED";
 }
 
 interface ExamCardProps {
   exam: StudentExam;
 }
 
-function ExamCard({
-  exam,
-}: ExamCardProps) {
-  const statusAppearance =
-    STATUS_APPEARANCE[exam.status];
+function ExamCard({ exam }: ExamCardProps) {
+  const statusAppearance = STATUS_APPEARANCE[exam.status];
 
   const destination =
-    exam.status === 'RESULT_RELEASED'
+    exam.status === "RESULT_RELEASED"
       ? `/student/exams/${exam.id}/result`
       : `/student/exams/${exam.id}`;
 
   const actionLabel =
-    exam.status === 'AVAILABLE'
-      ? 'View and enter exam'
-      : exam.status === 'IN_PROGRESS'
-        ? 'Continue examination'
-        : exam.status === 'RESULT_RELEASED'
-          ? 'View result'
-          : exam.status === 'SUBMITTED'
-            ? 'View submission'
-            : 'View details';
+    exam.status === "AVAILABLE"
+      ? "View and enter exam"
+      : exam.status === "IN_PROGRESS"
+        ? "Continue examination"
+        : exam.status === "RESULT_RELEASED"
+          ? "View result"
+          : exam.status === "SUBMITTED"
+            ? "View submission"
+            : "View details";
 
   return (
     <article
@@ -177,9 +146,7 @@ function ExamCard({
               text-xs font-semibold
             "
           >
-            <span className="text-blue-700">
-              {exam.courseCode}
-            </span>
+            <span className="text-blue-700">{exam.courseCode}</span>
 
             <span
               className="
@@ -188,9 +155,7 @@ function ExamCard({
               aria-hidden="true"
             />
 
-            <span className="text-slate-500">
-              {exam.examCode}
-            </span>
+            <span className="text-slate-500">{exam.examCode}</span>
           </div>
 
           <h3
@@ -203,9 +168,7 @@ function ExamCard({
             {exam.title}
           </h3>
 
-          <p className="mt-1 text-sm text-slate-500">
-            {exam.courseName}
-          </p>
+          <p className="mt-1 text-sm text-slate-500">{exam.courseName}</p>
         </div>
 
         <span
@@ -289,19 +252,17 @@ function ExamCard({
         "
       >
         <div className="text-xs text-slate-500">
-          {exam.status === 'RESULT_RELEASED' &&
+          {exam.status === "RESULT_RELEASED" &&
           exam.score !== undefined &&
           exam.totalScore !== undefined ? (
             <p>
-              Score:{' '}
+              Score:{" "}
               <strong className="text-slate-900">
                 {exam.score}/{exam.totalScore}
               </strong>
             </p>
           ) : (
-            <p>
-              End time: {formatExamDate(exam.endsAt)}
-            </p>
+            <p>End time: {formatExamDate(exam.endsAt)}</p>
           )}
         </div>
 
@@ -312,8 +273,7 @@ function ExamCard({
             text-xs font-semibold
             transition-colors
             ${
-              exam.status === 'AVAILABLE' ||
-              exam.status === 'IN_PROGRESS'
+              exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS"
                 ? `
                   bg-blue-700 text-white
                   hover:bg-blue-800
@@ -329,10 +289,7 @@ function ExamCard({
           to={destination}
         >
           {actionLabel}
-          <span
-            className="ml-2 text-base leading-none"
-            aria-hidden="true"
-          >
+          <span className="ml-2 text-base leading-none" aria-hidden="true">
             →
           </span>
         </Link>
@@ -342,135 +299,32 @@ function ExamCard({
 }
 
 function StudentDashboardPage() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
 
-  const [activeFilter, setActiveFilter] =
-    useState<ExamFilter>('ALL');
+  const displayName = user?.fullName ?? "Student";
+  const [activeFilter, setActiveFilter] = useState<ExamFilter>("ALL");
 
   const filteredExams = useMemo(
     () =>
-      MOCK_STUDENT_EXAMS.filter((exam) =>
-        matchesFilter(exam, activeFilter),
-      ),
+      MOCK_STUDENT_EXAMS.filter((exam) => matchesFilter(exam, activeFilter)),
     [activeFilter],
   );
 
-  const availableCount =
-    MOCK_STUDENT_EXAMS.filter(
-      (exam) =>
-        exam.status === 'AVAILABLE' ||
-        exam.status === 'IN_PROGRESS',
-    ).length;
+  const availableCount = MOCK_STUDENT_EXAMS.filter(
+    (exam) => exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS",
+  ).length;
 
-  const upcomingCount =
-    MOCK_STUDENT_EXAMS.filter(
-      (exam) => exam.status === 'UPCOMING',
-    ).length;
+  const upcomingCount = MOCK_STUDENT_EXAMS.filter(
+    (exam) => exam.status === "UPCOMING",
+  ).length;
 
-  const completedCount =
-    MOCK_STUDENT_EXAMS.filter(
-      (exam) =>
-        exam.status === 'SUBMITTED' ||
-        exam.status === 'RESULT_RELEASED',
-    ).length;
-
-  const handleSignOut = () => {
-    navigate('/login', {
-      replace: true,
-    });
-  };
+  const completedCount = MOCK_STUDENT_EXAMS.filter(
+    (exam) => exam.status === "SUBMITTED" || exam.status === "RESULT_RELEASED",
+  ).length;
 
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-slate-950">
-      <header
-        className="
-          border-b border-slate-200
-          bg-white
-        "
-      >
-        <div
-          className="
-            mx-auto flex min-h-16 w-full
-            max-w-[1240px] items-center
-            justify-between gap-6 px-6
-            max-sm:px-4
-          "
-        >
-          <Link
-            className="flex items-center gap-3"
-            to="/student/exams"
-          >
-            <span
-              className="
-                grid h-8 w-8 place-items-center
-                rounded-md bg-blue-700
-                text-[11px] font-extrabold
-                tracking-wide text-white
-              "
-              aria-hidden="true"
-            >
-              OE
-            </span>
-
-            <div>
-              <p
-                className="
-                  text-[10px] font-bold
-                  tracking-[0.14em] text-slate-400
-                "
-              >
-                STUDENT PORTAL
-              </p>
-
-              <p className="text-sm font-semibold text-slate-900">
-                Online Examination
-              </p>
-            </div>
-          </Link>
-
-          <div className="flex items-center gap-4">
-            <div
-              className="
-                text-right max-sm:hidden
-              "
-            >
-              <p className="text-xs font-semibold text-slate-900">
-                {MOCK_STUDENT.fullName}
-              </p>
-
-              <p className="mt-0.5 text-[11px] text-slate-500">
-                {MOCK_STUDENT.studentId}
-              </p>
-            </div>
-
-            <div
-              className="
-                grid h-9 w-9 place-items-center
-                rounded-full bg-slate-100
-                text-xs font-bold text-slate-700
-              "
-              aria-hidden="true"
-            >
-              AN
-            </div>
-
-            <button
-              className="
-                rounded-md border border-slate-300
-                bg-white px-3 py-2
-                text-xs font-semibold text-slate-700
-                transition-colors
-                hover:border-red-300
-                hover:text-red-700
-              "
-              type="button"
-              onClick={handleSignOut}
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      </header>
+      <StudentPortalHeader currentSection="Examinations" />
 
       <div
         className="
@@ -501,12 +355,12 @@ function StudentDashboardPage() {
                 tracking-[-0.035em] text-slate-950
               "
             >
-              Welcome back, {MOCK_STUDENT.fullName}
+              Welcome back, {displayName}
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              Review your assigned examinations and check their
-              availability before entering an examination room.
+              Review your assigned examinations and check their availability
+              before entering an examination room.
             </p>
           </div>
 
@@ -517,9 +371,7 @@ function StudentDashboardPage() {
               text-xs leading-5 text-blue-900
             "
           >
-            <p className="font-semibold">
-              Server connection required
-            </p>
+            <p className="font-semibold">Server connection required</p>
 
             <p className="mt-1 text-blue-700">
               Keep this browser open during an active examination.
@@ -553,9 +405,7 @@ function StudentDashboardPage() {
               {availableCount}
             </p>
 
-            <p className="mt-2 text-xs text-emerald-800">
-              Ready to enter
-            </p>
+            <p className="mt-2 text-xs text-emerald-800">Ready to enter</p>
           </article>
 
           <article
@@ -601,9 +451,7 @@ function StudentDashboardPage() {
               {completedCount}
             </p>
 
-            <p className="mt-2 text-xs text-slate-500">
-              Submitted or graded
-            </p>
+            <p className="mt-2 text-xs text-slate-500">Submitted or graded</p>
           </article>
         </section>
 
@@ -625,10 +473,8 @@ function StudentDashboardPage() {
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                {filteredExams.length}{' '}
-                {filteredExams.length === 1
-                  ? 'examination'
-                  : 'examinations'}
+                {filteredExams.length}{" "}
+                {filteredExams.length === 1 ? "examination" : "examinations"}
               </p>
             </div>
 
@@ -641,8 +487,7 @@ function StudentDashboardPage() {
               aria-label="Filter examinations"
             >
               {FILTERS.map((filter) => {
-                const isActive =
-                  activeFilter === filter.value;
+                const isActive = activeFilter === filter.value;
 
                 return (
                   <button
@@ -665,9 +510,7 @@ function StudentDashboardPage() {
                       }
                     `}
                     type="button"
-                    onClick={() =>
-                      setActiveFilter(filter.value)
-                    }
+                    onClick={() => setActiveFilter(filter.value)}
                   >
                     {filter.label}
                   </button>
@@ -684,10 +527,7 @@ function StudentDashboardPage() {
               "
             >
               {filteredExams.map((exam) => (
-                <ExamCard
-                  key={exam.id}
-                  exam={exam}
-                />
+                <ExamCard key={exam.id} exam={exam} />
               ))}
             </div>
           ) : (

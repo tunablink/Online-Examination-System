@@ -4,7 +4,7 @@ interface ConnectionBadgeProps {
   status: ConnectionStatus;
 }
 
-export const CONNECTION_LABEL: Record<ConnectionStatus,string> = {
+const CONNECTION_LABEL: Record<ConnectionStatus,string> = {
   connecting: 'Connecting...',
   connected: 'Server connected',
   disconnected: 'Disconnected',

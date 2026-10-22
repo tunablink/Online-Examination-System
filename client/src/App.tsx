@@ -1,112 +1,90 @@
-import {
-  Navigate,
-  Route,
-  Routes,
-} from 'react-router';
+import { Route, Routes } from "react-router";
 
-import DevelopmentPage from './components/common/DevelopmentPage';
+import DevelopmentPage from "./components/common/DevelopmentPage";
 
-import LoginPage from './pages/LoginPage/LoginPage';
-import RegisterPage from './pages/RegisterPage/RegisterPage';
-import StudentDashboardPage from './pages/StudentDashboardPage/StudentDashboardPage';
-import { useExamWebSocket } from './websocket/useExamWebSocket';
+import LoginPage from "./pages/LoginPage/LoginPage";
+import RegisterPage from "./pages/RegisterPage/RegisterPage";
+import StudentDashboardPage from "./pages/StudentDashboardPage/StudentDashboardPage";
+import { useExamWebSocket } from "./websocket/useExamWebSocket";
+import ExamDetailPage from "./pages/ExamDetailPage/ExamDetailPage";
+import ExamRoomPage from "./pages/ExamRoomPage/ExamRoomPage";
+import ExamHistoryPage from "./pages/ExamHistoryPage/ExamHistoryPage";
+import ExamResultPage from "./pages/ExamResultPage/ExamResultPage";
+import TeacherDashboardPage from "./pages/TeacherDashboardPage/TeacherDashboardPage";
+import ExamManagementPage from "./pages/ExamManagementPage/ExamManagementPage";
+import TeacherPortalLayout from "./components/layout/TeacherPortalLayout";
+import ExamMonitoringPage from "./pages/ExamMonitoringPage/ExamMonitoringPage";
+import SuspiciousActivityPage from "./pages/SuspiciousActivityPage/SuspiciousActivityPage";
+import CreateExamPage from "./pages/CreateExamPage/CreateExamPage";
+import QuestionManagementPage from "./pages/QuestionManagementPage/QuestionManagementPage";
+import ExamOverviewPage from "./pages/ExamOverviewPage/ExamOverviewPage";
+import ProtectedRoute from "./components/routing/ProtectedRoute";
+import HomeRedirect from "./components/routing/HomeRedirect";
 
 function App() {
-  const {
-    status,
-    lastMessage,
-    sendMessage,
-  } = useExamWebSocket();
+  const { status, sendMessage } = useExamWebSocket();
 
   return (
     <Routes>
-      <Route
-        path="/"
-        element={
-          <Navigate
-            to="/login"
-            replace
-          />
-        }
-      />
+      <Route path="/" element={<HomeRedirect />} />
 
       <Route
         path="/login"
         element={
-          <LoginPage
-            connectionStatus={status}
-            lastMessage={lastMessage}
-            sendMessage={sendMessage}
-          />
+          <LoginPage connectionStatus={status} sendMessage={sendMessage} />
         }
       />
 
-      <Route
-        path="/student/exams"
-        element={<StudentDashboardPage/>}
-      />
+      <Route element={<ProtectedRoute allowedRoles={["STUDENT"]} />}>
+        <Route path="/student/exams" element={<StudentDashboardPage />} />
 
-      <Route
-        path="/student/exams/:examId"
-        element={
-          <DevelopmentPage
-            eyebrow="EXAMINATION DETAILS"
-            title="Examination information"
-            description="This page will display the exam schedule, duration, instructions, and participation status."
-            backTo="/student/exams"
-            backLabel="Back to examinations"
+        <Route path="/student/history" element={<ExamHistoryPage />} />
+
+        <Route path="/student/exams/:examId" element={<ExamDetailPage />} />
+
+        <Route
+          path="/student/exams/:examId/room"
+          element={<ExamRoomPage connectionStatus={status} />}
+        />
+
+        <Route
+          path="/student/exams/:examId/result"
+          element={<ExamResultPage />}
+        />
+      </Route>
+
+      <Route element={<ProtectedRoute allowedRoles={["TEACHER"]} />}>
+        <Route
+          path="/teacher"
+          element={<TeacherPortalLayout connectionStatus={status} />}
+        >
+          <Route index element={<TeacherDashboardPage />} />
+
+          <Route path="exams" element={<ExamManagementPage />} />
+
+          <Route path="exams/new" element={<CreateExamPage />} />
+
+          <Route
+            path="exams/:examId/questions"
+            element={<QuestionManagementPage />}
           />
-        }
-      />
 
-      <Route
-        path="/student/exams/:examId/room"
-        element={
-          <DevelopmentPage
-            eyebrow="EXAMINATION ROOM"
-            title="Examination in progress"
-            description="This page will contain the timer, questions, answer navigation, autosave status, and anti-cheating event collection."
-            backTo="/student/exams"
-            backLabel="Back to examinations"
-          />
-        }
-      />
+          <Route path="exams/:examId" element={<ExamOverviewPage />} />
 
-      <Route
-        path="/student/exams/:examId/result"
-        element={
-          <DevelopmentPage
-            eyebrow="EXAMINATION RESULT"
-            title="Your result"
-            description="This page will display the score and result after the lecturer releases them."
-            backTo="/student/exams"
-            backLabel="Back to examinations"
-          />
-        }
-      />
+          <Route path="monitoring" element={<ExamMonitoringPage />} />
 
-      <Route
-        path="/teacher"
-        element={
-          <DevelopmentPage
-            eyebrow="LECTURER PORTAL"
-            title="Lecturer dashboard"
-            description="This page will provide access to exam creation, question management, assignments, and monitoring."
-          />
-        }
-      />
+          <Route path="monitoring/:examId" element={<ExamMonitoringPage />} />
 
-      <Route
-        path="/admin/students/new"
-        element={
-          <RegisterPage
-            connectionStatus={status}
-            lastMessage={lastMessage}
-            sendMessage={sendMessage}
-          />
-        }
-      />
+          <Route path="activities" element={<SuspiciousActivityPage />} />
+        </Route>
 
+        <Route
+          path="/admin/students/new"
+          element={
+            <RegisterPage connectionStatus={status} sendMessage={sendMessage} />
+          }
+        />
+      </Route>
       <Route
         path="*"
         element={

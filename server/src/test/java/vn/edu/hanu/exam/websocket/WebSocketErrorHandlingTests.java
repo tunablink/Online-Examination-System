@@ -2,7 +2,6 @@ package vn.edu.hanu.exam.websocket;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -16,6 +15,7 @@ import org.springframework.web.socket.WebSocketSession;
 
 import tools.jackson.databind.json.JsonMapper;
 import vn.edu.hanu.exam.service.LoginService;
+import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
 /**
  * Unit test cho ExamWebSocketHandler – kiểm tra error handling.
@@ -38,7 +38,9 @@ class WebSocketErrorHandlingTests {
 
         LoginService loginService = mock(LoginService.class);
 
-        handler = new ExamWebSocketHandler(jsonMapper,registrationMessageHandler,loginService);
+        AuthenticatedSessionRegistry authenticatedSessionRegistry = mock(AuthenticatedSessionRegistry.class);
+
+        handler = new ExamWebSocketHandler(jsonMapper,registrationMessageHandler,loginService, authenticatedSessionRegistry);
 
         fakeSession = new FakeWebSocketSession();
 }

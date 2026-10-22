@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -29,11 +28,13 @@ import {
 
 interface RegisterPageProps {
   connectionStatus: ConnectionStatus;
-  lastMessage: ServerMessage | null;
 
   sendMessage: (
     type: 'REGISTER',
     payload: Record<string, unknown>,
+    onResponse: (
+      message: ServerMessage
+    ) => void,
   ) => string | null;
 }
 
@@ -50,7 +51,6 @@ const LABEL_CLASS_NAME =
 
 function RegisterPage({
   connectionStatus,
-  lastMessage,
   sendMessage,
 }: RegisterPageProps) {
   const [form, setForm] = useState<RegisterFormState>(
@@ -83,61 +83,38 @@ function RegisterPage({
         ? 'Connecting...'
         : 'Not connected';
 
-  useEffect(() => {
-    if (
-      lastMessage === null ||
-      pendingRequestId === null ||
-      lastMessage.requestId !== pendingRequestId
-    ) {
-      return;
-    }
+  const handleRegisterResponse = (
+    message: ServerMessage,
+  ) => {
+    setPendingRequestId(null);
 
-    if (lastMessage.type === 'REGISTERED') {
+    if (message.type === 'REGISTERED') {
       const registeredName =
-        lastMessage.data?.fullName ?? 'the student';
+        message.data?.fullName ?? 'the student';
 
       setFeedback({
         type: 'success',
-        message: `The account for ${registeredName} has been created successfully.`,
+        message:
+          `The account for ${registeredName} ` +
+          'has been created successfully.',
       });
 
       setForm(EMPTY_REGISTER_FORM);
-      setPendingRequestId(null);
       return;
     }
 
-    if (lastMessage.type === 'ERROR') {
-      const errorCode =
-        lastMessage.error?.code ?? 'UNKNOWN_ERROR';
+    const errorCode =
+      message.error?.code ?? 'UNKNOWN_ERROR';
 
-      const errorMessage =
-        lastMessage.error?.message ??
-        'The server could not process the registration request.';
+    const errorMessage =
+      message.error?.message ??
+      'The server could not process the registration request.';
 
-      setFeedback({
-        type: 'error',
-        message: `${errorCode}: ${errorMessage}`,
-      });
-
-      setPendingRequestId(null);
-    }
-  }, [lastMessage, pendingRequestId]);
-
-  useEffect(() => {
-    if (
-      pendingRequestId !== null &&
-      (connectionStatus === 'disconnected' ||
-        connectionStatus === 'error')
-    ) {
-      setFeedback({
-        type: 'error',
-        message:
-          'The connection to the server was lost. Please start the server and try again.',
-      });
-
-      setPendingRequestId(null);
-    }
-  }, [connectionStatus, pendingRequestId]);
+    setFeedback({
+      type: 'error',
+      message: `${errorCode}: ${errorMessage}`,
+    });
+  };
 
   const handleInputChange = (
     event: ChangeEvent<HTMLInputElement>,
@@ -184,7 +161,7 @@ function RegisterPage({
       fullName: form.fullName.trim(),
       email: form.email.trim(),
       password: form.password,
-    });
+    }, handleRegisterResponse);
 
     if (requestId === null) {
       setFeedback({

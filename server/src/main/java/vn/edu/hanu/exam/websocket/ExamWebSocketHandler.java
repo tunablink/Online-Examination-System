@@ -23,151 +23,79 @@ import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.LoginCommand;
 import vn.edu.hanu.exam.service.LoginService;
 import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
+import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 @Component
-public final class ExamWebSocketHandler
-        extends TextWebSocketHandler {
+public final class ExamWebSocketHandler extends TextWebSocketHandler {
 
-    private static final Logger LOGGER =
-            LoggerFactory.getLogger(
-                    ExamWebSocketHandler.class
-            );
+    private static final Logger LOGGER = LoggerFactory.getLogger(ExamWebSocketHandler.class);
 
     private final JsonMapper jsonMapper;
 
-    private final RegistrationMessageHandler
-            registrationMessageHandler;
+    private final RegistrationMessageHandler registrationMessageHandler;
 
     private final LoginService loginService;
+    private final AuthenticatedSessionRegistry authenticatedSessionRegistry;
 
-    public ExamWebSocketHandler(
-            JsonMapper jsonMapper,
-            RegistrationMessageHandler
-                    registrationMessageHandler,
-            LoginService loginService
-    ) {
+    public ExamWebSocketHandler(JsonMapper jsonMapper, RegistrationMessageHandler registrationMessageHandler, LoginService loginService, AuthenticatedSessionRegistry authenticatedSessionRegistry) {
         this.jsonMapper = jsonMapper;
-
-        this.registrationMessageHandler =
-                registrationMessageHandler;
-
+        this.registrationMessageHandler = registrationMessageHandler;
         this.loginService = loginService;
+        this.authenticatedSessionRegistry = authenticatedSessionRegistry;
     }
 
     @Override
-    public void afterConnectionEstablished(
-            WebSocketSession session
-    ) throws Exception {
-        LOGGER.info(
-                "WebSocket connected: sessionId={}",
-                session.getId()
-        );
+    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        LOGGER.info("WebSocket connected: sessionId={}", session.getId());
 
-        ServerMessage connectedMessage =
-                ServerMessage.event(
-                        MessageType.CONNECTED.name(),
-                        Map.of(
-                                "message",
-                                "Connected to Online Examination Server",
+        ServerMessage connectedMessage = ServerMessage.event(MessageType.CONNECTED.name(), Map.of(
+                "message", "Connected to Online Examination Server",
+                "sessionId", session.getId(),
+                "serverTime", Instant.now().toString()
+        ));
 
-                                "sessionId",
-                                session.getId(),
-
-                                "serverTime",
-                                Instant.now().toString()
-                        )
-                );
-
-        sendMessage(
-                session,
-                connectedMessage
-        );
+        sendMessage(session, connectedMessage);
     }
 
     @Override
-    protected void handleTextMessage(
-            WebSocketSession session,
-            TextMessage message
-    ) throws Exception {
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         ClientMessage clientMessage;
 
         try {
-            clientMessage = jsonMapper.readValue(
-                    message.getPayload(),
-                    ClientMessage.class
-            );
+            clientMessage = jsonMapper.readValue(message.getPayload(), ClientMessage.class);
         } catch (JacksonException exception) {
-            LOGGER.warn(
-                    "Invalid JSON received: sessionId={}",
-                    session.getId()
-            );
+            LOGGER.warn("Invalid JSON received: sessionId={}", session.getId());
 
-            sendMessage(
-                    session,
-                    ServerMessage.error(
-                            null,
-                            "INVALID_JSON",
-                            "The message is not valid JSON."
-                    )
-            );
-
+            sendMessage(session, ServerMessage.error(null, "INVALID_JSON", "The message is not valid JSON."));
             return;
         }
 
-        if (
-                clientMessage.type() == null ||
-                clientMessage.type().isBlank()
-        ) {
-            LOGGER.warn(
-                    "Missing message type: sessionId={}, requestId={}",
-                    session.getId(),
-                    clientMessage.requestId()
-            );
+        if (clientMessage.type() == null || clientMessage.type().isBlank()) {
+            LOGGER.warn("Missing message type: sessionId={}, requestId={}",
+                    session.getId(), clientMessage.requestId());
 
-            sendMessage(
-                    session,
-                    ServerMessage.error(
-                            clientMessage.requestId(),
-                            "MISSING_MESSAGE_TYPE",
-                            "The message type is required."
-                    )
-            );
+            sendMessage(session, ServerMessage.error(clientMessage.requestId(), "MISSING_MESSAGE_TYPE", "The message type is required."));
 
             return;
         }
 
         Optional<MessageType> parsedMessageType =
-                MessageType.fromWireValue(
-                        clientMessage.type()
-                );
+                MessageType.fromWireValue(clientMessage.type());
 
         if (parsedMessageType.isEmpty()) {
-            sendUnsupportedMessageType(
-                    session,
-                    clientMessage
-            );
-
+            sendUnsupportedMessageType(session, clientMessage);
             return;
         }
 
-        MessageType messageType =
-                parsedMessageType.orElseThrow();
+        MessageType messageType = parsedMessageType.orElseThrow();
 
         if (!messageType.isAcceptedFromClient()) {
-            sendUnsupportedMessageType(
-                    session,
-                    clientMessage
-            );
-
+            sendUnsupportedMessageType(session, clientMessage);
             return;
         }
 
         try {
-            dispatchMessage(
-                    session,
-                    clientMessage,
-                    messageType
-            );
+            dispatchMessage(session, clientMessage, messageType);
         } catch (RuntimeException exception) {
             LOGGER.error(
                     "Unexpected error processing WebSocket message: "
@@ -178,22 +106,11 @@ public final class ExamWebSocketHandler
                     exception
             );
 
-            sendMessage(
-                    session,
-                    ServerMessage.error(
-                            clientMessage.requestId(),
-                            "INTERNAL_SERVER_ERROR",
-                            "The server could not process the request."
-                    )
-            );
+            sendMessage(session, ServerMessage.error(clientMessage.requestId(), "INTERNAL_SERVER_ERROR", "The server could not process the request."));
         }
     }
 
-    private void dispatchMessage(
-            WebSocketSession session,
-            ClientMessage clientMessage,
-            MessageType messageType
-    ) throws Exception {
+    private void dispatchMessage(WebSocketSession session, ClientMessage clientMessage, MessageType messageType) throws Exception {
         switch (messageType) {
             case PING ->
                     handlePing(
@@ -221,41 +138,16 @@ public final class ExamWebSocketHandler
         }
     }
 
-    private void handlePing(
-            WebSocketSession session,
-            ClientMessage clientMessage
-    ) throws Exception {
-        LOGGER.info(
-                "PING received: sessionId={}, requestId={}",
-                session.getId(),
-                clientMessage.requestId()
-        );
+    private void handlePing(WebSocketSession session, ClientMessage clientMessage) throws Exception {
+        LOGGER.info("PING received: sessionId={}, requestId={}", session.getId(), clientMessage.requestId());
 
-        ServerMessage pongMessage =
-                ServerMessage.success(
-                        clientMessage.requestId(),
-                        MessageType.PONG.name(),
-                        Map.of(
-                                "serverTime",
-                                Instant.now().toString()
-                        )
-                );
+        ServerMessage pongMessage = ServerMessage.success(clientMessage.requestId(), MessageType.PONG.name(), Map.of("serverTime", Instant.now().toString()));
 
-        sendMessage(
-                session,
-                pongMessage
-        );
+        sendMessage(session, pongMessage);
     }
 
-    private void handleRegister(
-            WebSocketSession session,
-            ClientMessage clientMessage
-    ) throws Exception {
-        ServerMessage response =
-                registrationMessageHandler.handle(
-                        clientMessage.requestId(),
-                        clientMessage.payload()
-                );
+    private void handleRegister(WebSocketSession session, ClientMessage clientMessage) throws Exception {
+        ServerMessage response = registrationMessageHandler.handle(clientMessage.requestId(), clientMessage.payload());
 
         LOGGER.info(
                 "REGISTER processed: sessionId={}, requestId={}",
@@ -263,35 +155,21 @@ public final class ExamWebSocketHandler
                 clientMessage.requestId()
         );
 
-        sendMessage(
-                session,
-                response
-        );
+        sendMessage(session, response);
     }
 
-    private void handleLogin(
-            WebSocketSession session,
-            ClientMessage clientMessage
-    ) throws Exception {
-        String username = readString(
-                clientMessage.payload(),
-                "username"
-        );
+    private void handleLogin(WebSocketSession session, ClientMessage clientMessage) throws Exception {
+        String username = readString(clientMessage.payload(), "username");
 
-        String password = readString(
-                clientMessage.payload(),
-                "password"
-        );
+        String password = readString(clientMessage.payload(),"password");
 
         try {
-            LoginCommand command =
-                    new LoginCommand(
-                            username,
-                            password
-                    );
+            LoginCommand command = new LoginCommand(username, password);
 
-            LoggedInUser loggedInUser =
-                    loginService.login(command);
+            LoggedInUser loggedInUser = loginService.login(command);
+
+            authenticatedSessionRegistry.authenticate(session.getId(), loggedInUser);
+
 
             LOGGER.info(
                     "User logged in: "
@@ -345,10 +223,7 @@ public final class ExamWebSocketHandler
         }
     }
 
-    private static String readString(
-            Map<String, Object> payload,
-            String fieldName
-    ) {
+    private static String readString(Map<String, Object> payload, String fieldName) {
         if (payload == null) {
             return null;
         }
@@ -362,10 +237,7 @@ public final class ExamWebSocketHandler
         return null;
     }
 
-    private void sendUnsupportedMessageType(
-            WebSocketSession session,
-            ClientMessage clientMessage
-    ) throws Exception {
+    private void sendUnsupportedMessageType(WebSocketSession session, ClientMessage clientMessage) throws Exception {
         LOGGER.warn(
                 "Unsupported message type: "
                         + "sessionId={}, requestId={}, type={}",
@@ -384,25 +256,15 @@ public final class ExamWebSocketHandler
         );
     }
 
-    private void sendMessage(
-            WebSocketSession session,
-            ServerMessage serverMessage
-    ) throws Exception {
-        String json =
-                jsonMapper.writeValueAsString(
-                        serverMessage
-                );
+    private void sendMessage(WebSocketSession session, ServerMessage serverMessage) throws Exception {
+        String json = jsonMapper.writeValueAsString(serverMessage);
 
-        session.sendMessage(
-                new TextMessage(json)
-        );
+        session.sendMessage(new TextMessage(json));
     }
 
     @Override
-    public void afterConnectionClosed(
-            WebSocketSession session,
-            CloseStatus status
-    ) {
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        authenticatedSessionRegistry.remove(session.getId());
         LOGGER.info(
                 "WebSocket disconnected: "
                         + "sessionId={}, code={}, reason={}",

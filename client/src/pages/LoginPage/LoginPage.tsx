@@ -1,5 +1,4 @@
 import {
-  useEffect,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -22,14 +21,17 @@ import type {
 import type {
   ConnectionStatus,
 } from '../../websocket/useExamWebSocket';
+import { useAuth } from '../../auth/useAuth';
 
 interface LoginPageProps {
   connectionStatus: ConnectionStatus;
-  lastMessage: ServerMessage | null;
 
   sendMessage: (
     type: 'LOGIN',
     payload: Record<string, unknown>,
+    onResponse: (
+      message: ServerMessage
+    ) => void,
   ) => string | null;
 }
 
@@ -56,10 +58,11 @@ const INPUT_CLASS_NAME = `
 
 function LoginPage({
   connectionStatus,
-  lastMessage,
   sendMessage,
 }: LoginPageProps) {
   const navigate = useNavigate();
+
+  const {login} = useAuth();
 
   const [form, setForm] =
     useState<LoginFormState>(EMPTY_LOGIN_FORM);
@@ -76,71 +79,72 @@ function LoginPage({
   const isConnected = connectionStatus === 'connected';
   const isSubmitting = pendingRequestId !== null;
 
-  useEffect(() => {
-    if (
-      lastMessage === null ||
-      pendingRequestId === null ||
-      lastMessage.requestId !== pendingRequestId
-    ) {
-      return;
-    }
+  const handleLoginResponse = (
+    message: ServerMessage,
+  ) => {
+    setPendingRequestId(null);
 
-    if (lastMessage.type === 'LOGGED_IN') {
-      setPendingRequestId(null);
+    if (message.type === 'LOGGED_IN') {
+      const loggedInUser = message.data;
 
-      if (lastMessage.data?.role === 'TEACHER') {
-        navigate('/teacher', {
-          replace: true,
+      if (loggedInUser == null ||
+        loggedInUser.id == undefined ||
+        loggedInUser.username == undefined ||
+        loggedInUser.fullName == undefined ||
+        loggedInUser.email == undefined ||
+        loggedInUser.role == undefined
+      ){
+        setFeedback({
+          type: 'error',
+          title:
+           'Invalid server response',
+          message:
+           'The server authenticated the account but did not return complete user information.'
         });
-
         return;
       }
 
-      navigate('/student/exams', {
-        replace: true,
+      login({
+        id: loggedInUser.id,
+
+        username:
+          loggedInUser.username,
+
+        fullName:
+          loggedInUser.fullName,
+
+        email:
+          loggedInUser.email,
+
+        role:
+          loggedInUser.role
       });
 
+      if (loggedInUser.role === 'TEACHER'){
+        navigate('/teacher', {replace: true});
+        return;
+      }
+
+      navigate('/student/exams', {replace: true});
       return;
     }
 
-    if (lastMessage.type === 'ERROR') {
-      const errorCode =
-        lastMessage.error?.code ?? 'LOGIN_FAILED';
+    const errorCode =
+      message.error?.code ?? 'LOGIN_FAILED';
 
-      const errorMessage =
-        lastMessage.error?.message ??
-        'The server could not complete the login request.';
+    const errorMessage =
+      message.error?.message ??
+      'The server could not complete the login request.';
 
-      setFeedback({
-        type: 'error',
-        title: 'Login failed',
-        message: `${errorCode}: ${errorMessage}`,
-      });
-
-      setPendingRequestId(null);
-    }
-  }, [
-    lastMessage,
-    navigate,
-    pendingRequestId,
-  ]);
-
-  useEffect(() => {
-    if (
-      pendingRequestId !== null &&
-      (connectionStatus === 'disconnected' ||
-        connectionStatus === 'error')
-    ) {
-      setFeedback({
-        type: 'error',
-        title: 'Connection lost',
-        message:
-          'The connection to the examination server was lost. Please try again when the server is available.',
-      });
-
-      setPendingRequestId(null);
-    }
-  }, [connectionStatus, pendingRequestId]);
+    setFeedback({
+      type: 'error',
+      title:
+        errorCode === 'CONNECTION_CLOSED'
+          ? 'Connection lost'
+          : 'Login failed',
+      message: `${errorCode}: ${errorMessage}`,
+    });
+  };
 
   const handleInputChange = (
     event: ChangeEvent<HTMLInputElement>,
@@ -201,7 +205,7 @@ function LoginPage({
     const requestId = sendMessage('LOGIN', {
       username: form.username.trim(),
       password: form.password,
-    });
+    }, handleLoginResponse);
 
     if (requestId === null) {
       setFeedback({
