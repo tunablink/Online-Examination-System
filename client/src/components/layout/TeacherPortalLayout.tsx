@@ -1,19 +1,8 @@
-import {
-  NavLink,
-  Outlet,
-  useNavigate,
-} from 'react-router';
+import { NavLink, Outlet, useNavigate } from "react-router";
 
-import type {
-  ConnectionStatus,
-} from '../../websocket/useExamWebSocket';
-
-import ConnectionBadge from '../common/ConnectionBadge';
-import { useAuth } from '../../auth/useAuth';
-
-interface TeacherPortalLayoutProps {
-  connectionStatus: ConnectionStatus;
-}
+import ConnectionBadge from "../common/ConnectionBadge";
+import { useAuth } from "../../auth/useAuth";
+import { useWebSocket } from "../../websocket/useWebSocket";
 
 interface NavigationItem {
   label: string;
@@ -24,49 +13,46 @@ interface NavigationItem {
 
 const NAVIGATION_ITEMS: NavigationItem[] = [
   {
-    label: 'Dashboard',
-    description: 'System overview',
-    to: '/teacher',
+    label: "Dashboard",
+    description: "System overview",
+    to: "/teacher",
     end: true,
   },
   {
-    label: 'Examinations',
-    description: 'Manage exams',
-    to: '/teacher/exams',
+    label: "Examinations",
+    description: "Manage exams",
+    to: "/teacher/exams",
   },
   {
-    label: 'Monitoring',
-    description: 'Live sessions',
-    to: '/teacher/monitoring',
+    label: "Monitoring",
+    description: "Live sessions",
+    to: "/teacher/monitoring",
   },
   {
-    label: 'Activity reports',
-    description: 'Suspicious events',
-    to: '/teacher/activities',
+    label: "Activity reports",
+    description: "Suspicious events",
+    to: "/teacher/activities",
   },
 ];
 
-function getInitials(
-  fullName: string,
-): string {
+function getInitials(fullName: string): string {
   return fullName
     .trim()
     .split(/\s+/)
     .slice(-2)
     .map((part) => part.charAt(0))
-    .join('')
+    .join("")
     .toUpperCase();
 }
 
-function TeacherPortalLayout({
-  connectionStatus,
-}: TeacherPortalLayoutProps) {
+function TeacherPortalLayout() {
+  const { status: connectionStatus } = useWebSocket();
   const navigate = useNavigate();
 
-  const {user, logout} = useAuth();
+  const { user, logout } = useAuth();
 
-  const displayName = user?.fullName ?? 'Lecturer';
-  const accountLabel = user?.username ?? 'Unknown account';
+  const displayName = user?.fullName ?? "Lecturer";
+  const accountLabel = user?.username ?? "Unknown account";
 
   const handleSignOut = () => {
     /*
@@ -74,7 +60,7 @@ function TeacherPortalLayout({
      * Server phải xóa authenticated session.
      */
     logout();
-    navigate('/login', {
+    navigate("/login", {
       replace: true,
     });
   };
@@ -135,9 +121,7 @@ function TeacherPortalLayout({
                 LECTURER PORTAL
               </p>
 
-              <p className="mt-1 text-sm font-semibold">
-                Online Examination
-              </p>
+              <p className="mt-1 text-sm font-semibold">Online Examination</p>
             </div>
           </div>
 
@@ -148,13 +132,10 @@ function TeacherPortalLayout({
             "
             aria-label="Teacher portal navigation"
           >
-            {NAVIGATION_ITEMS.map(
-              (navigationItem) => (
-                <NavLink
-                  key={navigationItem.to}
-                  className={({
-                    isActive,
-                  }) => `
+            {NAVIGATION_ITEMS.map((navigationItem) => (
+              <NavLink
+                key={navigationItem.to}
+                className={({ isActive }) => `
                     block rounded-lg px-4 py-3
                     transition-colors
                     max-lg:min-w-[170px]
@@ -171,26 +152,21 @@ function TeacherPortalLayout({
                         `
                     }
                   `}
-                  to={navigationItem.to}
-                  end={navigationItem.end}
-                >
-                  <p className="text-sm font-semibold">
-                    {navigationItem.label}
-                  </p>
+                to={navigationItem.to}
+                end={navigationItem.end}
+              >
+                <p className="text-sm font-semibold">{navigationItem.label}</p>
 
-                  <p
-                    className="
+                <p
+                  className="
                       mt-1 text-[11px]
                       opacity-70
                     "
-                  >
-                    {
-                      navigationItem.description
-                    }
-                  </p>
-                </NavLink>
-              ),
-            )}
+                >
+                  {navigationItem.description}
+                </p>
+              </NavLink>
+            ))}
           </nav>
 
           <div
@@ -216,9 +192,7 @@ function TeacherPortalLayout({
                 "
                 aria-hidden="true"
               >
-                {getInitials(
-                  displayName,
-                )}
+                {getInitials(displayName)}
               </div>
 
               <div className="min-w-0">
@@ -278,9 +252,7 @@ function TeacherPortalLayout({
               </div>
 
               <div className="flex items-center gap-3">
-                <ConnectionBadge
-                  status={connectionStatus}
-                />
+                <ConnectionBadge status={connectionStatus} />
 
                 <button
                   className="

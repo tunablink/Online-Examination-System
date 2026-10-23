@@ -1,39 +1,21 @@
-import {
-  useState,
-  type ChangeEvent,
-  type FormEvent,
-} from 'react';
+import { useState, type ChangeEvent, type FormEvent } from "react";
 
-import { useNavigate } from 'react-router';
+import { useNavigate } from "react-router";
 
 import FeedbackMessage, {
   type Feedback,
-} from '../../components/common/FeedbackMessage';
+} from "../../components/common/FeedbackMessage";
 
-import InstitutionPanel from '../../components/layout/InstitutionPanel';
-import SystemFooter from '../../components/layout/SystemFooter';
-import SystemHeader from '../../components/layout/SystemHeader';
+import InstitutionPanel from "../../components/layout/InstitutionPanel";
+import SystemFooter from "../../components/layout/SystemFooter";
+import SystemHeader from "../../components/layout/SystemHeader";
 
-import type {
-  ServerMessage,
-} from '../../websocket/protocol';
+import type { ServerMessage } from "../../websocket/protocol";
 
-import type {
-  ConnectionStatus,
-} from '../../websocket/useExamWebSocket';
-import { useAuth } from '../../auth/useAuth';
+import { WEBSOCKET_URL } from "../../websocket/config";
 
-interface LoginPageProps {
-  connectionStatus: ConnectionStatus;
-
-  sendMessage: (
-    type: 'LOGIN',
-    payload: Record<string, unknown>,
-    onResponse: (
-      message: ServerMessage
-    ) => void,
-  ) => string | null;
-}
+import { useAuth } from "../../auth/useAuth";
+import { useWebSocket } from "../../websocket/useWebSocket";
 
 interface LoginFormState {
   username: string;
@@ -41,8 +23,8 @@ interface LoginFormState {
 }
 
 const EMPTY_LOGIN_FORM: LoginFormState = {
-  username: '',
-  password: '',
+  username: "",
+  password: "",
 };
 
 const INPUT_CLASS_NAME = `
@@ -56,50 +38,60 @@ const INPUT_CLASS_NAME = `
   focus:ring-[3px] focus:ring-blue-600/10
 `;
 
-function LoginPage({
-  connectionStatus,
-  sendMessage,
-}: LoginPageProps) {
+function LoginPage() {
+  const { status: connectionStatus, sendMessage } = useWebSocket();
   const navigate = useNavigate();
 
-  const {login} = useAuth();
+  const { login, sessionNotice, clearSessionNotice } = useAuth();
 
-  const [form, setForm] =
-    useState<LoginFormState>(EMPTY_LOGIN_FORM);
+  const [form, setForm] = useState<LoginFormState>(EMPTY_LOGIN_FORM);
 
-  const [showPassword, setShowPassword] =
-    useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
-  const [feedback, setFeedback] =
-    useState<Feedback | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const [pendingRequestId, setPendingRequestId] =
-    useState<string | null>(null);
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
 
-  const isConnected = connectionStatus === 'connected';
+  const displayedFeedback: Feedback | null =
+    feedback ??
+    (sessionNotice === null
+      ? null
+      : {
+          type: "error",
+          title: "Session ended",
+          message: sessionNotice,
+        });
+
+  const isConnected = connectionStatus === "connected";
   const isSubmitting = pendingRequestId !== null;
 
-  const handleLoginResponse = (
-    message: ServerMessage,
-  ) => {
+  const handleCloseFeedback = () => {
+    if (feedback !== null) {
+      setFeedback(null);
+      return;
+    }
+
+    clearSessionNotice();
+  };
+  const handleLoginResponse = (message: ServerMessage) => {
     setPendingRequestId(null);
 
-    if (message.type === 'LOGGED_IN') {
+    if (message.type === "LOGGED_IN") {
       const loggedInUser = message.data;
 
-      if (loggedInUser == null ||
+      if (
+        loggedInUser == null ||
         loggedInUser.id == undefined ||
         loggedInUser.username == undefined ||
         loggedInUser.fullName == undefined ||
         loggedInUser.email == undefined ||
         loggedInUser.role == undefined
-      ){
+      ) {
         setFeedback({
-          type: 'error',
-          title:
-           'Invalid server response',
+          type: "error",
+          title: "Invalid server response",
           message:
-           'The server authenticated the account but did not return complete user information.'
+            "The server authenticated the account but did not return complete user information.",
         });
         return;
       }
@@ -107,48 +99,39 @@ function LoginPage({
       login({
         id: loggedInUser.id,
 
-        username:
-          loggedInUser.username,
+        username: loggedInUser.username,
 
-        fullName:
-          loggedInUser.fullName,
+        fullName: loggedInUser.fullName,
 
-        email:
-          loggedInUser.email,
+        email: loggedInUser.email,
 
-        role:
-          loggedInUser.role
+        role: loggedInUser.role,
       });
 
-      if (loggedInUser.role === 'TEACHER'){
-        navigate('/teacher', {replace: true});
+      if (loggedInUser.role === "TEACHER") {
+        navigate("/teacher", { replace: true });
         return;
       }
 
-      navigate('/student/exams', {replace: true});
+      navigate("/student/exams", { replace: true });
       return;
     }
 
-    const errorCode =
-      message.error?.code ?? 'LOGIN_FAILED';
+    const errorCode = message.error?.code ?? "LOGIN_FAILED";
 
     const errorMessage =
       message.error?.message ??
-      'The server could not complete the login request.';
+      "The server could not complete the login request.";
 
     setFeedback({
-      type: 'error',
+      type: "error",
       title:
-        errorCode === 'CONNECTION_CLOSED'
-          ? 'Connection lost'
-          : 'Login failed',
+        errorCode === "CONNECTION_CLOSED" ? "Connection lost" : "Login failed",
       message: `${errorCode}: ${errorMessage}`,
     });
   };
 
-  const handleInputChange = (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
 
     setForm((currentForm) => ({
@@ -163,28 +146,27 @@ function LoginPage({
 
   const validateForm = (): string | null => {
     if (form.username.trim().length === 0) {
-      return 'Please enter your username or student ID.';
+      return "Please enter your username or student ID.";
     }
 
     if (form.password.length === 0) {
-      return 'Please enter your password.';
+      return "Please enter your password.";
     }
 
     return null;
   };
 
-  const handleSubmit = (
-    event: FormEvent<HTMLFormElement>,
-  ) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFeedback(null);
+    clearSessionNotice();
 
     const validationError = validateForm();
 
     if (validationError !== null) {
       setFeedback({
-        type: 'error',
-        title: 'Check your information',
+        type: "error",
+        title: "Check your information",
         message: validationError,
       });
 
@@ -193,26 +175,29 @@ function LoginPage({
 
     if (!isConnected) {
       setFeedback({
-        type: 'error',
-        title: 'Server unavailable',
-        message:
-          'The client is not connected to the examination server at ws://localhost:8081/ws.',
+        type: "error",
+        title: "Server unavailable",
+        message: `The client is not connected to the examination server at ${WEBSOCKET_URL}.`,
       });
 
       return;
     }
 
-    const requestId = sendMessage('LOGIN', {
-      username: form.username.trim(),
-      password: form.password,
-    }, handleLoginResponse);
+    const requestId = sendMessage(
+      "LOGIN",
+      {
+        username: form.username.trim(),
+        password: form.password,
+      },
+      handleLoginResponse,
+    );
 
     if (requestId === null) {
       setFeedback({
-        type: 'error',
-        title: 'Request not sent',
+        type: "error",
+        title: "Request not sent",
         message:
-          'The WebSocket connection is not ready. Please wait and try again.',
+          "The WebSocket connection is not ready. Please wait and try again.",
       });
 
       return;
@@ -222,18 +207,18 @@ function LoginPage({
   };
 
   const connectionText =
-    connectionStatus === 'connected'
-      ? 'Ready for secure sign-in'
-      : connectionStatus === 'connecting'
-        ? 'Connecting to the server...'
-        : 'Examination server unavailable';
+    connectionStatus === "connected"
+      ? "Ready for secure sign-in"
+      : connectionStatus === "connecting"
+        ? "Connecting to the server..."
+        : "Examination server unavailable";
 
   const connectionTextColor =
-    connectionStatus === 'connected'
-      ? 'text-emerald-700'
-      : connectionStatus === 'connecting'
-        ? 'text-amber-700'
-        : 'text-red-700';
+    connectionStatus === "connected"
+      ? "text-emerald-700"
+      : connectionStatus === "connecting"
+        ? "text-amber-700"
+        : "text-red-700";
 
   return (
     <main
@@ -243,9 +228,7 @@ function LoginPage({
         max-lg:p-5 max-sm:p-3.5
       "
     >
-      <SystemHeader
-        connectionStatus={connectionStatus}
-      />
+      <SystemHeader connectionStatus={connectionStatus} />
 
       <section
         className="
@@ -288,8 +271,8 @@ function LoginPage({
               </h1>
 
               <p className="mt-3 text-sm leading-6 text-slate-500">
-                Use the account issued by your examination
-                administrator or institution.
+                Use the account issued by your examination administrator or
+                institution.
               </p>
             </div>
 
@@ -319,11 +302,11 @@ function LoginPage({
                 className={`
                   h-2.5 w-2.5 rounded-full
                   ${
-                    connectionStatus === 'connected'
-                      ? 'bg-emerald-500'
-                      : connectionStatus === 'connecting'
-                        ? 'bg-amber-500'
-                        : 'bg-red-500'
+                    connectionStatus === "connected"
+                      ? "bg-emerald-500"
+                      : connectionStatus === "connecting"
+                        ? "bg-amber-500"
+                        : "bg-red-500"
                   }
                 `}
                 aria-hidden="true"
@@ -331,17 +314,14 @@ function LoginPage({
             </div>
 
             <div className="mt-7">
-              {feedback !== null && (
+              {displayedFeedback !== null && (
                 <FeedbackMessage
-                  feedback={feedback}
-                  onClose={() => setFeedback(null)}
+                  feedback={displayedFeedback}
+                  onClose={handleCloseFeedback}
                 />
               )}
 
-              <form
-                className="grid gap-5"
-                onSubmit={handleSubmit}
-              >
+              <form className="grid gap-5" onSubmit={handleSubmit}>
                 <div className="grid gap-2.5">
                   <label
                     className="
@@ -385,10 +365,10 @@ function LoginPage({
                       "
                       onClick={() =>
                         setFeedback({
-                          type: 'error',
-                          title: 'Feature unavailable',
+                          type: "error",
+                          title: "Feature unavailable",
                           message:
-                            'Password recovery has not been implemented yet. Please contact the examination administrator.',
+                            "Password recovery has not been implemented yet. Please contact the examination administrator.",
                         })
                       }
                     >
@@ -401,11 +381,7 @@ function LoginPage({
                       className={`${INPUT_CLASS_NAME} pr-16`}
                       id="password"
                       name="password"
-                      type={
-                        showPassword
-                          ? 'text'
-                          : 'password'
-                      }
+                      type={showPassword ? "text" : "password"}
                       value={form.password}
                       onChange={handleInputChange}
                       placeholder="Enter your password"
@@ -423,18 +399,13 @@ function LoginPage({
                         hover:bg-blue-50
                       "
                       aria-label={
-                        showPassword
-                          ? 'Hide password'
-                          : 'Show password'
+                        showPassword ? "Hide password" : "Show password"
                       }
                       onClick={() =>
-                        setShowPassword(
-                          (currentValue) =>
-                            !currentValue,
-                        )
+                        setShowPassword((currentValue) => !currentValue)
                       }
                     >
-                      {showPassword ? 'Hide' : 'Show'}
+                      {showPassword ? "Hide" : "Show"}
                     </button>
                   </div>
                 </div>
@@ -453,9 +424,7 @@ function LoginPage({
                     type="checkbox"
                   />
 
-                  <span>
-                    Keep me signed in on this trusted device.
-                  </span>
+                  <span>Keep me signed in on this trusted device.</span>
                 </label>
 
                 <button
@@ -473,18 +442,11 @@ function LoginPage({
                     disabled:bg-slate-400
                   "
                   type="submit"
-                  disabled={
-                    !isConnected || isSubmitting
-                  }
+                  disabled={!isConnected || isSubmitting}
                 >
-                  {isSubmitting
-                    ? 'Signing in...'
-                    : 'Continue to examinations'}
+                  {isSubmitting ? "Signing in..." : "Continue to examinations"}
 
-                  <span
-                    className="text-lg leading-none"
-                    aria-hidden="true"
-                  >
+                  <span className="text-lg leading-none" aria-hidden="true">
                     →
                   </span>
                 </button>
@@ -498,9 +460,8 @@ function LoginPage({
               "
             >
               <p>
-                Student accounts are created or approved by the
-                examination administrator. Public registration is
-                not available.
+                Student accounts are created or approved by the examination
+                administrator. Public registration is not available.
               </p>
             </div>
           </div>

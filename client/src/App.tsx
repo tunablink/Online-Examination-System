@@ -5,7 +5,6 @@ import DevelopmentPage from "./components/common/DevelopmentPage";
 import LoginPage from "./pages/LoginPage/LoginPage";
 import RegisterPage from "./pages/RegisterPage/RegisterPage";
 import StudentDashboardPage from "./pages/StudentDashboardPage/StudentDashboardPage";
-import { useExamWebSocket } from "./websocket/useExamWebSocket";
 import ExamDetailPage from "./pages/ExamDetailPage/ExamDetailPage";
 import ExamRoomPage from "./pages/ExamRoomPage/ExamRoomPage";
 import ExamHistoryPage from "./pages/ExamHistoryPage/ExamHistoryPage";
@@ -22,18 +21,11 @@ import ProtectedRoute from "./components/routing/ProtectedRoute";
 import HomeRedirect from "./components/routing/HomeRedirect";
 
 function App() {
-  const { status, sendMessage } = useExamWebSocket();
-
   return (
     <Routes>
       <Route path="/" element={<HomeRedirect />} />
 
-      <Route
-        path="/login"
-        element={
-          <LoginPage connectionStatus={status} sendMessage={sendMessage} />
-        }
-      />
+      <Route path="/login" element={<LoginPage />} />
 
       <Route element={<ProtectedRoute allowedRoles={["STUDENT"]} />}>
         <Route path="/student/exams" element={<StudentDashboardPage />} />
@@ -44,7 +36,7 @@ function App() {
 
         <Route
           path="/student/exams/:examId/room"
-          element={<ExamRoomPage connectionStatus={status} />}
+          element={<ExamRoomPage />}
         />
 
         <Route
@@ -56,7 +48,7 @@ function App() {
       <Route element={<ProtectedRoute allowedRoles={["TEACHER"]} />}>
         <Route
           path="/teacher"
-          element={<TeacherPortalLayout connectionStatus={status} />}
+          element={<TeacherPortalLayout />}
         >
           <Route index element={<TeacherDashboardPage />} />
 
@@ -81,7 +73,7 @@ function App() {
         <Route
           path="/admin/students/new"
           element={
-            <RegisterPage connectionStatus={status} sendMessage={sendMessage} />
+            <RegisterPage />
           }
         />
       </Route>

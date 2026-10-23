@@ -506,13 +506,13 @@ Integration test `RegistrationServiceIntegrationTests` đã được viết đ�
 
 React đã gửi `REGISTER`/`LOGIN` thật, lưu user đã đăng nhập trong `AuthContext`, bảo vệ route theo role `STUDENT`/`TEACHER`, điều hướng về dashboard tương ứng và logout phía client. Auth state chưa persist qua refresh và server chưa có command `LOGOUT` hoặc session-resume token.
 
-### 10.4. Schema exam cơ bản và thực thể còn thiếu
+### 10.4. Exam/question persistence hiện tại và các thực thể còn thiếu
 
 | Thực thể | Mục đích |
 | --- | --- |
 | `users` | Tài khoản, password hash, role, display name. |
-| `exams` | Đã có schema và domain model cơ bản cho title, description, duration, status và creator; chưa có repository/service/transport CRUD hoàn chỉnh. |
-| `questions` / `choices` | Đã có schema và domain model cơ bản; đáp án đúng chỉ dùng phía server; chưa có repository/service/transport CRUD hoàn chỉnh. |
+| `exams` | Đã có schema/domain, `ExamRepository`/`JdbcExamRepository`, service và handler độc lập cho create/list/get theo teacher ownership. Update/publish/close/delete đang được phát triển; protocol chưa được nối vào dispatcher trung tâm. |
+| `questions` / `choices` | Đã có schema/domain, exception, create command, teacher-safe result DTO, `QuestionRepository` và `JdbcQuestionRepository`. JDBC layer đã có generated-key readback, ownership/status query dùng `FOR UPDATE`, ordered question query và choice query tránh N+1; service/transaction/handler/test chưa hoàn thành. |
 | `exam_attempts` | Sinh viên, start/deadline, status, submission source/time và score. |
 | `attempt_questions` / `attempt_choice_order` | Mapping question/choice gốc với thứ tự/biến thể cố định của từng attempt. |
 | `student_answers` | Đáp án theo attempt/question. |
@@ -521,7 +521,7 @@ React đã gửi `REGISTER`/`LOGIN` thật, lưu user đã đăng nhập trong `
 | `activity_logs` | Activity event tổng quát nếu tách khỏi suspicious record để phục vụ monitoring/audit. |
 | `sessions` | Phiên xác thực nếu cần persistent session. |
 
-Schema thật hiện có các bảng `users`, `exams`, `questions` và `choices`, với primary key, foreign key, check constraint và index cơ bản. `ExamSchemaIntegrationTests` đã có trong source. Các bảng attempt/answer/result/suspicious activity/session trong bảng trên vẫn chưa được triển khai; schema cuối còn phải bổ sung constraint/index và transaction boundary phục vụ các invariant concurrency.
+Schema thật hiện có các bảng `users`, `exams`, `questions` và `choices`, với primary key, foreign key, check constraint và index cơ bản. `ExamSchemaIntegrationTests` đã có trong source. Main source hiện compile thành công `45` file với Java 21 vào ngày `2026-10-23`. Kết quả compile chỉ xác nhận type/syntax và Spring wiring ở mức build; chưa thay thế integration test với PostgreSQL thật. Các bảng attempt/answer/result/suspicious activity/session trong bảng trên vẫn chưa được triển khai; schema cuối còn phải bổ sung constraint/index và transaction boundary phục vụ các invariant concurrency.
 
 ## 11. Bốn core features và novelty đã chốt
 
@@ -966,7 +966,7 @@ Chỉ ghi “đã thực hiện” khi code/test/measurement chứng minh:
 
 ### Current implementation status
 
-Tại thời điểm cập nhật `2026-10-22`, giao diện React và auth foundation đã tiến xa hơn skeleton ban đầu. Client có đầy đủ nhóm màn hình chính để demo, nhưng ngoại trừ đăng ký/đăng nhập, dữ liệu nghiệp vụ exam vẫn chủ yếu là mock. Không được dùng số lượng màn hình để tuyên bố hệ thống end-to-end đã hoàn thành.
+Tại thời điểm cập nhật `2026-10-23`, giao diện React và auth foundation đã tiến xa hơn skeleton ban đầu. Backend đã có Exam Management create/list/get độc lập và Question Management persistence foundation, nhưng các message nghiệp vụ này chưa được nối vào WebSocket dispatcher và React vẫn chủ yếu dùng mock/local state cho dữ liệu exam. Không được dùng số lượng màn hình hoặc kết quả compile để tuyên bố hệ thống end-to-end đã hoàn thành.
 
 **Đã làm được:**
 
@@ -986,7 +986,7 @@ Tại thời điểm cập nhật `2026-10-22`, giao diện React và auth found
 - [x] Tạo `AuthProvider`, `useAuth`, `ProtectedRoute` và `HomeRedirect`; bảo vệ route theo role `STUDENT`/`TEACHER`.
 - [x] Tạo Student Portal header và Teacher Portal layout; hiển thị user thật từ auth state và hỗ trợ logout phía client.
 - [x] Có UI/routing cho Login, Register, Student Dashboard, Exam Detail, Exam Room, Exam History, Exam Result, Teacher Dashboard, Exam Management, Create Exam, Exam Overview, Question Management, Exam Monitoring và Suspicious Activity.
-- [x] Client đã qua ESLint, TypeScript production build (`135` modules) và `git diff --check` ngày `2026-10-22`.
+- [x] Client đã qua ESLint và TypeScript production build (`139` modules) trong lần kiểm tra gần nhất; WebSocket dùng shared provider/context, URL lấy từ cấu hình môi trường và request vẫn được ghép bằng `requestId`.
 - [x] Chọn PostgreSQL và cấu hình datasource bằng `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`; không hard-code password.
 - [x] Thêm Spring JDBC, PostgreSQL driver và Spring Security Crypto.
 - [x] Tạo idempotent `schema.sql` cho `users`, `exams`, `questions`, `choices`, constraint/index và foreign key cơ bản.
@@ -999,6 +999,11 @@ Tại thời điểm cập nhật `2026-10-22`, giao diện React và auth found
 - [x] Hiện thực `LoginService`, `LOGIN`/`LOGGED_IN`, kiểm tra BCrypt/active account và trả `INVALID_CREDENTIALS` an toàn.
 - [x] Tạo thread-safe `AuthenticatedSessionRegistry` bằng `ConcurrentHashMap`; gắn user với WebSocket session khi login và xóa khi disconnect.
 - [x] `ExamWebSocketHandler` trả lỗi cho JSON sai, thiếu/không hỗ trợ message type và unexpected runtime exception.
+- [x] Có `ExamRepository`/`JdbcExamRepository`, `ExamManagementService` và `ExamManagementMessageHandler` cho teacher create/list/get exam với ownership filtering.
+- [x] Có unit test handler và integration test source cho Exam Management create/list/get; `ExamManagementMessageHandlerTests` đã pass trong lần full-test gần nhất.
+- [x] Tạo `QuestionManagementException`, `CreateQuestionCommand`, teacher-only question/choice result DTO và immutable list wrapper.
+- [x] Tạo `QuestionRepository`/`JdbcQuestionRepository`; insert question/choice lấy generated ID, query exam ownership/status dùng `FOR UPDATE`, danh sách sắp xếp ổn định và choices được lấy bằng một join query thay vì N+1.
+- [x] Backend main source đã compile `BUILD SUCCESS` với `45` source files, Java 21 và Maven vào `2026-10-23`.
 - [x] Có test source cho schema, registration, login, message type contract, authenticated-session registry, registration handler và WebSocket error handling.
 
 **Đã có khung nhưng chưa hoàn chỉnh:**
@@ -1007,11 +1012,13 @@ Tại thời điểm cập nhật `2026-10-22`, giao diện React và auth found
 - [ ] Reconnect transport đã có nhưng authenticated session cũ không được resume trên socket mới; cần policy buộc login lại hoặc token/session-resume.
 - [ ] Logout hiện mới xóa React state; server chưa có `LOGOUT` command để clear session chủ động.
 - [ ] `lastMessage` đã có nhưng chưa có subscription API theo message type cho server-push monitoring event.
-- [ ] `exams`, `questions`, `choices` đã có schema/domain cơ bản nhưng chưa có repository/service/WebSocket CRUD hoàn chỉnh.
+- [ ] Exam Management mới hoàn thành create/list/get ở module độc lập; update/publish/close/delete đang được Phanh phát triển và toàn bộ command exam chưa được nối vào `MessageType`/`ExamWebSocketHandler`.
+- [ ] Question Management mới hoàn thành contract/model/JDBC repository; chưa có `QuestionManagementService`, transaction tạo question + choices, WebSocket DTO/handler và test.
+- [ ] Student Exam Catalog mới được giao cho Hải Yến, chưa có source và chưa được xem là đã triển khai.
 - [ ] Các trang exam/attempt/result/teacher/monitoring đã có UI nhưng vẫn đọc `MOCK_*` hoặc local state.
 - [ ] Cần chạy lại toàn bộ `mvn test` trong terminal có đúng `DB_PASSWORD` và ghi nhận `BUILD SUCCESS` trước khi đánh dấu server test pass hoàn toàn.
 
-**Chưa triển khai end-to-end:** quản lý exam/question bằng dữ liệu PostgreSQL thật, exam attempt/session, server-authoritative deadline, auto-save/recovery, submit/chấm điểm, leaderboard, question randomization, real-time teacher monitoring và anti-cheating event collection. Thư mục `stitch_university_online_examination_system/` chỉ là form tham khảo; giao diện React hiện tại đã được tách thành pages/components riêng và không phụ thuộc trực tiếp vào source mockup đó.
+**Chưa triển khai end-to-end:** quản lý exam/question từ React qua WebSocket đến PostgreSQL, student exam catalog, exam attempt/session, server-authoritative deadline, auto-save/recovery, submit/chấm điểm, leaderboard, question randomization, real-time teacher monitoring và anti-cheating event collection. Thư mục `stitch_university_online_examination_system/` chỉ là form tham khảo; giao diện React hiện tại đã được tách thành pages/components riêng và không phụ thuộc trực tiếp vào source mockup đó.
 
 ## 21. Kế hoạch triển khai
 
@@ -1022,7 +1029,7 @@ Tại thời điểm cập nhật `2026-10-22`, giao diện React và auth found
 5. Thiết kế React pages, đặc biệt Exam Room và Teacher Monitoring Dashboard.
 6. Tạo skeleton client/server, WebSocket connection/message foundation và persistence foundation. **Đã hoàn thành `CONNECTED`/`PING`/`PONG`, request timeout/reconnect phía client, schema cơ bản và user JDBC repository.**
 7. Hoàn thiện registration/login transport, session registry và React role guard. **Đã hoàn thành foundation; còn logout/session resume và authorization cho command nghiệp vụ.**
-8. Hiện thực exam/question management end-to-end và thay mock ở Teacher Dashboard/Create Exam/Question Management bằng dữ liệu server thật.
+8. Hoàn thiện Exam Lifecycle, Question Management và Student Exam Catalog; sau đó tích hợp protocol/dispatcher và thay mock ở các trang teacher/student tương ứng bằng dữ liệu server thật. **Đang thực hiện: Exam create/list/get và Question JDBC foundation đã có, nhưng chưa end-to-end.**
 9. Hiện thực exam session, randomization, answer auto-save và `RESUME_EXAM` recovery.
 10. Hiện thực `AttemptFinalizer`, deadline scheduler, restart recovery và duplicate-submit protection.
 11. Hiện thực real-time monitoring và `SuspiciousActivityService` sau khi core session flow đúng.

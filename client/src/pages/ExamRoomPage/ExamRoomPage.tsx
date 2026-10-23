@@ -1,97 +1,64 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { useEffect, useRef, useState } from "react";
 
-import {
-  Link,
-  useNavigate,
-  useParams,
-} from 'react-router';
+import { Link, useNavigate, useParams } from "react-router";
 
-import ConnectionBadge from '../../components/common/ConnectionBadge';
+import ConnectionBadge from "../../components/common/ConnectionBadge";
 
-import { MOCK_EXAM_ATTEMPT } from '../../mocks/attempt';
+import { MOCK_EXAM_ATTEMPT } from "../../mocks/attempt";
 
-import type {
-  AnswerMap,
-  AutosaveStatus,
-} from '../../types/attempt';
+import type { AnswerMap, AutosaveStatus } from "../../types/attempt";
 
-import type {
-  ConnectionStatus,
-} from '../../websocket/useExamWebSocket';
+import ExamTimer from "./components/ExamTimer";
+import QuestionNavigator from "./components/QuestionNavigator";
+import QuestionPanel from "./components/QuestionPanel";
+import SubmitExamDialog from "./components/SubmitExamDialog";
+import { useWebSocket } from "../../websocket/useWebSocket";
 
-import ExamTimer from './components/ExamTimer';
-import QuestionNavigator from './components/QuestionNavigator';
-import QuestionPanel from './components/QuestionPanel';
-import SubmitExamDialog from './components/SubmitExamDialog';
-
-interface ExamRoomPageProps {
-  connectionStatus: ConnectionStatus;
-}
-
-const AUTOSAVE_LABELS: Record<
-  AutosaveStatus,
-  string
-> = {
-  IDLE: 'No unsaved changes',
-  SAVING: 'Saving answer...',
-  SAVED: 'Answer saved',
-  ERROR: 'Answer could not be saved',
+const AUTOSAVE_LABELS: Record<AutosaveStatus, string> = {
+  IDLE: "No unsaved changes",
+  SAVING: "Saving answer...",
+  SAVED: "Answer saved",
+  ERROR: "Answer could not be saved",
 };
 
-function ExamRoomPage({
-  connectionStatus,
-}: ExamRoomPageProps) {
+function ExamRoomPage() {
+  const {
+    status: connectionStatus
+  } = useWebSocket();
+
   const navigate = useNavigate();
 
   const { examId } = useParams<{
     examId: string;
   }>();
 
-  const [currentQuestionIndex, setCurrentQuestionIndex] =
-    useState(0);
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
 
-  const [answers, setAnswers] =
-    useState<AnswerMap>({});
+  const [answers, setAnswers] = useState<AnswerMap>({});
 
-  const [
-    flaggedQuestionIds,
-    setFlaggedQuestionIds,
-  ] = useState<Set<string>>(
+  const [flaggedQuestionIds, setFlaggedQuestionIds] = useState<Set<string>>(
     () => new Set(),
   );
 
-  const [autosaveStatus, setAutosaveStatus] =
-    useState<AutosaveStatus>('IDLE');
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>("IDLE");
 
-  const [remainingSeconds, setRemainingSeconds] =
-    useState(
-      MOCK_EXAM_ATTEMPT.durationSeconds,
-    );
+  const [remainingSeconds, setRemainingSeconds] = useState(
+    MOCK_EXAM_ATTEMPT.durationSeconds,
+  );
 
-  const [showSubmitDialog, setShowSubmitDialog] =
-    useState(false);
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
 
-  const [submitted, setSubmitted] =
-    useState(false);
+  const [submitted, setSubmitted] = useState(false);
 
-  const autosaveTimerRef =
-    useRef<number | null>(null);
+  const autosaveTimerRef = useRef<number | null>(null);
 
-  const attemptMatchesRoute =
-    MOCK_EXAM_ATTEMPT.examId === examId;
+  const attemptMatchesRoute = MOCK_EXAM_ATTEMPT.examId === examId;
 
-  const questions =
-    MOCK_EXAM_ATTEMPT.questions;
+  const questions = MOCK_EXAM_ATTEMPT.questions;
 
-  const currentQuestion =
-    questions[currentQuestionIndex];
+  const currentQuestion = questions[currentQuestionIndex];
 
-  const answeredCount =
-    Object.keys(answers).length;
+  const answeredCount = Object.keys(answers).length;
 
   useEffect(() => {
     if (submitted) {
@@ -99,12 +66,8 @@ function ExamRoomPage({
     }
 
     const timerId = window.setInterval(() => {
-      setRemainingSeconds(
-        (currentRemainingSeconds) =>
-          Math.max(
-            0,
-            currentRemainingSeconds - 1,
-          ),
+      setRemainingSeconds((currentRemainingSeconds) =>
+        Math.max(0, currentRemainingSeconds - 1),
       );
     }, 1000);
 
@@ -116,9 +79,7 @@ function ExamRoomPage({
   useEffect(() => {
     return () => {
       if (autosaveTimerRef.current !== null) {
-        window.clearTimeout(
-          autosaveTimerRef.current,
-        );
+        window.clearTimeout(autosaveTimerRef.current);
       }
     };
   }, []);
@@ -157,8 +118,8 @@ function ExamRoomPage({
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            This mock attempt does not match the examination in the
-            current route.
+            This mock attempt does not match the examination in the current
+            route.
           </p>
 
           <Link
@@ -177,69 +138,49 @@ function ExamRoomPage({
     );
   }
 
-  const handleSelectChoice = (
-    questionId: string,
-    choiceId: string,
-  ) => {
+  const handleSelectChoice = (questionId: string, choiceId: string) => {
     setAnswers((currentAnswers) => ({
       ...currentAnswers,
       [questionId]: choiceId,
     }));
 
-    setAutosaveStatus('SAVING');
+    setAutosaveStatus("SAVING");
 
     if (autosaveTimerRef.current !== null) {
-      window.clearTimeout(
-        autosaveTimerRef.current,
-      );
+      window.clearTimeout(autosaveTimerRef.current);
     }
 
     /*
      * Đây chỉ là mô phỏng độ trễ auto-save.
      * Sau này đoạn này sẽ gọi sendMessage('SAVE_ANSWER', ...).
      */
-    autosaveTimerRef.current =
-      window.setTimeout(() => {
-        setAutosaveStatus('SAVED');
-        autosaveTimerRef.current = null;
-      }, 700);
+    autosaveTimerRef.current = window.setTimeout(() => {
+      setAutosaveStatus("SAVED");
+      autosaveTimerRef.current = null;
+    }, 700);
   };
 
-  const handleToggleFlag = (
-    questionId: string,
-  ) => {
-    setFlaggedQuestionIds(
-      (currentFlaggedIds) => {
-        const nextFlaggedIds =
-          new Set(currentFlaggedIds);
+  const handleToggleFlag = (questionId: string) => {
+    setFlaggedQuestionIds((currentFlaggedIds) => {
+      const nextFlaggedIds = new Set(currentFlaggedIds);
 
-        if (
-          nextFlaggedIds.has(questionId)
-        ) {
-          nextFlaggedIds.delete(questionId);
-        } else {
-          nextFlaggedIds.add(questionId);
-        }
+      if (nextFlaggedIds.has(questionId)) {
+        nextFlaggedIds.delete(questionId);
+      } else {
+        nextFlaggedIds.add(questionId);
+      }
 
-        return nextFlaggedIds;
-      },
-    );
+      return nextFlaggedIds;
+    });
   };
 
   const handlePreviousQuestion = () => {
-    setCurrentQuestionIndex(
-      (currentIndex) =>
-        Math.max(0, currentIndex - 1),
-    );
+    setCurrentQuestionIndex((currentIndex) => Math.max(0, currentIndex - 1));
   };
 
   const handleNextQuestion = () => {
-    setCurrentQuestionIndex(
-      (currentIndex) =>
-        Math.min(
-          questions.length - 1,
-          currentIndex + 1,
-        ),
+    setCurrentQuestionIndex((currentIndex) =>
+      Math.min(questions.length - 1, currentIndex + 1),
     );
   };
 
@@ -299,9 +240,9 @@ function ExamRoomPage({
           </h1>
 
           <p className="mt-3 text-sm leading-6 text-slate-600">
-            This is currently a frontend mock. The final version will
-            show this confirmation only after the Java server commits
-            the submission successfully.
+            This is currently a frontend mock. The final version will show this
+            confirmation only after the Java server commits the submission
+            successfully.
           </p>
 
           <button
@@ -313,7 +254,7 @@ function ExamRoomPage({
             "
             type="button"
             onClick={() =>
-              navigate('/student/exams', {
+              navigate("/student/exams", {
                 replace: true,
               })
             }
@@ -354,15 +295,11 @@ function ExamRoomPage({
                 tracking-[0.14em] text-blue-700
               "
             >
-              <span>
-                {MOCK_EXAM_ATTEMPT.courseCode}
-              </span>
+              <span>{MOCK_EXAM_ATTEMPT.courseCode}</span>
 
               <span aria-hidden="true">/</span>
 
-              <span>
-                {MOCK_EXAM_ATTEMPT.examCode}
-              </span>
+              <span>{MOCK_EXAM_ATTEMPT.examCode}</span>
             </div>
 
             <h1
@@ -381,15 +318,9 @@ function ExamRoomPage({
               max-md:justify-between
             "
           >
-            <ConnectionBadge
-              status={connectionStatus}
-            />
+            <ConnectionBadge status={connectionStatus} />
 
-            <ExamTimer
-              remainingSeconds={
-                remainingSeconds
-              }
-            />
+            <ExamTimer remainingSeconds={remainingSeconds} />
 
             <button
               className="
@@ -400,9 +331,7 @@ function ExamRoomPage({
                 hover:bg-red-800
               "
               type="button"
-              onClick={() =>
-                setShowSubmitDialog(true)
-              }
+              onClick={() => setShowSubmitDialog(true)}
             >
               Submit examination
             </button>
@@ -427,16 +356,10 @@ function ExamRoomPage({
         >
           <QuestionNavigator
             questions={questions}
-            currentQuestionIndex={
-              currentQuestionIndex
-            }
+            currentQuestionIndex={currentQuestionIndex}
             answers={answers}
-            flaggedQuestionIds={
-              flaggedQuestionIds
-            }
-            onSelectQuestion={
-              setCurrentQuestionIndex
-            }
+            flaggedQuestionIds={flaggedQuestionIds}
+            onSelectQuestion={setCurrentQuestionIndex}
           />
 
           <section
@@ -477,11 +400,7 @@ function ExamRoomPage({
                   transition-[width]
                 "
                 style={{
-                  width: `${
-                    (answeredCount /
-                      questions.length) *
-                    100
-                  }%`,
+                  width: `${(answeredCount / questions.length) * 100}%`,
                 }}
               />
             </div>
@@ -490,19 +409,17 @@ function ExamRoomPage({
               className={`
                 mt-4 text-xs font-semibold
                 ${
-                  autosaveStatus === 'ERROR'
-                    ? 'text-red-700'
-                    : autosaveStatus === 'SAVING'
-                      ? 'text-amber-700'
-                      : autosaveStatus === 'SAVED'
-                        ? 'text-emerald-700'
-                        : 'text-slate-500'
+                  autosaveStatus === "ERROR"
+                    ? "text-red-700"
+                    : autosaveStatus === "SAVING"
+                      ? "text-amber-700"
+                      : autosaveStatus === "SAVED"
+                        ? "text-emerald-700"
+                        : "text-slate-500"
                 }
               `}
             >
-              {AUTOSAVE_LABELS[
-                autosaveStatus
-              ]}
+              {AUTOSAVE_LABELS[autosaveStatus]}
             </p>
           </section>
         </aside>
@@ -510,28 +427,13 @@ function ExamRoomPage({
         <div className="min-w-0">
           <QuestionPanel
             question={currentQuestion}
-            questionNumber={
-              currentQuestionIndex + 1
-            }
-            totalQuestions={
-              questions.length
-            }
-            selectedChoiceId={
-              answers[currentQuestion.id]
-            }
-            isFlagged={flaggedQuestionIds.has(
-              currentQuestion.id,
-            )}
-            disabled={
-              remainingSeconds <= 0 ||
-              connectionStatus !== 'connected'
-            }
-            onSelectChoice={
-              handleSelectChoice
-            }
-            onToggleFlag={
-              handleToggleFlag
-            }
+            questionNumber={currentQuestionIndex + 1}
+            totalQuestions={questions.length}
+            selectedChoiceId={answers[currentQuestion.id]}
+            isFlagged={flaggedQuestionIds.has(currentQuestion.id)}
+            disabled={remainingSeconds <= 0 || connectionStatus !== "connected"}
+            onSelectChoice={handleSelectChoice}
+            onToggleFlag={handleToggleFlag}
           />
 
           <div
@@ -557,20 +459,14 @@ function ExamRoomPage({
                 disabled:opacity-40
               "
               type="button"
-              disabled={
-                currentQuestionIndex === 0
-              }
-              onClick={
-                handlePreviousQuestion
-              }
+              disabled={currentQuestionIndex === 0}
+              onClick={handlePreviousQuestion}
             >
               Previous question
             </button>
 
             <p className="text-xs text-slate-500 max-sm:hidden">
-              Question{' '}
-              {currentQuestionIndex + 1} of{' '}
-              {questions.length}
+              Question {currentQuestionIndex + 1} of {questions.length}
             </p>
 
             <button
@@ -584,10 +480,7 @@ function ExamRoomPage({
                 disabled:bg-slate-300
               "
               type="button"
-              disabled={
-                currentQuestionIndex ===
-                questions.length - 1
-              }
+              disabled={currentQuestionIndex === questions.length - 1}
               onClick={handleNextQuestion}
             >
               Next question
@@ -600,9 +493,7 @@ function ExamRoomPage({
         <SubmitExamDialog
           answeredCount={answeredCount}
           totalQuestions={questions.length}
-          onCancel={() =>
-            setShowSubmitDialog(false)
-          }
+          onCancel={() => setShowSubmitDialog(false)}
           onConfirm={handleConfirmSubmit}
         />
       )}

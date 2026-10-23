@@ -2,9 +2,10 @@
 
 ## 1. Mục tiêu của giai đoạn
 
-Giai đoạn này tập trung hoàn thiện hai phần backend gần nhau nhưng có ranh giới rõ ràng:
+Giai đoạn này có ba luồng backend song song với ranh giới file rõ ràng:
 
 - **Phanh:** hoàn thiện trọn vẹn `Teacher Exam Lifecycle Management`.
+- **Hải Yến:** hoàn thiện trọn vẹn `Student Exam Catalog/Discovery`.
 - **Leader:** tự triển khai `Question Management`, giữ các file tích hợp trung tâm và kết nối frontend.
 
 Code Exam Management cơ bản của Phanh đã được merge vào `main`. Phần hiện có gồm:
@@ -535,11 +536,373 @@ Phanh chỉ báo hoàn thành khi tất cả mục sau đạt:
 
 ---
 
-# 4. PHẦN LEADER TỰ TRIỂN KHAI
+# 4. NHIỆM VỤ CỦA HẢI YẾN
+
+## 4.1. Tên nhiệm vụ
+
+**Hoàn thiện Student Exam Catalog/Discovery backend**
+
+Mục tiêu của module là cho sinh viên đã đăng nhập:
+
+- Xem danh sách các kỳ thi đang được công bố.
+- Xem thông tin an toàn của một kỳ thi được công bố.
+- Không nhận câu hỏi, choices hoặc đáp án đúng ở bước catalog.
+- Không nhìn thấy kỳ thi `DRAFT` hoặc `CLOSED`.
+
+Đây là một module read-only hoàn chỉnh, độc lập với Teacher Exam Lifecycle và Question Management đang được phát triển song song.
+
+Với schema hiện tại chưa có `open_at`/`close_at`, định nghĩa “available” trong milestone này là:
+
+```text
+exam.status = 'PUBLISHED'
+```
+
+Không tự thêm lịch mở/đóng thi, assignment hoặc attempt trong nhiệm vụ này.
+
+---
+
+## 4.2. Protocol bắt buộc
+
+### Lấy danh sách kỳ thi khả dụng
+
+```text
+GET_AVAILABLE_EXAMS
+→ AVAILABLE_EXAMS
+```
+
+Request không cần payload nghiệp vụ:
+
+```json
+{
+  "requestId": "req-available-exams-1",
+  "type": "GET_AVAILABLE_EXAMS",
+  "payload": {}
+}
+```
+
+Response đề xuất:
+
+```json
+{
+  "requestId": "req-available-exams-1",
+  "type": "AVAILABLE_EXAMS",
+  "payload": {
+    "exams": [
+      {
+        "id": 12,
+        "title": "Java Programming Final Exam",
+        "description": "Multiple-choice final examination",
+        "durationMinutes": 90,
+        "questionCount": 30,
+        "totalPoints": 30
+      }
+    ]
+  }
+}
+```
+
+Danh sách rỗng là response thành công:
+
+```json
+{
+  "exams": []
+}
+```
+
+Không trả lỗi chỉ vì chưa có kỳ thi được publish.
+
+### Lấy thông tin một kỳ thi khả dụng
+
+```text
+GET_AVAILABLE_EXAM
+→ AVAILABLE_EXAM_DETAILS
+```
+
+Request:
+
+```json
+{
+  "requestId": "req-available-exam-1",
+  "type": "GET_AVAILABLE_EXAM",
+  "payload": {
+    "examId": 12
+  }
+}
+```
+
+Response chỉ chứa metadata an toàn:
+
+```json
+{
+  "requestId": "req-available-exam-1",
+  "type": "AVAILABLE_EXAM_DETAILS",
+  "payload": {
+    "id": 12,
+    "title": "Java Programming Final Exam",
+    "description": "Multiple-choice final examination",
+    "durationMinutes": 90,
+    "questionCount": 30,
+    "totalPoints": 30
+  }
+}
+```
+
+Không trả question content, choice content hoặc trường `correct` trong module catalog.
+
+---
+
+## 4.3. Authorization và data filtering
+
+Mọi operation phải thực hiện theo thứ tự:
+
+1. Lấy user từ `AuthenticatedSessionRegistry` bằng server-side WebSocket session ID.
+2. Nếu chưa đăng nhập, trả `AUTHENTICATION_REQUIRED`.
+3. Nếu role không phải `STUDENT`, trả `FORBIDDEN`.
+4. Chỉ query exam có `status = 'PUBLISHED'` ngay trong SQL.
+5. Không query toàn bộ exam rồi filter trong Java.
+
+Không nhận `studentId`, `role` hoặc `status` từ client để quyết định quyền truy cập.
+
+Khi lấy chi tiết, câu query phải có điều kiện tương đương:
+
+```sql
+WHERE e.id = :examId
+  AND e.status = 'PUBLISHED'
+```
+
+Nếu ID không tồn tại, là `DRAFT`, hoặc đã `CLOSED`, đều trả cùng một mã:
+
+```text
+EXAM_NOT_AVAILABLE
+```
+
+Không tiết lộ rằng một draft/closed exam có tồn tại.
+
+---
+
+## 4.4. Repository và SQL
+
+Tạo repository riêng, không mở rộng `ExamRepository` của Phanh:
+
+```text
+StudentExamCatalogRepository
+JdbcStudentExamCatalogRepository
+```
+
+Contract định hướng:
+
+```java
+public interface StudentExamCatalogRepository {
+    List<AvailableExam> findAllPublished();
+
+    Optional<AvailableExam> findPublishedById(long examId);
+}
+```
+
+Tên domain/read model có thể điều chỉnh nhưng repository không được phụ thuộc WebSocket DTO.
+
+Query danh sách phải:
+
+- Chỉ lấy `PUBLISHED`.
+- `LEFT JOIN` questions để vẫn xử lý dữ liệu an toàn.
+- Dùng aggregate cho `questionCount` và `totalPoints` nếu đưa hai trường này vào response.
+- `COALESCE(SUM(q.points), 0)` để không nhận null.
+- Group theo các cột exam cần trả.
+- Sắp xếp ổn định bằng `created_at DESC, id DESC`.
+- Dùng named parameters cho mọi input.
+
+Không được select:
+
+```text
+choices.correct
+password_hash
+email
+session data
+```
+
+---
+
+## 4.5. Service
+
+Tạo:
+
+```text
+StudentExamCatalogService
+AvailableExamDetails
+AvailableExamList
+```
+
+Service chịu trách nhiệm:
+
+- Validate `examId > 0`.
+- Trả immutable result list.
+- Chuyển empty detail thành `EXAM_NOT_AVAILABLE`.
+- Chuyển `DataAccessException`/repository failure thành `DATABASE_ERROR` an toàn.
+- Không trả exception message của PostgreSQL cho client.
+
+Module read-only này không cần `@Transactional` cho list/detail thông thường. Nếu chọn dùng transaction, phải dùng read-only transaction và giải thích lý do; không được thêm lock vô ích.
+
+---
+
+## 4.6. WebSocket DTO và handler
+
+Tạo:
+
+```text
+GetAvailableExamPayload
+StudentExamCatalogMessageHandler
+```
+
+Handler cần có hai operation độc lập:
+
+```text
+handleList(...)
+handleGet(...)
+```
+
+Handler phải:
+
+- Kiểm tra authenticated session.
+- Chỉ cho role `STUDENT`.
+- Convert payload an toàn.
+- Không nhận payload null cho detail command.
+- Giữ nguyên `requestId`.
+- Trả `INVALID_PAYLOAD` khi payload sai cấu trúc.
+- Trả error nghiệp vụ đúng code.
+- Log lỗi nội bộ tại server nhưng không gửi stack trace cho client.
+- Không đóng WebSocket chỉ vì một request thất bại.
+
+Các error code được phép:
+
+```text
+AUTHENTICATION_REQUIRED
+FORBIDDEN
+INVALID_PAYLOAD
+EXAM_NOT_AVAILABLE
+DATABASE_ERROR
+INTERNAL_SERVER_ERROR
+```
+
+---
+
+## 4.7. Test bắt buộc
+
+### Repository/service integration tests
+
+Tối thiểu phải kiểm tra:
+
+1. Danh sách chỉ trả exam `PUBLISHED`.
+2. Không trả exam `DRAFT`.
+3. Không trả exam `CLOSED`.
+4. Danh sách rỗng trả thành công với list rỗng.
+5. Thứ tự là `created_at DESC, id DESC` hoặc thứ tự đã chốt trong implementation.
+6. `questionCount` đúng.
+7. `totalPoints` đúng và bằng `0` khi chưa có question.
+8. Detail trả exam `PUBLISHED` đúng ID.
+9. Detail từ chối `DRAFT` và `CLOSED` bằng `EXAM_NOT_AVAILABLE`.
+10. `examId <= 0` bị từ chối.
+11. Result không chứa question/choice/correct answer.
+12. Database exception được đổi thành error code an toàn.
+
+### Handler unit tests
+
+Tối thiểu phải kiểm tra:
+
+1. Student đã đăng nhập lấy list thành công.
+2. Student lấy detail thành công.
+3. Session chưa đăng nhập trả `AUTHENTICATION_REQUIRED`.
+4. Teacher gọi module trả `FORBIDDEN`.
+5. Payload detail null/sai kiểu trả `INVALID_PAYLOAD`.
+6. Exam không available giữ đúng error code.
+7. Response giữ nguyên `requestId`.
+8. Unexpected exception trả `INTERNAL_SERVER_ERROR`.
+
+---
+
+## 4.8. File Hải Yến được phép sửa
+
+```text
+server/src/main/java/vn/edu/hanu/exam/exception/StudentExamCatalogException.java
+server/src/main/java/vn/edu/hanu/exam/repository/StudentExamCatalogRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcStudentExamCatalogRepository.java
+server/src/main/java/vn/edu/hanu/exam/service/catalog/**
+server/src/main/java/vn/edu/hanu/exam/websocket/dto/GetAvailableExamPayload.java
+server/src/main/java/vn/edu/hanu/exam/websocket/handler/StudentExamCatalogMessageHandler.java
+server/src/test/java/**/StudentExamCatalog*Tests.java
+```
+
+Hải Yến có thể tạo read model riêng trong `service/catalog` hoặc package phù hợp đã thống nhất, nhưng không dùng domain `Choice` làm response cho student.
+
+---
+
+## 4.9. File Hải Yến không được sửa
+
+Để tránh conflict, Hải Yến không sửa:
+
+```text
+server/src/main/java/vn/edu/hanu/exam/protocol/MessageType.java
+server/src/main/java/vn/edu/hanu/exam/websocket/ExamWebSocketHandler.java
+server/src/main/java/vn/edu/hanu/exam/repository/ExamRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcExamRepository.java
+server/src/main/resources/schema.sql
+README.md
+PHAN_CONG_NHIEM_VU_BACKEND.md
+client/**
+```
+
+Không mở rộng sang:
+
+- Join/start/resume attempt.
+- Trả nội dung question cho Exam Room.
+- Randomization.
+- Auto-save answer.
+- Submit/grading/result.
+- Monitoring hoặc anti-cheating.
+
+---
+
+## 4.10. Git workflow và Definition of Done
+
+Branch đề xuất:
+
+```text
+feature/hai-yen-student-exam-catalog
+```
+
+Trước khi gửi Pull Request:
+
+```powershell
+cd server
+$env:DB_PASSWORD = '<local-database-password>'
+mvn test
+cd ..
+git diff --check
+git status
+```
+
+Hải Yến chỉ báo hoàn thành khi:
+
+- [ ] List chỉ trả exam `PUBLISHED`.
+- [ ] Detail chỉ trả exam `PUBLISHED`.
+- [ ] Authentication và role `STUDENT` được kiểm tra tại server.
+- [ ] Không trả question/choice/correct answer.
+- [ ] Empty list là success.
+- [ ] Invalid/unavailable ID trả error an toàn.
+- [ ] SQL dùng named parameters và order ổn định.
+- [ ] Handler giữ nguyên `requestId`.
+- [ ] Unit và integration test đều pass.
+- [ ] Toàn bộ test cũ vẫn pass.
+- [ ] `git diff --check` không báo lỗi.
+- [ ] Không sửa file bị cấm.
+- [ ] Pull Request có commit hash, file list và bằng chứng `mvn test`.
+
+---
+
+# 5. PHẦN LEADER TỰ TRIỂN KHAI
 
 Leader tự chịu trách nhiệm cho:
 
-## 4.1. Question Management
+## 5.1. Question Management
 
 - Question repository và JDBC implementation.
 - Choice persistence.
@@ -552,7 +915,7 @@ Leader tự chịu trách nhiệm cho:
 - Teacher DTO có thể chứa `correct`; student DTO tuyệt đối không được chứa đáp án đúng.
 - Test service/repository/handler và rollback.
 
-## 4.2. Tích hợp trung tâm
+## 5.2. Tích hợp trung tâm
 
 Leader giữ quyền sửa:
 
@@ -593,29 +956,30 @@ Leader chịu trách nhiệm cập nhật React sau khi backend contract đã �
 
 ---
 
-# 5. Thứ tự phối hợp và merge
+# 6. Thứ tự phối hợp và merge
 
 Thứ tự thực hiện đề xuất:
 
-1. Leader gửi tài liệu này cho Phanh.
-2. Phanh xác nhận payload, response và error code trước khi code.
-3. Phanh làm trên branch `feature/phanh-exam-lifecycle`.
-4. Song song, leader triển khai Question Management trên branch/worktree của leader.
-5. Phanh chạy toàn bộ test và mở Pull Request.
-6. Leader review file scope, SQL, transaction, authorization và test.
-7. Leader merge Exam Lifecycle vào `main`.
-8. Leader chạy toàn bộ backend test với PostgreSQL thật.
-9. Leader tích hợp `MessageType` và `ExamWebSocketHandler`.
-10. Leader kết nối các trang React Teacher với backend thật.
-11. Chỉ xóa mock data của từng trang sau khi flow thật đã hoạt động và có loading/error/empty state.
+1. Leader gửi tài liệu này cho Phanh và Hải Yến.
+2. Phanh xác nhận payload/response/error code cho Exam Lifecycle.
+3. Hải Yến xác nhận payload/response/error code cho Student Exam Catalog.
+4. Phanh làm trên branch `feature/phanh-exam-lifecycle`.
+5. Hải Yến làm trên branch `feature/hai-yen-student-exam-catalog`.
+6. Song song, leader triển khai Question Management trên branch/worktree của leader.
+7. Mỗi thành viên chạy toàn bộ test và mở Pull Request riêng.
+8. Leader review file scope, SQL, authorization, transaction và test của từng PR.
+9. Leader merge lần lượt, chạy full backend test sau mỗi lần merge.
+10. Leader giải quyết integration tại `MessageType` và `ExamWebSocketHandler` sau cùng.
+11. Leader kết nối trang React Teacher với Exam/Question backend thật.
+12. Leader kết nối Student Dashboard/Exam Information với Student Exam Catalog thật.
+13. Chỉ xóa mock data của từng trang sau khi flow tương ứng hoạt động và có loading/error/empty state.
 
 ---
 
-# 6. Những phần chưa giao trong giai đoạn này
+# 7. Những phần chưa giao trong giai đoạn này
 
 Không tự mở rộng sang các phần sau:
 
-- Student available-exam query.
 - Exam attempt/session.
 - Question/choice randomization theo attempt.
 - Server-authoritative deadline.
@@ -627,11 +991,11 @@ Không tự mở rộng sang các phần sau:
 - Suspicious activity và anti-cheating rules.
 - Concurrency/load test toàn hệ thống.
 
-Các phần này sẽ được chia theo milestone sau khi Teacher Exam Lifecycle và Question Management chạy end-to-end.
+Các phần này sẽ được chia theo milestone sau khi Teacher Exam Lifecycle, Question Management và Student Exam Catalog chạy end-to-end.
 
 ---
 
-# 7. Điều kiện trước khi bắt đầu milestone tiếp theo
+# 8. Điều kiện trước khi bắt đầu milestone tiếp theo
 
 Chỉ chuyển sang attempt/submission/anti-cheating khi:
 
@@ -641,6 +1005,8 @@ Chỉ chuyển sang attempt/submission/anti-cheating khi:
 - Publish validation hoạt động với dữ liệu PostgreSQL thật.
 - Teacher publish và close exam đúng state transition.
 - Delete draft rollback an toàn khi có lỗi.
+- Student chỉ xem được danh sách/chi tiết exam `PUBLISHED` qua backend thật.
+- Student Catalog không trả question, choice hoặc correct answer.
 - Backend full test trả `BUILD SUCCESS`.
 - Client chạy `npm run lint` và `npm run build` thành công.
 - README phản ánh đúng trạng thái thực tế, không đánh dấu hoàn thành sớm.

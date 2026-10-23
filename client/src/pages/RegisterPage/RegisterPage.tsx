@@ -1,42 +1,23 @@
-import {
-  useState,
-  type ChangeEvent,
-  type FormEvent,
-} from 'react';
+import { useState, type ChangeEvent, type FormEvent } from "react";
 
 import FeedbackMessage, {
   type Feedback,
-} from '../../components/common/FeedbackMessage';
+} from "../../components/common/FeedbackMessage";
 
-import InstitutionPanel from '../../components/layout/InstitutionPanel';
-import SystemFooter from '../../components/layout/SystemFooter';
-import SystemHeader from '../../components/layout/SystemHeader';
+import InstitutionPanel from "../../components/layout/InstitutionPanel";
+import SystemFooter from "../../components/layout/SystemFooter";
+import SystemHeader from "../../components/layout/SystemHeader";
 
-import type {
-  ServerMessage,
-} from '../../websocket/protocol';
+import { WEBSOCKET_URL } from "../../websocket/config";
 
-import type {
-  ConnectionStatus,
-} from '../../websocket/useExamWebSocket';
+import type { ServerMessage } from "../../websocket/protocol";
 
 import {
   EMPTY_REGISTER_FORM,
   validateRegisterForm,
   type RegisterFormState,
-} from './registerValidation';
-
-interface RegisterPageProps {
-  connectionStatus: ConnectionStatus;
-
-  sendMessage: (
-    type: 'REGISTER',
-    payload: Record<string, unknown>,
-    onResponse: (
-      message: ServerMessage
-    ) => void,
-  ) => string | null;
-}
+} from "./registerValidation";
+import { useWebSocket } from "../../websocket/useWebSocket";
 
 const INPUT_CLASS_NAME = `
   min-h-[50px] w-full rounded-md border border-slate-200
@@ -46,79 +27,64 @@ const INPUT_CLASS_NAME = `
   focus:ring-[3px] focus:ring-blue-600/10
 `;
 
-const LABEL_CLASS_NAME =
-  'text-sm font-semibold text-slate-800';
+const LABEL_CLASS_NAME = "text-sm font-semibold text-slate-800";
 
-function RegisterPage({
-  connectionStatus,
-  sendMessage,
-}: RegisterPageProps) {
-  const [form, setForm] = useState<RegisterFormState>(
-    EMPTY_REGISTER_FORM,
-  );
-
+function RegisterPage() {
+  const { status: connectionStatus, sendMessage } = useWebSocket();
+  const [form, setForm] = useState<RegisterFormState>(EMPTY_REGISTER_FORM);
   const [showPassword, setShowPassword] = useState(false);
 
-  const [feedback, setFeedback] =
-    useState<Feedback | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const [pendingRequestId, setPendingRequestId] =
-    useState<string | null>(null);
+  const [pendingRequestId, setPendingRequestId] = useState<string | null>(null);
 
-  const isConnected = connectionStatus === 'connected';
+  const isConnected = connectionStatus === "connected";
   const isSubmitting = pendingRequestId !== null;
 
   const supportStatusClass =
-    connectionStatus === 'connected'
-      ? 'text-emerald-700'
-      : connectionStatus === 'error' ||
-          connectionStatus === 'disconnected'
-        ? 'text-red-700'
-        : 'text-amber-700';
+    connectionStatus === "connected"
+      ? "text-emerald-700"
+      : connectionStatus === "error" || connectionStatus === "disconnected"
+        ? "text-red-700"
+        : "text-amber-700";
 
   const supportStatusText =
-    connectionStatus === 'connected'
-      ? 'Connected'
-      : connectionStatus === 'connecting'
-        ? 'Connecting...'
-        : 'Not connected';
+    connectionStatus === "connected"
+      ? "Connected"
+      : connectionStatus === "connecting"
+        ? "Connecting..."
+        : "Not connected";
 
-  const handleRegisterResponse = (
-    message: ServerMessage,
-  ) => {
+  const handleRegisterResponse = (message: ServerMessage) => {
     setPendingRequestId(null);
 
-    if (message.type === 'REGISTERED') {
-      const registeredName =
-        message.data?.fullName ?? 'the student';
+    if (message.type === "REGISTERED") {
+      const registeredName = message.data?.fullName ?? "the student";
 
       setFeedback({
-        type: 'success',
+        type: "success",
         message:
           `The account for ${registeredName} ` +
-          'has been created successfully.',
+          "has been created successfully.",
       });
 
       setForm(EMPTY_REGISTER_FORM);
       return;
     }
 
-    const errorCode =
-      message.error?.code ?? 'UNKNOWN_ERROR';
+    const errorCode = message.error?.code ?? "UNKNOWN_ERROR";
 
     const errorMessage =
       message.error?.message ??
-      'The server could not process the registration request.';
+      "The server could not process the registration request.";
 
     setFeedback({
-      type: 'error',
+      type: "error",
       message: `${errorCode}: ${errorMessage}`,
     });
   };
 
-  const handleInputChange = (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleInputChange = (event: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = event.target;
 
     setForm((currentForm) => ({
@@ -131,17 +97,14 @@ function RegisterPage({
     }
   };
 
-  const handleSubmit = (
-    event: FormEvent<HTMLFormElement>,
-  ) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFeedback(null);
 
     if (!isConnected) {
       setFeedback({
-        type: 'error',
-        message:
-          'The client is not connected to the server at ws://localhost:8081/ws.',
+        type: "error",
+        message: `The client is not connected to the examination server at ${WEBSOCKET_URL}.`
       });
       return;
     }
@@ -150,24 +113,28 @@ function RegisterPage({
 
     if (validationError !== null) {
       setFeedback({
-        type: 'error',
+        type: "error",
         message: validationError,
       });
       return;
     }
 
-    const requestId = sendMessage('REGISTER', {
-      username: form.username.trim(),
-      fullName: form.fullName.trim(),
-      email: form.email.trim(),
-      password: form.password,
-    }, handleRegisterResponse);
+    const requestId = sendMessage(
+      "REGISTER",
+      {
+        username: form.username.trim(),
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        password: form.password,
+      },
+      handleRegisterResponse,
+    );
 
     if (requestId === null) {
       setFeedback({
-        type: 'error',
+        type: "error",
         message:
-          'The request could not be sent because the WebSocket connection is not ready.',
+          "The request could not be sent because the WebSocket connection is not ready.",
       });
       return;
     }
@@ -255,8 +222,8 @@ function RegisterPage({
             </h2>
 
             <p className="mt-3 max-w-lg text-sm leading-6 text-slate-500">
-              Create your account first. Your information is sent
-              securely to the examination server in real time.
+              Create your account first. Your information is sent securely to
+              the examination server in real time.
             </p>
           </div>
 
@@ -267,10 +234,7 @@ function RegisterPage({
             />
           )}
 
-          <form
-            className="grid gap-5.5"
-            onSubmit={handleSubmit}
-          >
+          <form className="grid gap-5.5" onSubmit={handleSubmit}>
             <div
               className="
                 grid grid-cols-2 gap-5
@@ -278,12 +242,8 @@ function RegisterPage({
               "
             >
               <div className="grid gap-2.5">
-                <label
-                  className={LABEL_CLASS_NAME}
-                  htmlFor="username"
-                >
-                  Username{' '}
-                  <span className="text-red-600">*</span>
+                <label className={LABEL_CLASS_NAME} htmlFor="username">
+                  Username <span className="text-red-600">*</span>
                 </label>
 
                 <input
@@ -301,18 +261,13 @@ function RegisterPage({
                 />
 
                 <small className="-mt-0.5 text-xs leading-5 text-slate-500">
-                  Use letters, numbers, dots, underscores, or
-                  hyphens.
+                  Use letters, numbers, dots, underscores, or hyphens.
                 </small>
               </div>
 
               <div className="grid gap-2.5">
-                <label
-                  className={LABEL_CLASS_NAME}
-                  htmlFor="fullName"
-                >
-                  Full name{' '}
-                  <span className="text-red-600">*</span>
+                <label className={LABEL_CLASS_NAME} htmlFor="fullName">
+                  Full name <span className="text-red-600">*</span>
                 </label>
 
                 <input
@@ -328,17 +283,19 @@ function RegisterPage({
                   maxLength={100}
                   required
                 />
-                <small className='-mt-0.5 text-xs leading-5 text-transparent' aria-hidden='true'> Placeholder helper text</small>
+                <small
+                  className="-mt-0.5 text-xs leading-5 text-transparent"
+                  aria-hidden="true"
+                >
+                  {" "}
+                  Placeholder helper text
+                </small>
               </div>
             </div>
 
             <div className="grid gap-2.5">
-              <label
-                className={LABEL_CLASS_NAME}
-                htmlFor="email"
-              >
-                Email address{' '}
-                <span className="text-red-600">*</span>
+              <label className={LABEL_CLASS_NAME} htmlFor="email">
+                Email address <span className="text-red-600">*</span>
               </label>
 
               <input
@@ -362,12 +319,8 @@ function RegisterPage({
               "
             >
               <div className="grid gap-2.5">
-                <label
-                  className={LABEL_CLASS_NAME}
-                  htmlFor="password"
-                >
-                  Password{' '}
-                  <span className="text-red-600">*</span>
+                <label className={LABEL_CLASS_NAME} htmlFor="password">
+                  Password <span className="text-red-600">*</span>
                 </label>
 
                 <div className="relative">
@@ -375,7 +328,7 @@ function RegisterPage({
                     className={`${INPUT_CLASS_NAME} pr-16`}
                     id="password"
                     name="password"
-                    type={showPassword ? 'text' : 'password'}
+                    type={showPassword ? "text" : "password"}
                     value={form.password}
                     onChange={handleInputChange}
                     placeholder="At least 8 characters"
@@ -393,35 +346,27 @@ function RegisterPage({
                     "
                     type="button"
                     aria-label={
-                      showPassword
-                        ? 'Hide password'
-                        : 'Show password'
+                      showPassword ? "Hide password" : "Show password"
                     }
                     onClick={() =>
-                      setShowPassword(
-                        (currentValue) => !currentValue,
-                      )
+                      setShowPassword((currentValue) => !currentValue)
                     }
                   >
-                    {showPassword ? 'Hide' : 'Show'}
+                    {showPassword ? "Hide" : "Show"}
                   </button>
                 </div>
               </div>
 
               <div className="grid gap-2.5">
-                <label
-                  className={LABEL_CLASS_NAME}
-                  htmlFor="confirmPassword"
-                >
-                  Confirm password{' '}
-                  <span className="text-red-600">*</span>
+                <label className={LABEL_CLASS_NAME} htmlFor="confirmPassword">
+                  Confirm password <span className="text-red-600">*</span>
                 </label>
 
                 <input
                   className={INPUT_CLASS_NAME}
                   id="confirmPassword"
                   name="confirmPassword"
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   value={form.confirmPassword}
                   onChange={handleInputChange}
                   placeholder="Enter the password again"
@@ -446,9 +391,8 @@ function RegisterPage({
               />
 
               <span>
-                I confirm that the registration information is
-                correct and agree to follow the online examination
-                regulations.
+                I confirm that the registration information is correct and agree
+                to follow the online examination regulations.
               </span>
             </label>
 
@@ -466,10 +410,12 @@ function RegisterPage({
               disabled={!isConnected || isSubmitting}
             >
               {isSubmitting
-                ? 'Submitting request...'
-                : 'Create student account'}
+                ? "Submitting request..."
+                : "Create student account"}
 
-              <span className="text-lg leading-none" aria-hidden="true">→</span>
+              <span className="text-lg leading-none" aria-hidden="true">
+                →
+              </span>
             </button>
           </form>
 
