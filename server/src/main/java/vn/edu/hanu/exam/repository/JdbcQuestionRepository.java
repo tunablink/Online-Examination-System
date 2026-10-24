@@ -52,23 +52,40 @@ public class JdbcQuestionRepository implements QuestionRepository {
     }
 
     @Override
-    public Optional<ExamStatus> findOwnedExamStatusForUpdate(long examId, long teacherId){
-        String sql = """
-                SELECT status
-                FROM exams
-                WHERE id = :examId
-                  AND created_by = :teacherId
-                FOR UPDATE
-                """;
-
-        Map<String, Object> parameters = Map.of(
-                "examId", examId,
-                "teacherId", teacherId
-        );
-        
-        List<ExamStatus> statuses = jdbcTemplate.query(sql, parameters, (resultSet, rowNumber) -> ExamStatus.valueOf(resultSet.getString("status")));
-        return statuses.stream().findFirst();
+    public Optional<ExamStatus> findOwnedExamStatus(long examId, long teacherId) {
+        return queryOwnedExamStatus(examId, teacherId, false);
     }
+
+    @Override
+    public Optional<ExamStatus> findOwnedExamStatusForUpdate(long examId, long teacherId) {
+        return queryOwnedExamStatus(examId, teacherId, true);
+    }
+
+    private Optional<ExamStatus> queryOwnedExamStatus(long examId, long teacherId, boolean lockForUpdate) {
+        String sql = """
+            SELECT status
+            FROM exams
+            WHERE id = :examId
+              AND created_by = :teacherId
+            """
+            + (lockForUpdate ? "FOR UPDATE" : "");
+
+    Map<String, Object> parameters = Map.of(
+            "examId", examId,
+            "teacherId", teacherId
+    );
+
+    List<ExamStatus> statuses = jdbcTemplate.query(
+            sql,
+            parameters,
+            (resultSet, rowNumber) ->
+                    ExamStatus.valueOf(
+                            resultSet.getString("status")
+                    )
+    );
+
+    return statuses.stream().findFirst();
+}
 
     @Override 
     public Question insertQuestion(long examId, String content, int points, int displayOrder){
