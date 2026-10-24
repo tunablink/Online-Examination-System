@@ -17,19 +17,25 @@ import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.exam.CreateExamCommand;
 import vn.edu.hanu.exam.service.exam.ExamManagementService;
+import vn.edu.hanu.exam.service.exam.UpdateExamCommand;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.websocket.dto.CreateExamPayload;
 import vn.edu.hanu.exam.websocket.dto.GetExamPayload;
+import vn.edu.hanu.exam.websocket.dto.UpdateExamPayload;
 
 @Component
 public class ExamManagementMessageHandler {
     static final String TYPE_EXAM_CREATED = "EXAM_CREATED";
     static final String TYPE_TEACHER_EXAMS = "TEACHER_EXAMS";
     static final String TYPE_EXAM_DETAILS = "EXAM_DETAILS";
+    static final String TYPE_EXAM_UPDATED = "EXAM_UPDATED";
+    static final String TYPE_EXAM_PUBLISHED = "EXAM_PUBLISHED";
+    static final String TYPE_EXAM_CLOSED = "EXAM_CLOSED";
+    static final String TYPE_EXAM_DELETED = "EXAM_DELETED";
     static final String CODE_AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED";
     static final String CODE_FORBIDDEN = "FORBIDDEN";
     static final String CODE_INVALID_PAYLOAD = "INVALID_PAYLOAD";
-    static final String CODE_INTERNAL_ERROR = "INTERNAL_ERROR";
+    static final String CODE_INTERNAL_SERVER_ERROR = "INTERNAL_SERVER_ERROR";
 
     private static final Logger LOGGER = LoggerFactory.getLogger(ExamManagementMessageHandler.class);
 
@@ -58,6 +64,22 @@ public class ExamManagementMessageHandler {
         return handleGet(session.getId(), message.requestId(), message.payload());
     }
 
+    public ServerMessage handleUpdate(WebSocketSession session, ClientMessage message) {
+        return handleUpdate(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handlePublish(WebSocketSession session, ClientMessage message) {
+        return handlePublish(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleClose(WebSocketSession session, ClientMessage message) {
+        return handleClose(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleDelete(WebSocketSession session, ClientMessage message) {
+        return handleDelete(session.getId(), message.requestId(), message.payload());
+    }
+
     public ServerMessage handleCreate(String sessionId, String requestId, Map<String, Object> payload) {
         return withTeacher(sessionId, requestId, teacher -> {
             CreateExamPayload input = convertPayload(payload, CreateExamPayload.class);
@@ -82,6 +104,53 @@ public class ExamManagementMessageHandler {
         });
     }
 
+    public ServerMessage handleUpdate(String sessionId, String requestId, Map<String, Object> payload) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            UpdateExamPayload input = convertPayload(payload, UpdateExamPayload.class);
+            return ServerMessage.success(
+                    requestId,
+                    TYPE_EXAM_UPDATED,
+                    examService.updateExam(
+                            teacher.id(),
+                            new UpdateExamCommand(
+                                    input.examId(),
+                                    input.title(),
+                                    input.description(),
+                                    input.durationMinutes())));
+        });
+    }
+
+    public ServerMessage handlePublish(String sessionId, String requestId, Map<String, Object> payload) {
+        return withExamId(sessionId, requestId, payload, TYPE_EXAM_PUBLISHED, examService::publishExam);
+    }
+
+    public ServerMessage handleClose(String sessionId, String requestId, Map<String, Object> payload) {
+        return withExamId(sessionId, requestId, payload, TYPE_EXAM_CLOSED, examService::closeExam);
+    }
+
+    public ServerMessage handleDelete(String sessionId, String requestId, Map<String, Object> payload) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            GetExamPayload input = convertPayload(payload, GetExamPayload.class);
+            examService.deleteExam(input.examId(), teacher.id());
+            return ServerMessage.success(requestId, TYPE_EXAM_DELETED, Map.of("examId", input.examId()));
+        });
+    }
+
+    private ServerMessage withExamId(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload,
+            String responseType,
+            ExamOperation operation) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            GetExamPayload input = convertPayload(payload, GetExamPayload.class);
+            return ServerMessage.success(
+                    requestId,
+                    responseType,
+                    operation.apply(input.examId(), teacher.id()));
+        });
+    }
+
     private ServerMessage withTeacher(
             String sessionId,
             String requestId,
@@ -102,7 +171,10 @@ public class ExamManagementMessageHandler {
             return ServerMessage.error(requestId, exception.code(), exception.getMessage());
         } catch (RuntimeException exception) {
             LOGGER.error("Unexpected exam operation error: requestId={}", requestId, exception);
-            return ServerMessage.error(requestId, CODE_INTERNAL_ERROR, "An unexpected error occurred.");
+            return ServerMessage.error(
+                    requestId,
+                    CODE_INTERNAL_SERVER_ERROR,
+                    "An unexpected error occurred.");
         }
     }
 
@@ -118,4 +190,9 @@ public class ExamManagementMessageHandler {
     }
 
     private static final class InvalidPayloadException extends RuntimeException {}
+
+    @FunctionalInterface
+    private interface ExamOperation {
+        Object apply(long examId, long teacherId);
+    }
 }

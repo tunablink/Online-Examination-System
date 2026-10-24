@@ -10,6 +10,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -28,6 +29,7 @@ import vn.edu.hanu.exam.service.exam.CreateExamCommand;
 import vn.edu.hanu.exam.service.exam.ExamDetails;
 import vn.edu.hanu.exam.service.exam.ExamManagementService;
 import vn.edu.hanu.exam.service.exam.TeacherExamList;
+import vn.edu.hanu.exam.service.exam.UpdateExamCommand;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 class ExamManagementMessageHandlerTests {
@@ -108,6 +110,78 @@ class ExamManagementMessageHandlerTests {
         verify(examService).findByIdAndCreatedBy(1L, 10L);
     }
 
+    @Test
+    void lifecycleOperationsReturnExpectedTypesAndPreserveRequestId() {
+        authenticate(UserRole.TEACHER);
+        ExamDetails exam = sampleExam();
+        when(examService.updateExam(eq(10L), any(UpdateExamCommand.class))).thenReturn(exam);
+        when(examService.publishExam(1L, 10L)).thenReturn(exam);
+        when(examService.closeExam(1L, 10L)).thenReturn(exam);
+
+        ServerMessage updated = handler.handleUpdate(SESSION_ID, REQUEST_ID, Map.of(
+                "examId", 1L,
+                "title", "Updated exam",
+                "durationMinutes", 90));
+        ServerMessage published = handler.handlePublish(
+                SESSION_ID, REQUEST_ID, Map.of("examId", 1L));
+        ServerMessage closed = handler.handleClose(
+                SESSION_ID, REQUEST_ID, Map.of("examId", 1L));
+        ServerMessage deleted = handler.handleDelete(
+                SESSION_ID, REQUEST_ID, Map.of("examId", 1L));
+
+        assertSuccess(updated, "EXAM_UPDATED");
+        assertSuccess(published, "EXAM_PUBLISHED");
+        assertSuccess(closed, "EXAM_CLOSED");
+        assertSuccess(deleted, "EXAM_DELETED");
+        verify(examService).deleteExam(1L, 10L);
+    }
+
+    @Test
+    void lifecycleOperationsRejectNullOrMalformedPayload() {
+        authenticate(UserRole.TEACHER);
+
+        assertError(handler.handleUpdate(SESSION_ID, REQUEST_ID, null), "INVALID_PAYLOAD");
+        assertError(handler.handlePublish(
+                SESSION_ID, REQUEST_ID, Map.of("examId", "not-a-number")), "INVALID_PAYLOAD");
+        assertError(handler.handleClose(SESSION_ID, REQUEST_ID, null), "INVALID_PAYLOAD");
+        assertError(handler.handleDelete(SESSION_ID, REQUEST_ID, null), "INVALID_PAYLOAD");
+    }
+
+    @Test
+    void lifecycleOperationsEnforceAuthenticationAndTeacherRole() {
+        assertError(handler.handlePublish(
+                "missing", REQUEST_ID, Map.of("examId", 1L)), "AUTHENTICATION_REQUIRED");
+
+        authenticate(UserRole.STUDENT);
+        assertError(handler.handleDelete(
+                SESSION_ID, REQUEST_ID, Map.of("examId", 1L)), "FORBIDDEN");
+        verify(examService, never()).publishExam(anyLong(), anyLong());
+        verify(examService, never()).deleteExam(anyLong(), anyLong());
+    }
+
+    @Test
+    void lifecycleBusinessErrorsKeepTheirCode() {
+        authenticate(UserRole.TEACHER);
+        when(examService.publishExam(1L, 10L)).thenThrow(
+                new ExamManagementException("EXAM_NOT_EDITABLE", "Invalid state."));
+
+        assertError(handler.handlePublish(
+                SESSION_ID, REQUEST_ID, Map.of("examId", 1L)), "EXAM_NOT_EDITABLE");
+    }
+
+    @Test
+    void unexpectedLifecycleErrorIsSanitized() {
+        authenticate(UserRole.TEACHER);
+        doThrow(new RuntimeException("sensitive detail"))
+                .when(examService).deleteExam(1L, 10L);
+
+        ServerMessage response = handler.handleDelete(
+                SESSION_ID, REQUEST_ID, Map.of("examId", 1L));
+
+        assertError(response, "INTERNAL_SERVER_ERROR");
+        assertEquals("An unexpected error occurred.", response.error().message());
+    }
+
     private void authenticate(UserRole role) {
         sessionRegistry.authenticate(
                 SESSION_ID,
@@ -126,5 +200,11 @@ class ExamManagementMessageHandlerTests {
         assertNull(response.data());
         assertNotNull(response.error());
         assertEquals(expectedCode, response.error().code());
+    }
+
+    private void assertSuccess(ServerMessage response, String expectedType) {
+        assertEquals(REQUEST_ID, response.requestId());
+        assertEquals(expectedType, response.type());
+        assertNull(response.error());
     }
 }
