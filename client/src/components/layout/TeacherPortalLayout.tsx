@@ -24,6 +24,11 @@ const NAVIGATION_ITEMS: NavigationItem[] = [
     to: "/teacher/exams",
   },
   {
+    label: "Student accounts",
+    description: "Create student accounts",
+    to: "/teacher/students/new",
+  },
+  {
     label: "Monitoring",
     description: "Live sessions",
     to: "/teacher/monitoring",

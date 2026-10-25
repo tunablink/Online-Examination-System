@@ -63,6 +63,8 @@ function App() {
 
           <Route path="exams/:examId" element={<ExamOverviewPage />} />
 
+          <Route path="students/new" element={<RegisterPage />} />
+
           <Route path="monitoring" element={<ExamMonitoringPage />} />
 
           <Route path="monitoring/:examId" element={<ExamMonitoringPage />} />
@@ -70,12 +72,6 @@ function App() {
           <Route path="activities" element={<SuspiciousActivityPage />} />
         </Route>
 
-        <Route
-          path="/admin/students/new"
-          element={
-            <RegisterPage />
-          }
-        />
       </Route>
       <Route
         path="*"
