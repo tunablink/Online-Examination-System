@@ -1,131 +1,198 @@
 import {
+  useCallback,
+  useEffect,
   useMemo,
   useState,
   type ChangeEvent,
-} from 'react';
+} from "react";
 
-import { Link } from 'react-router';
+import { Link } from "react-router";
 
-import {
-  MOCK_TEACHER_EXAMS,
-} from '../../mocks/teacher';
+import FeedbackMessage, {
+  type Feedback,
+} from "../../components/common/FeedbackMessage";
 
-import type {
-  TeacherExam,
-  TeacherExamStatus,
-} from '../../types/teacher';
+import type { ExamDetailsData, ExamStatus } from "../../websocket/protocol";
 
-type ExamStatusFilter =
-  | 'ALL'
-  | TeacherExamStatus;
+import { useWebSocket } from "../../websocket/useWebSocket";
 
-const DATE_FORMATTER =
-  new Intl.DateTimeFormat(
-    'en-GB',
-    {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    },
-  );
+type ExamStatusFilter = "ALL" | ExamStatus;
+
+const DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
+  day: "2-digit",
+  month: "short",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+});
 
 function formatDate(value: string): string {
   const parsedDate = new Date(value);
 
   if (Number.isNaN(parsedDate.getTime())) {
-    return 'Unknown schedule';
+    return "Unknown";
   }
 
   return DATE_FORMATTER.format(parsedDate);
 }
 
-function getStatusAppearance(
-  status: TeacherExamStatus,
-) {
-  if (status === 'PUBLISHED') {
+function isExamStatus(value: unknown): value is ExamStatus {
+  return value === "DRAFT" || value === "PUBLISHED" || value === "CLOSED";
+}
+
+function isExamDetailsData(value: unknown): value is ExamDetailsData {
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
+
+  const candidate = value as Record<string, unknown>;
+
+  return (
+    typeof candidate.id === "number" &&
+    typeof candidate.title === "string" &&
+    (typeof candidate.description === "string" ||
+      candidate.description === null) &&
+    typeof candidate.durationMinutes === "number" &&
+    isExamStatus(candidate.status) &&
+    typeof candidate.createdBy === "number" &&
+    typeof candidate.createdAt === "string" &&
+    typeof candidate.updatedAt === "string"
+  );
+}
+
+function getStatusAppearance(status: ExamStatus) {
+  if (status === "PUBLISHED") {
     return {
-      label: 'Published',
-      className:
-        'border-emerald-200 bg-emerald-50 text-emerald-800',
+      label: "Published",
+      className: "border-emerald-200 bg-emerald-50 text-emerald-800",
     };
   }
 
-  if (status === 'CLOSED') {
+  if (status === "CLOSED") {
     return {
-      label: 'Closed',
-      className:
-        'border-slate-200 bg-slate-100 text-slate-700',
+      label: "Closed",
+      className: "border-slate-200 bg-slate-100 text-slate-700",
     };
   }
 
   return {
-    label: 'Draft',
-    className:
-      'border-amber-200 bg-amber-50 text-amber-800',
+    label: "Draft",
+    className: "border-amber-200 bg-amber-50 text-amber-800",
   };
 }
 
-function matchesSearch(
-  exam: TeacherExam,
-  searchTerm: string,
-): boolean {
-  const normalizedSearchTerm =
-    searchTerm.trim().toLowerCase();
+function matchesSearch(exam: ExamDetailsData, searchTerm: string): boolean {
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
 
   if (normalizedSearchTerm.length === 0) {
     return true;
   }
 
   const searchableContent = [
+    String(exam.id),
     exam.title,
-    exam.examCode,
-    exam.courseCode,
-    exam.courseName,
+    exam.description ?? "",
+    exam.status,
   ]
-    .join(' ')
+    .join(" ")
     .toLowerCase();
 
-  return searchableContent.includes(
-    normalizedSearchTerm,
-  );
+  return searchableContent.includes(normalizedSearchTerm);
 }
 
 function ExamManagementPage() {
-  const [searchTerm, setSearchTerm] =
-    useState('');
+  const { status: connectionStatus, sendMessage } = useWebSocket();
 
-  const [statusFilter, setStatusFilter] =
-    useState<ExamStatusFilter>('ALL');
+  const [exams, setExams] = useState<ExamDetailsData[]>([]);
+
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const [statusFilter, setStatusFilter] = useState<ExamStatusFilter>("ALL");
+
+  const [isLoading, setIsLoading] = useState(false);
+
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+
+  const loadExams = useCallback(() => {
+    if (connectionStatus !== "connected") {
+      setIsLoading(false);
+
+      setFeedback({
+        type: "error",
+        title: "Server connection unavailable",
+        message:
+          "The examination list cannot be loaded until the server connection is restored.",
+      });
+
+      return;
+    }
+
+    setIsLoading(true);
+    setFeedback(null);
+
+    const requestId = sendMessage("GET_TEACHER_EXAMS", {}, (response) => {
+      setIsLoading(false);
+
+      const receivedExams = response.data?.exams;
+
+      if (
+        response.type === "TEACHER_EXAMS" &&
+        Array.isArray(receivedExams) &&
+        receivedExams.every(isExamDetailsData)
+      ) {
+        setExams(receivedExams);
+
+        return;
+      }
+
+      setFeedback({
+        type: "error",
+        title: "Unable to load examinations",
+        message:
+          response.error?.message ??
+          "The server returned an unexpected examination list.",
+      });
+    });
+
+    if (requestId === null) {
+      setIsLoading(false);
+
+      setFeedback({
+        type: "error",
+        title: "Request could not be sent",
+        message:
+          "The WebSocket connection is not ready. Wait for the connection and try again.",
+      });
+    }
+  }, [connectionStatus, sendMessage]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    const loadTimer = window.setTimeout(() => {
+      loadExams();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(loadTimer);
+    };
+  }, [connectionStatus, loadExams]);
 
   const filteredExams = useMemo(
     () =>
-      MOCK_TEACHER_EXAMS.filter(
-        (exam) => {
-          const matchesStatus =
-            statusFilter === 'ALL' ||
-            exam.status === statusFilter;
+      exams.filter((exam) => {
+        const matchesStatus =
+          statusFilter === "ALL" || exam.status === statusFilter;
 
-          return (
-            matchesStatus &&
-            matchesSearch(
-              exam,
-              searchTerm,
-            )
-          );
-        },
-      ),
-    [
-      searchTerm,
-      statusFilter,
-    ],
+        return matchesStatus && matchesSearch(exam, searchTerm);
+      }),
+    [exams, searchTerm, statusFilter],
   );
 
-  const handleSearchChange = (
-    event: ChangeEvent<HTMLInputElement>,
-  ) => {
+  const handleSearchChange = (event: ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(event.target.value);
   };
 
@@ -142,7 +209,8 @@ function ExamManagementPage() {
         <div>
           <p
             className="
-              text-[11px] font-bold uppercase
+              text-[11px] font-bold
+              uppercase
               tracking-[0.16em]
               text-blue-700
             "
@@ -152,7 +220,8 @@ function ExamManagementPage() {
 
           <h1
             className="
-              mt-3 text-3xl font-semibold
+              mt-3 text-3xl
+              font-semibold
               tracking-[-0.035em]
               text-slate-950
             "
@@ -160,32 +229,79 @@ function ExamManagementPage() {
             Manage examinations
           </h1>
 
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-            Create, configure, publish, monitor, and close your
-            examinations.
+          <p
+            className="
+              mt-3 max-w-2xl
+              text-sm leading-6
+              text-slate-600
+            "
+          >
+            Create draft examinations, manage questions, and review examination
+            status.
           </p>
         </div>
 
-        <Link
+        <div
           className="
-            inline-flex min-h-11
-            items-center justify-center
-            rounded-md bg-blue-700
-            px-5 text-sm font-semibold
-            text-white transition-colors
-            hover:bg-blue-800
+            flex flex-wrap gap-3
           "
-          to="/teacher/exams/new"
         >
-          Create examination
-        </Link>
+          <button
+            className="
+              inline-flex min-h-11
+              items-center
+              justify-center
+              rounded-md border
+              border-slate-300
+              bg-white px-5
+              text-sm font-semibold
+              text-slate-700
+              transition-colors
+              hover:border-blue-600
+              hover:text-blue-700
+              disabled:cursor-not-allowed
+              disabled:opacity-60
+            "
+            type="button"
+            disabled={isLoading || connectionStatus !== "connected"}
+            onClick={loadExams}
+          >
+            {isLoading ? "Loading..." : "Reload list"}
+          </button>
+
+          <Link
+            className="
+              inline-flex min-h-11
+              items-center
+              justify-center
+              rounded-md
+              bg-blue-700 px-5
+              text-sm font-semibold
+              text-white
+              transition-colors
+              hover:bg-blue-800
+            "
+            to="/teacher/exams/new"
+          >
+            Create examination
+          </Link>
+        </div>
       </section>
+
+      {feedback !== null && (
+        <div className="mt-6">
+          <FeedbackMessage
+            feedback={feedback}
+            onClose={() => setFeedback(null)}
+          />
+        </div>
+      )}
 
       <section
         className="
-          mt-8 rounded-xl border
-          border-slate-200 bg-white
-          p-5
+          mt-8 rounded-xl
+          border border-slate-200
+          bg-white p-5
         "
       >
         <div
@@ -196,7 +312,11 @@ function ExamManagementPage() {
             max-lg:items-stretch
           "
         >
-          <div className="max-w-md flex-1">
+          <div
+            className="
+              max-w-md flex-1
+            "
+          >
             <label
               className="
                 text-xs font-semibold
@@ -224,34 +344,33 @@ function ExamManagementPage() {
               type="search"
               value={searchTerm}
               onChange={handleSearchChange}
-              placeholder="Search title, code, or course"
+              placeholder="Search by ID, title, description, or status"
             />
           </div>
 
           <div>
-            <p className="text-xs font-semibold text-slate-700">
+            <p
+              className="
+                text-xs font-semibold
+                text-slate-700
+              "
+            >
               Status
             </p>
 
             <div
               className="
-                mt-2 flex flex-wrap gap-1
-                rounded-lg border
-                border-slate-200
+                mt-2 flex flex-wrap
+                gap-1 rounded-lg
+                border border-slate-200
                 bg-slate-50 p-1
               "
             >
-              {(
-                [
-                  'ALL',
-                  'DRAFT',
-                  'PUBLISHED',
-                  'CLOSED',
-                ] as const
-              ).map((status) => (
-                <button
-                  key={status}
-                  className={`
+              {(["ALL", "DRAFT", "PUBLISHED", "CLOSED"] as const).map(
+                (status) => (
+                  <button
+                    key={status}
+                    className={`
                     min-h-9 rounded-md
                     px-3 text-xs
                     font-semibold
@@ -269,19 +388,15 @@ function ExamManagementPage() {
                         `
                     }
                   `}
-                  type="button"
-                  onClick={() =>
-                    setStatusFilter(status)
-                  }
-                >
-                  {status === 'ALL'
-                    ? 'All'
-                    : status.charAt(0) +
-                      status
-                        .slice(1)
-                        .toLowerCase()}
-                </button>
-              ))}
+                    type="button"
+                    onClick={() => setStatusFilter(status)}
+                  >
+                    {status === "ALL"
+                      ? "All"
+                      : status.charAt(0) + status.slice(1).toLowerCase()}
+                  </button>
+                ),
+              )}
             </div>
           </div>
         </div>
@@ -294,99 +409,122 @@ function ExamManagementPage() {
             justify-between gap-4
           "
         >
-          <h2 className="text-lg font-semibold text-slate-950">
+          <h2
+            className="
+              text-lg font-semibold
+              text-slate-950
+            "
+          >
             Examinations
           </h2>
 
-          <p className="text-xs text-slate-500">
-            {filteredExams.length}{' '}
-            {filteredExams.length === 1
-              ? 'record'
-              : 'records'}
+          <p
+            className="
+              text-xs text-slate-500
+            "
+          >
+            {filteredExams.length}{" "}
+            {filteredExams.length === 1 ? "record" : "records"}
           </p>
         </div>
 
-        {filteredExams.length > 0 ? (
+        {isLoading ? (
           <div
             className="
-              mt-4 grid grid-cols-2
-              gap-5
+              mt-4 rounded-xl
+              border border-slate-200
+              bg-white px-6 py-16
+              text-center
+            "
+          >
+            <p
+              className="
+                text-sm font-semibold
+                text-slate-800
+              "
+            >
+              Loading examinations...
+            </p>
+
+            <p
+              className="
+                mt-2 text-xs
+                text-slate-500
+              "
+            >
+              Waiting for the Java server to return your examination list.
+            </p>
+          </div>
+        ) : filteredExams.length > 0 ? (
+          <div
+            className="
+              mt-4 grid
+              grid-cols-2 gap-5
               max-xl:grid-cols-1
             "
           >
             {filteredExams.map((exam) => {
-              const statusAppearance =
-                getStatusAppearance(
-                  exam.status,
-                );
+              const statusAppearance = getStatusAppearance(exam.status);
 
               return (
                 <article
                   key={exam.id}
                   className="
-                    rounded-xl border
-                    border-slate-200
-                    bg-white p-5
-                    transition-all
-                    hover:border-slate-300
-                    hover:shadow-[0_12px_30px_rgb(15_23_42/0.06)]
-                  "
+                      rounded-xl border
+                      border-slate-200
+                      bg-white p-5
+                      transition-all
+                      hover:border-slate-300
+                      hover:shadow-[0_12px_30px_rgb(15_23_42/0.06)]
+                    "
                 >
                   <div
                     className="
-                      flex items-start
-                      justify-between gap-4
-                      max-sm:flex-col
-                    "
+                        flex items-start
+                        justify-between gap-4
+                        max-sm:flex-col
+                      "
                   >
                     <div className="min-w-0">
-                      <div
+                      <p
                         className="
-                          flex flex-wrap
-                          items-center gap-2
-                          text-xs font-semibold
-                        "
-                      >
-                        <span className="text-blue-700">
-                          {exam.courseCode}
-                        </span>
-
-                        <span
-                          className="
-                            h-1 w-1
-                            rounded-full
-                            bg-slate-300
+                            text-xs font-semibold
+                            text-blue-700
                           "
-                        />
-
-                        <span className="text-slate-500">
-                          {exam.examCode}
-                        </span>
-                      </div>
+                      >
+                        Examination #{exam.id}
+                      </p>
 
                       <h3
                         className="
-                          mt-3 text-lg
-                          font-semibold
-                          leading-7
-                          text-slate-950
-                        "
+                            mt-3 text-lg
+                            font-semibold
+                            leading-7
+                            text-slate-950
+                          "
                       >
                         {exam.title}
                       </h3>
 
-                      <p className="mt-1 text-sm text-slate-500">
-                        {exam.courseName}
+                      <p
+                        className="
+                            mt-2 line-clamp-3
+                            text-sm leading-6
+                            text-slate-500
+                          "
+                      >
+                        {exam.description?.trim() || "No description provided."}
                       </p>
                     </div>
 
                     <span
                       className={`
-                        shrink-0 rounded-full
-                        border px-2.5 py-1.5
-                        text-xs font-semibold
-                        ${statusAppearance.className}
-                      `}
+                          shrink-0
+                          rounded-full border
+                          px-2.5 py-1.5
+                          text-xs font-semibold
+                          ${statusAppearance.className}
+                        `}
                     >
                       {statusAppearance.label}
                     </span>
@@ -394,138 +532,120 @@ function ExamManagementPage() {
 
                   <div
                     className="
-                      mt-5 grid
-                      grid-cols-2 gap-3
-                      border-y
-                      border-slate-100 py-4
-                      max-sm:grid-cols-1
-                    "
+                        mt-5 grid
+                        grid-cols-3 gap-3
+                        border-y
+                        border-slate-100
+                        py-4
+                        max-md:grid-cols-1
+                      "
                   >
                     <div>
                       <p
                         className="
-                          text-[10px]
-                          font-bold uppercase
-                          tracking-[0.12em]
-                          text-slate-400
-                        "
-                      >
-                        Starts
-                      </p>
-
-                      <p className="mt-1 text-xs font-medium text-slate-700">
-                        {formatDate(
-                          exam.startsAt,
-                        )}
-                      </p>
-                    </div>
-
-                    <div>
-                      <p
-                        className="
-                          text-[10px]
-                          font-bold uppercase
-                          tracking-[0.12em]
-                          text-slate-400
-                        "
+                            text-[10px]
+                            font-bold uppercase
+                            tracking-[0.12em]
+                            text-slate-400
+                          "
                       >
                         Duration
                       </p>
 
-                      <p className="mt-1 text-xs font-medium text-slate-700">
-                        {
-                          exam.durationMinutes
-                        }{' '}
-                        minutes
+                      <p
+                        className="
+                            mt-1 text-xs
+                            font-medium
+                            text-slate-700
+                          "
+                      >
+                        {exam.durationMinutes} minutes
+                      </p>
+                    </div>
+
+                    <div>
+                      <p
+                        className="
+                            text-[10px]
+                            font-bold uppercase
+                            tracking-[0.12em]
+                            text-slate-400
+                          "
+                      >
+                        Created
+                      </p>
+
+                      <p
+                        className="
+                            mt-1 text-xs
+                            font-medium
+                            text-slate-700
+                          "
+                      >
+                        {formatDate(exam.createdAt)}
+                      </p>
+                    </div>
+
+                    <div>
+                      <p
+                        className="
+                            text-[10px]
+                            font-bold uppercase
+                            tracking-[0.12em]
+                            text-slate-400
+                          "
+                      >
+                        Updated
+                      </p>
+
+                      <p
+                        className="
+                            mt-1 text-xs
+                            font-medium
+                            text-slate-700
+                          "
+                      >
+                        {formatDate(exam.updatedAt)}
                       </p>
                     </div>
                   </div>
 
                   <div
                     className="
-                      mt-4 grid grid-cols-3
-                      gap-3
-                    "
-                  >
-                    <div>
-                      <p className="text-lg font-semibold text-slate-950">
-                        {exam.questionCount}
-                      </p>
-
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                        Questions
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-lg font-semibold text-slate-950">
-                        {
-                          exam.assignedStudentCount
-                        }
-                      </p>
-
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                        Students
-                      </p>
-                    </div>
-
-                    <div>
-                      <p className="text-lg font-semibold text-slate-950">
-                        {
-                          exam.submittedAttemptCount
-                        }
-                      </p>
-
-                      <p className="text-[10px] uppercase tracking-wide text-slate-400">
-                        Submitted
-                      </p>
-                    </div>
-                  </div>
-
-                  <div
-                    className="
-                      mt-5 flex flex-wrap
-                      justify-end gap-2
-                    "
+                        mt-5 flex flex-wrap
+                        justify-end gap-2
+                      "
                   >
                     <Link
                       className="
-                        rounded-md border
-                        border-slate-300
-                        bg-white px-3 py-2
-                        text-xs font-semibold
-                        text-slate-700
-                        transition-colors
-                        hover:border-blue-600
-                        hover:text-blue-700
-                      "
-                      to={
-                        `/teacher/exams/` +
-                        `${exam.id}`
-                      }
+                          rounded-md border
+                          border-slate-300
+                          bg-white px-3 py-2
+                          text-xs font-semibold
+                          text-slate-700
+                          transition-colors
+                          hover:border-blue-600
+                          hover:text-blue-700
+                        "
+                      to={`/teacher/exams/` + `${exam.id}/questions`}
                     >
-                      Manage
+                      Questions
                     </Link>
 
-                    {exam.status ===
-                      'PUBLISHED' && (
-                      <Link
-                        className="
+                    <Link
+                      className="
                           rounded-md
-                          bg-blue-700 px-3 py-2
+                          bg-blue-700
+                          px-3 py-2
                           text-xs font-semibold
                           text-white
                           transition-colors
                           hover:bg-blue-800
                         "
-                        to={
-                          `/teacher/monitoring/` +
-                          `${exam.id}`
-                        }
-                      >
-                        Monitor
-                      </Link>
-                    )}
+                      to={`/teacher/exams/` + `${exam.id}`}
+                    >
+                      Manage
+                    </Link>
                   </div>
                 </article>
               );
@@ -541,13 +661,46 @@ function ExamManagementPage() {
               text-center
             "
           >
-            <p className="text-sm font-semibold text-slate-800">
-              No examinations found
+            <p
+              className="
+                text-sm font-semibold
+                text-slate-800
+              "
+            >
+              {exams.length === 0
+                ? "No examinations yet"
+                : "No examinations match the filters"}
             </p>
 
-            <p className="mt-2 text-xs text-slate-500">
-              Change the search term or status filter.
+            <p
+              className="
+                mt-2 text-xs
+                text-slate-500
+              "
+            >
+              {exams.length === 0
+                ? "Create your first draft examination to begin adding questions."
+                : "Change the search term or status filter."}
             </p>
+
+            {exams.length === 0 && (
+              <Link
+                className="
+                  mt-5 inline-flex
+                  min-h-10 items-center
+                  justify-center
+                  rounded-md
+                  bg-blue-700 px-4
+                  text-xs font-semibold
+                  text-white
+                  transition-colors
+                  hover:bg-blue-800
+                "
+                to="/teacher/exams/new"
+              >
+                Create examination
+              </Link>
+            )}
           </div>
         )}
       </section>
