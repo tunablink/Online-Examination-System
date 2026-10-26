@@ -2,6 +2,7 @@ export type ClientMessageType =
   | 'PING'
   | 'REGISTER'
   | 'LOGIN'
+  | 'GET_TEACHER_DASHBOARD'
   | 'CREATE_EXAM'
   | 'GET_TEACHER_EXAMS'
   | 'GET_EXAM'
@@ -19,6 +20,7 @@ export type ServerMessageType =
   | 'PONG'
   | 'REGISTERED'
   | 'LOGGED_IN'
+  | 'TEACHER_DASHBOARD'
   | 'EXAM_CREATED'
   | 'TEACHER_EXAMS'
   | 'EXAM_DETAILS'
@@ -126,6 +128,25 @@ export interface ExamDetailsData {
   updatedAt: string;
 }
 
+export interface TeacherDashboardExamData {
+  id: number;
+  title: string;
+  description: string | null;
+  durationMinutes: number;
+  status: ExamStatus;
+  questionCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeacherDashboardData {
+  totalExams: number;
+  draftExamCount: number;
+  publishedExamCount: number;
+  closedExamCount: number;
+  recentExams: TeacherDashboardExamData[];
+}
+
 export interface ClientMessage {
   requestId: string;
   type: ClientMessageType;
@@ -164,6 +185,12 @@ export interface ServerMessageData {
   displayOrder?: number;
   choices?: TeacherChoiceData[];
   questions?: TeacherQuestionData[];
+
+  totalExams?: number;
+  draftExamCount?: number;
+  publishedExamCount?: number;
+  closedExamCount?: number;
+  recentExams?: TeacherDashboardExamData[];
 }
 
 export interface ServerMessage {
