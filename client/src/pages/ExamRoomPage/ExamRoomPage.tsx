@@ -5,12 +5,11 @@ import Icon from '../../components/common/Icon';
 import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
 import { MOCK_EXAM_ATTEMPT } from '../../mocks/attempt';
 import type { AnswerMap, AutosaveStatus } from '../../types/attempt';
-import type { ConnectionStatus } from '../../websocket/useExamWebSocket';
+import { useWebSocket } from '../../websocket/useWebSocket';
 import QuestionNavigator from './components/QuestionNavigator';
 import QuestionPanel from './components/QuestionPanel';
 import SubmitExamDialog from './components/SubmitExamDialog';
 
-interface ExamRoomPageProps { connectionStatus: ConnectionStatus; }
 const autosaveLabels: Record<AutosaveStatus, string> = { IDLE: 'Ready to save', SAVING: 'Saving…', SAVED: 'Autosaved just now', ERROR: 'Save failed' };
 
 function formatTime(value: number) {
@@ -18,8 +17,9 @@ function formatTime(value: number) {
   return [Math.floor(safe / 3600), Math.floor((safe % 3600) / 60), safe % 60].map((part) => String(part).padStart(2, '0')).join(':');
 }
 
-function ExamRoomPage({ connectionStatus }: ExamRoomPageProps) {
+function ExamRoomPage() {
   const navigate = useNavigate();
+  const { status: connectionStatus } = useWebSocket();
   const { examId } = useParams();
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<AnswerMap>({});

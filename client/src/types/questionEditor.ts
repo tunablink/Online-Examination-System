@@ -8,6 +8,7 @@ export interface QuestionEditorQuestion {
   id: string;
   content: string;
   points: number;
+  displayOrder?: number;
   choices: QuestionEditorChoice[];
 }
 

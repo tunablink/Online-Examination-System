@@ -5,26 +5,64 @@ import java.util.Optional;
 
 public enum MessageType {
     CONNECTED(false),
+
     PING(true),
-    PONG(false), 
+    PONG(false),
+
     REGISTER(true),
     REGISTERED(false),
+
     LOGIN(true),
     LOGGED_IN(false),
+
+    GET_STUDENTS(true),
+    STUDENTS(false),
+
+    GET_STUDENT(true),
+    STUDENT_DETAILS(false),
+
+    GET_TEACHER_DASHBOARD(true),
+    TEACHER_DASHBOARD(false),
+
     CREATE_EXAM(true),
     EXAM_CREATED(false),
+
     GET_TEACHER_EXAMS(true),
     TEACHER_EXAMS(false),
+
     GET_EXAM(true),
     EXAM_DETAILS(false),
+
     UPDATE_EXAM(true),
     EXAM_UPDATED(false),
+
     PUBLISH_EXAM(true),
     EXAM_PUBLISHED(false),
+
     CLOSE_EXAM(true),
     EXAM_CLOSED(false),
+
     DELETE_EXAM(true),
     EXAM_DELETED(false),
+
+    CREATE_QUESTION(true),
+    QUESTION_CREATED(false),
+
+    UPDATE_QUESTION(true),
+    QUESTION_UPDATED(false),
+
+    DELETE_QUESTION(true),
+    QUESTION_DELETED(false),
+
+    GET_EXAM_QUESTIONS(true),
+    EXAM_QUESTIONS(false),
+
+    GET_AVAILABLE_EXAMS(true),
+    AVAILABLE_EXAMS(false),
+
+    GET_AVAILABLE_EXAM(true),
+    AVAILABLE_EXAM_DETAILS(false),
+
     ERROR(false);
 
     private final boolean acceptedFromClient;
@@ -37,18 +75,17 @@ public enum MessageType {
         return acceptedFromClient;
     }
 
-    public static Optional<MessageType> fromWireValue(String value){
+    public static Optional<MessageType> fromWireValue(String value) {
         if (value == null || value.isBlank()) {
             return Optional.empty();
         }
 
         String normalizedValue = value.trim().toUpperCase(Locale.ROOT);
 
-        try{
+        try {
             return Optional.of(MessageType.valueOf(normalizedValue));
-        } catch (IllegalArgumentException e){
+        } catch (IllegalArgumentException exception) {
             return Optional.empty();
         }
     }
-
 }

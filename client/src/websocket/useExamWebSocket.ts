@@ -4,7 +4,10 @@ import type {
   ClientMessage,
   ClientMessageType,
   ServerMessage,
+  ServerMessageType,
 } from "./protocol";
+
+import { WEBSOCKET_URL } from "./config";
 
 export type ConnectionStatus =
   | "connecting"
@@ -19,16 +22,20 @@ export type SendExamMessage = (
   onResponse?: ServerMessageHandler,
 ) => string | null;
 
+export type Unsubscribe = () => void;
+
 interface PendingRequest {
   handler: ServerMessageHandler;
   timeoutId: ReturnType<typeof setTimeout>;
 }
 
+interface UseExamWebSocketOptions {
+  onConnectionLost?: () => void;
+}
+
 const REQUEST_TIMEOUT_MS = 10_000;
 const RECONNECT_BASE_DELAY_MS = 1_000;
 const RECONNECT_MAX_DELAY_MS = 10_000;
-
-const WEBSOCKET_URL = "ws://localhost:8081/ws";
 
 function createConnectionErrorMessage(): ServerMessage {
   return {
@@ -54,10 +61,16 @@ function createRequestTimeoutMessage(requestId: string): ServerMessage {
   };
 }
 
-export function useExamWebSocket() {
+export function useExamWebSocket({
+  onConnectionLost,
+}: UseExamWebSocketOptions = {}) {
   const socketRef = useRef<WebSocket | null>(null);
 
   const responseHandlersRef = useRef<Map<string, PendingRequest>>(new Map());
+
+  const subscribersRef = useRef<
+    Map<ServerMessageType, Set<ServerMessageHandler>>
+  >(new Map());
 
   const [status, setStatus] = useState<ConnectionStatus>("connecting");
 
@@ -82,6 +95,24 @@ export function useExamWebSocket() {
       pendingRequests.forEach(({ handler, timeoutId }) => {
         clearTimeout(timeoutId);
         handler(connectionError);
+      });
+    };
+
+    const notifySubscribers = (message: ServerMessage) => {
+      const subscribers = subscribersRef.current.get(message.type);
+
+      if (subscribers === undefined) {
+        return;
+      }
+
+      const subscriberSnapshot = Array.from(subscribers);
+
+      subscriberSnapshot.forEach((subscriber) => {
+        try {
+          subscriber(message);
+        } catch (error) {
+          console.error(`A subscriber for ${message.type} failed:`, error);
+        }
       });
     };
 
@@ -147,6 +178,8 @@ export function useExamWebSocket() {
 
           setLastMessage(message);
 
+          notifySubscribers(message);
+
           if (message.requestId === null) {
             return;
           }
@@ -185,6 +218,7 @@ export function useExamWebSocket() {
 
         setStatus("disconnected");
         rejectPendingRequests();
+        onConnectionLost?.();
         scheduleReconnect();
       };
     };
@@ -217,7 +251,38 @@ export function useExamWebSocket() {
         activeSocket.close();
       }
     };
-  }, []);
+  }, [onConnectionLost]);
+
+  const subscribe = useCallback(
+    (type: ServerMessageType, handler: ServerMessageHandler): Unsubscribe => {
+      const subscriberMap = subscribersRef.current;
+
+      let subscribers = subscriberMap.get(type);
+
+      if (subscribers === undefined) {
+        subscribers = new Set<ServerMessageHandler>();
+
+        subscriberMap.set(type, subscribers);
+      }
+
+      subscribers.add(handler);
+
+      return () => {
+        const currentSubscribers = subscribersRef.current.get(type);
+
+        if (currentSubscribers === undefined) {
+          return;
+        }
+
+        currentSubscribers.delete(handler);
+
+        if (currentSubscribers.size === 0) {
+          subscribersRef.current.delete(type);
+        }
+      };
+    },
+    [],
+  );
 
   const sendMessage = useCallback(
     (
@@ -283,5 +348,6 @@ export function useExamWebSocket() {
     status,
     lastMessage,
     sendMessage,
+    subscribe,
   };
 }

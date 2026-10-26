@@ -16,15 +16,11 @@ import org.springframework.web.socket.WebSocketSession;
 import tools.jackson.databind.json.JsonMapper;
 import vn.edu.hanu.exam.service.LoginService;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
+import vn.edu.hanu.exam.websocket.handler.ExamManagementMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.QuestionManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
-/**
- * Unit test cho ExamWebSocketHandler – kiểm tra error handling.
- *
- * Không cần Spring context hay database.
- * Dùng FakeWebSocketSession để bắt các message server gửi ra.
- *
- * Người viết: Hải Yến (fix/websocket-error-handling)
- */
+import vn.edu.hanu.exam.websocket.handler.StudentExamCatalogMessageHandler;
+
 class WebSocketErrorHandlingTests {
 
     private ExamWebSocketHandler handler;
@@ -32,18 +28,38 @@ class WebSocketErrorHandlingTests {
 
     @BeforeEach
     void setUp() {
-        JsonMapper jsonMapper =JsonMapper.builder().build();
+        JsonMapper jsonMapper = JsonMapper.builder().build();
 
-        RegistrationMessageHandler registrationMessageHandler = mock(RegistrationMessageHandler.class);
+        RegistrationMessageHandler registrationMessageHandler =
+                mock(RegistrationMessageHandler.class);
 
-        LoginService loginService = mock(LoginService.class);
+        ExamManagementMessageHandler examManagementMessageHandler =
+                mock(ExamManagementMessageHandler.class);
 
-        AuthenticatedSessionRegistry authenticatedSessionRegistry = mock(AuthenticatedSessionRegistry.class);
+        QuestionManagementMessageHandler questionManagementMessageHandler =
+                mock(QuestionManagementMessageHandler.class);
 
-        handler = new ExamWebSocketHandler(jsonMapper,registrationMessageHandler,loginService, authenticatedSessionRegistry);
+        StudentExamCatalogMessageHandler studentExamCatalogMessageHandler =
+                mock(StudentExamCatalogMessageHandler.class);
+
+        LoginService loginService =
+                mock(LoginService.class);
+
+        AuthenticatedSessionRegistry authenticatedSessionRegistry =
+                mock(AuthenticatedSessionRegistry.class);
+
+        handler = new ExamWebSocketHandler(
+                jsonMapper,
+                registrationMessageHandler,
+                examManagementMessageHandler,
+                questionManagementMessageHandler,
+                studentExamCatalogMessageHandler,
+                loginService,
+                authenticatedSessionRegistry
+        );
 
         fakeSession = new FakeWebSocketSession();
-}
+    }
 
     // -----------------------------------------------------------------------
     // INVALID_JSON

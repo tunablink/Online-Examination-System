@@ -6,14 +6,9 @@ import { MOCK_MONITORED_SESSIONS, MOCK_SUSPICIOUS_ACTIVITIES } from '../../mocks
 import { MOCK_TEACHER_EXAMS } from '../../mocks/teacher';
 import type { AttemptMonitoringStatus } from '../../types/monitoring';
 import type { ServerExam } from '../../websocket/protocol';
-import type { ConnectionStatus, SendExamMessage } from '../../websocket/useExamWebSocket';
+import { useWebSocket } from '../../websocket/useWebSocket';
 
 type Filter = 'ALL' | AttemptMonitoringStatus | 'WARNINGS';
-
-interface ExamMonitoringPageProps {
-  connectionStatus: ConnectionStatus;
-  sendMessage: SendExamMessage;
-}
 
 interface MonitoringExam {
   id: string;
@@ -33,7 +28,8 @@ function StatCard({ icon, label, value, note, tone = 'teal' }: { icon: IconName;
   return <article className="rounded-xl border border-[#dce7ea] bg-white p-4"><div className="flex justify-between"><span className={`grid h-8 w-8 place-items-center rounded-lg border border-[#e3eaec] ${color}`}><Icon name={icon} size={15} /></span><span className="text-[8px] text-[#829096]">{note}</span></div><p className="mt-4 text-[9px] font-bold uppercase tracking-[.08em] text-[#829096]">{label}</p><p className={`mt-1 text-[25px] font-bold ${color}`}>{value}</p></article>;
 }
 
-function ExamMonitoringPage({ connectionStatus, sendMessage }: ExamMonitoringPageProps) {
+function ExamMonitoringPage() {
+  const { status: connectionStatus, sendMessage } = useWebSocket();
   const { examId } = useParams();
   const navigate = useNavigate();
   const [filter, setFilter] = useState<Filter>('ALL');

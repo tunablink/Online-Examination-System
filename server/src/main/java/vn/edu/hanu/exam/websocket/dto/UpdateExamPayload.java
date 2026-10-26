@@ -4,4 +4,5 @@ public record UpdateExamPayload(
         long examId,
         String title,
         String description,
-        int durationMinutes) {}
+        int durationMinutes
+) {}

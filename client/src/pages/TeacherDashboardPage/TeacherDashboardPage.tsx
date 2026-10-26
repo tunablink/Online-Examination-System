@@ -1,16 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
 
 import { useAuth } from '../../auth/useAuth';
 import Icon, { type IconName } from '../../components/common/Icon';
 import { MOCK_MONITORED_SESSIONS, MOCK_SUSPICIOUS_ACTIVITIES } from '../../mocks/monitoring';
-import type { ServerExam } from '../../websocket/protocol';
-import type { ConnectionStatus, SendExamMessage } from '../../websocket/useExamWebSocket';
-
-interface TeacherDashboardPageProps {
-  connectionStatus: ConnectionStatus;
-  sendMessage: SendExamMessage;
-}
+import type { TeacherDashboardData } from '../../websocket/protocol';
+import { useWebSocket } from '../../websocket/useWebSocket';
 
 const dateFormatter = new Intl.DateTimeFormat('en-GB', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
@@ -34,22 +29,26 @@ function MetricCard({ icon, label, value, note, tone = 'teal' }: { icon: IconNam
   );
 }
 
-function TeacherDashboardPage({ connectionStatus, sendMessage }: TeacherDashboardPageProps) {
+function TeacherDashboardPage() {
   const { user } = useAuth();
-  const [exams, setExams] = useState<ServerExam[]>([]);
+  const { status: connectionStatus, sendMessage } = useWebSocket();
+  const [dashboard, setDashboard] = useState<TeacherDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
-    const requestId = sendMessage('GET_TEACHER_EXAMS', {}, (message) => {
+    const requestId = sendMessage('GET_TEACHER_DASHBOARD', {}, (message) => {
       setLoading(false);
-      if (message.type === 'TEACHER_EXAMS' && Array.isArray(message.data?.exams)) {
+      if (message.type === 'TEACHER_DASHBOARD' && message.data &&
+        typeof message.data.totalExams === 'number' && typeof message.data.draftExamCount === 'number' &&
+        typeof message.data.publishedExamCount === 'number' && typeof message.data.closedExamCount === 'number' &&
+        Array.isArray(message.data.recentExams)) {
         setError(null);
-        setExams(message.data.exams);
+        setDashboard({ totalExams: message.data.totalExams, draftExamCount: message.data.draftExamCount, publishedExamCount: message.data.publishedExamCount, closedExamCount: message.data.closedExamCount, recentExams: message.data.recentExams });
         return;
       }
-      setError(message.error?.message ?? 'Could not load examinations.');
+      setError(message.error?.message ?? 'Could not load the teacher dashboard.');
     });
     if (requestId === null) {
       queueMicrotask(() => {
@@ -59,11 +58,8 @@ function TeacherDashboardPage({ connectionStatus, sendMessage }: TeacherDashboar
     }
   }, [connectionStatus, sendMessage]);
 
-  const totals = useMemo(() => ({
-    published: exams.filter((exam) => exam.status === 'PUBLISHED').length,
-    draft: exams.filter((exam) => exam.status === 'DRAFT').length,
-    closed: exams.filter((exam) => exam.status === 'CLOSED').length,
-  }), [exams]);
+  const exams = dashboard?.recentExams ?? [];
+  const totals = { published: dashboard?.publishedExamCount ?? 0, draft: dashboard?.draftExamCount ?? 0, closed: dashboard?.closedExamCount ?? 0 };
 
   const activeStudents = MOCK_MONITORED_SESSIONS.filter((session) => session.attemptStatus === 'TAKING').length;
   const flagged = MOCK_SUSPICIOUS_ACTIVITIES.length;
@@ -88,7 +84,7 @@ function TeacherDashboardPage({ connectionStatus, sendMessage }: TeacherDashboar
       {error && <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#efd8da] bg-[#fff6f6] px-4 py-3 text-[11px] text-[#a82b31]"><Icon name="alert" size={15} />{error}</div>}
 
       <section className="mt-5 grid grid-cols-5 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2 max-sm:grid-cols-1" aria-label="Dashboard metrics">
-        <MetricCard icon="document" label="Total exams" value={loading ? '—' : exams.length} note={`${totals.draft} draft`} />
+        <MetricCard icon="document" label="Total exams" value={loading ? '—' : dashboard?.totalExams ?? 0} note={`${totals.draft} draft`} />
         <MetricCard icon="activity" label="Active monitoring" value={totals.published} note="Live now" />
         <MetricCard icon="users" label="Active students" value={activeStudents} note="Preview" />
         <MetricCard icon="check" label="Closed exams" value={totals.closed} note="Completed" tone="amber" />

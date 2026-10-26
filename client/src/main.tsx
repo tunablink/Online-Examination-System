@@ -5,6 +5,7 @@ import AuthProvider from './auth/AuthProvider';
 
 import App from './App';
 import './index.css';
+import WebSocketProvider from './websocket/WebSocketProvider';
 
 const rootElement = document.getElementById('root');
 
@@ -15,9 +16,11 @@ if (rootElement === null) {
 createRoot(rootElement).render(
   <StrictMode>
     <AuthProvider>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
+      <WebSocketProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </WebSocketProvider>
     </AuthProvider>
   </StrictMode>,
 );

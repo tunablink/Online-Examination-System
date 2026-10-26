@@ -19,8 +19,11 @@ import vn.edu.hanu.exam.service.exam.CreateExamCommand;
 import vn.edu.hanu.exam.service.exam.ExamManagementService;
 import vn.edu.hanu.exam.service.exam.UpdateExamCommand;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
+import vn.edu.hanu.exam.websocket.dto.CloseExamPayload;
 import vn.edu.hanu.exam.websocket.dto.CreateExamPayload;
+import vn.edu.hanu.exam.websocket.dto.DeleteExamPayload;
 import vn.edu.hanu.exam.websocket.dto.GetExamPayload;
+import vn.edu.hanu.exam.websocket.dto.PublishExamPayload;
 import vn.edu.hanu.exam.websocket.dto.UpdateExamPayload;
 
 @Component
@@ -64,22 +67,6 @@ public class ExamManagementMessageHandler {
         return handleGet(session.getId(), message.requestId(), message.payload());
     }
 
-    public ServerMessage handleUpdate(WebSocketSession session, ClientMessage message) {
-        return handleUpdate(session.getId(), message.requestId(), message.payload());
-    }
-
-    public ServerMessage handlePublish(WebSocketSession session, ClientMessage message) {
-        return handlePublish(session.getId(), message.requestId(), message.payload());
-    }
-
-    public ServerMessage handleClose(WebSocketSession session, ClientMessage message) {
-        return handleClose(session.getId(), message.requestId(), message.payload());
-    }
-
-    public ServerMessage handleDelete(WebSocketSession session, ClientMessage message) {
-        return handleDelete(session.getId(), message.requestId(), message.payload());
-    }
-
     public ServerMessage handleCreate(String sessionId, String requestId, Map<String, Object> payload) {
         return withTeacher(sessionId, requestId, teacher -> {
             CreateExamPayload input = convertPayload(payload, CreateExamPayload.class);
@@ -104,50 +91,103 @@ public class ExamManagementMessageHandler {
         });
     }
 
-    public ServerMessage handleUpdate(String sessionId, String requestId, Map<String, Object> payload) {
-        return withTeacher(sessionId, requestId, teacher -> {
-            UpdateExamPayload input = convertPayload(payload, UpdateExamPayload.class);
-            return ServerMessage.success(
-                    requestId,
-                    TYPE_EXAM_UPDATED,
-                    examService.updateExam(
-                            teacher.id(),
-                            new UpdateExamCommand(
-                                    input.examId(),
-                                    input.title(),
-                                    input.description(),
-                                    input.durationMinutes())));
-        });
+    public ServerMessage handleUpdate(
+            WebSocketSession session,
+            ClientMessage message) {
+        return handleUpdate(
+                session.getId(),
+                message.requestId(),
+                message.payload());
     }
 
-    public ServerMessage handlePublish(String sessionId, String requestId, Map<String, Object> payload) {
-        return withExamId(sessionId, requestId, payload, TYPE_EXAM_PUBLISHED, examService::publishExam);
-    }
-
-    public ServerMessage handleClose(String sessionId, String requestId, Map<String, Object> payload) {
-        return withExamId(sessionId, requestId, payload, TYPE_EXAM_CLOSED, examService::closeExam);
-    }
-
-    public ServerMessage handleDelete(String sessionId, String requestId, Map<String, Object> payload) {
-        return withTeacher(sessionId, requestId, teacher -> {
-            GetExamPayload input = convertPayload(payload, GetExamPayload.class);
-            examService.deleteExam(input.examId(), teacher.id());
-            return ServerMessage.success(requestId, TYPE_EXAM_DELETED, Map.of("examId", input.examId()));
-        });
-    }
-
-    private ServerMessage withExamId(
+    public ServerMessage handleUpdate(
             String sessionId,
             String requestId,
-            Map<String, Object> payload,
-            String responseType,
-            ExamOperation operation) {
+            Map<String, Object> payload) {
+        return withTeacher(
+                sessionId,
+                requestId,
+                teacher -> {
+                    UpdateExamPayload input = convertPayload(
+                            payload,
+                            UpdateExamPayload.class);
+
+                    return ServerMessage.success(
+                            requestId,
+                            TYPE_EXAM_UPDATED,
+                            examService.updateDraftExam(
+                                    input.examId(),
+                                    teacher.id(),
+                                    new UpdateExamCommand(
+                                            input.title(),
+                                            input.description(),
+                                            input.durationMinutes())));
+                });
+    }
+
+    public ServerMessage handlePublish(
+            WebSocketSession session,
+            ClientMessage message) {
+        return handlePublish(
+                session.getId(),
+                message.requestId(),
+                message.payload());
+    }
+
+    public ServerMessage handlePublish(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload) {
         return withTeacher(sessionId, requestId, teacher -> {
-            GetExamPayload input = convertPayload(payload, GetExamPayload.class);
+            PublishExamPayload input = convertPayload(payload, PublishExamPayload.class);
             return ServerMessage.success(
                     requestId,
-                    responseType,
-                    operation.apply(input.examId(), teacher.id()));
+                    TYPE_EXAM_PUBLISHED,
+                    examService.publishExam(input.examId(), teacher.id()));
+        });
+    }
+
+    public ServerMessage handleClose(
+            WebSocketSession session,
+            ClientMessage message) {
+        return handleClose(
+                session.getId(),
+                message.requestId(),
+                message.payload());
+    }
+
+    public ServerMessage handleClose(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            CloseExamPayload input = convertPayload(payload, CloseExamPayload.class);
+            return ServerMessage.success(
+                    requestId,
+                    TYPE_EXAM_CLOSED,
+                    examService.closeExam(input.examId(), teacher.id()));
+        });
+    }
+
+    public ServerMessage handleDelete(
+            WebSocketSession session,
+            ClientMessage message) {
+        return handleDelete(
+                session.getId(),
+                message.requestId(),
+                message.payload());
+    }
+
+    public ServerMessage handleDelete(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            DeleteExamPayload input = convertPayload(payload, DeleteExamPayload.class);
+            return ServerMessage.success(
+                    requestId,
+                    TYPE_EXAM_DELETED,
+                    examService.deleteDraftExam(input.examId(), teacher.id()));
         });
     }
 
@@ -189,10 +229,6 @@ public class ExamManagementMessageHandler {
         }
     }
 
-    private static final class InvalidPayloadException extends RuntimeException {}
-
-    @FunctionalInterface
-    private interface ExamOperation {
-        Object apply(long examId, long teacherId);
+    private static final class InvalidPayloadException extends RuntimeException {
     }
 }

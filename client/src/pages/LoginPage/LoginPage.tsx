@@ -8,12 +8,12 @@ import InstitutionPanel from '../../components/layout/InstitutionPanel';
 import SystemFooter from '../../components/layout/SystemFooter';
 import SystemHeader from '../../components/layout/SystemHeader';
 import type { ServerMessage } from '../../websocket/protocol';
-import type { ConnectionStatus } from '../../websocket/useExamWebSocket';
+import { useWebSocket } from '../../websocket/useWebSocket';
 
-interface LoginPageProps { connectionStatus: ConnectionStatus; sendMessage: (type: 'LOGIN', payload: Record<string, unknown>, onResponse: (message: ServerMessage) => void) => string | null; }
 const inputClass = 'h-11 w-full rounded-lg border border-[#d6e1e4] bg-white px-3.5 text-[12px] outline-none placeholder:text-[#9aa6aa] focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10';
 
-function LoginPage({ connectionStatus, sendMessage }: LoginPageProps) {
+function LoginPage() {
+  const { status: connectionStatus, sendMessage } = useWebSocket();
   const navigate = useNavigate(); const { login } = useAuth();
   const [form, setForm] = useState({ username: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);

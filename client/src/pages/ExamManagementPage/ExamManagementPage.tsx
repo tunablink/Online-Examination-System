@@ -4,15 +4,20 @@ import { Link } from 'react-router';
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
 import type { ServerExam } from '../../websocket/protocol';
-import type { ConnectionStatus, SendExamMessage } from '../../websocket/useExamWebSocket';
+import { useWebSocket } from '../../websocket/useWebSocket';
 
 type Filter = 'ALL' | ServerExam['status'];
-interface Props { connectionStatus: ConnectionStatus; sendMessage: SendExamMessage; }
+const isServerExam = (value: unknown): value is ServerExam => {
+  if (typeof value !== 'object' || value === null) return false;
+  const exam = value as Partial<ServerExam>;
+  return typeof exam.id === 'number' && typeof exam.title === 'string' && typeof exam.durationMinutes === 'number' && (exam.status === 'DRAFT' || exam.status === 'PUBLISHED' || exam.status === 'CLOSED');
+};
 const dateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
 
-function ExamManagementPage({ connectionStatus, sendMessage }: Props) {
+function ExamManagementPage() {
+  const { status: connectionStatus, sendMessage } = useWebSocket();
   const [exams, setExams] = useState<ServerExam[]>([]); const [filter, setFilter] = useState<Filter>('ALL'); const [query, setQuery] = useState(''); const [loading, setLoading] = useState(true); const [feedback, setFeedback] = useState<Feedback | null>(null); const [deletingId, setDeletingId] = useState<number | null>(null);
-  useEffect(() => { if (connectionStatus !== 'connected') return; const id = sendMessage('GET_TEACHER_EXAMS', {}, (message) => { setLoading(false); if (message.type === 'TEACHER_EXAMS' && Array.isArray(message.data?.exams)) { setExams(message.data.exams); setFeedback(null); } else setFeedback({ type: 'error', message: message.error?.message ?? 'Could not load examinations.' }); }); if (id === null) queueMicrotask(() => { setLoading(false); setFeedback({ type: 'error', message: 'The request could not be sent.' }); }); }, [connectionStatus, sendMessage]);
+  useEffect(() => { if (connectionStatus !== 'connected') return; const id = sendMessage('GET_TEACHER_EXAMS', {}, (message) => { setLoading(false); if (message.type === 'TEACHER_EXAMS' && Array.isArray(message.data?.exams) && message.data.exams.every(isServerExam)) { setExams(message.data.exams); setFeedback(null); } else setFeedback({ type: 'error', message: message.error?.message ?? 'Could not load examinations.' }); }); if (id === null) queueMicrotask(() => { setLoading(false); setFeedback({ type: 'error', message: 'The request could not be sent.' }); }); }, [connectionStatus, sendMessage]);
   const filtered = useMemo(() => exams.filter((exam) => (filter === 'ALL' || exam.status === filter) && `${exam.title} ${exam.id}`.toLowerCase().includes(query.trim().toLowerCase())), [exams, filter, query]);
   const remove = (exam: ServerExam) => { if (exam.status !== 'DRAFT' || !window.confirm(`Delete draft “${exam.title}”?`)) return; setDeletingId(exam.id); const id = sendMessage('DELETE_EXAM', { examId: exam.id }, (message) => { setDeletingId(null); if (message.type === 'EXAM_DELETED') { setExams((current) => current.filter((item) => item.id !== exam.id)); setFeedback({ type: 'success', message: 'The draft examination was deleted from the database.' }); } else setFeedback({ type: 'error', message: `${message.error?.code ?? 'DELETE_FAILED'}: ${message.error?.message ?? 'Could not delete this exam.'}` }); }); if (id === null) { setDeletingId(null); setFeedback({ type: 'error', message: 'The delete request could not be sent.' }); } };
   const count = (status: ServerExam['status']) => exams.filter((exam) => exam.status === status).length;

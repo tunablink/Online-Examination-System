@@ -4,9 +4,8 @@ import { Link, useNavigate, useParams } from 'react-router';
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
 import type { ServerExam, ServerMessageData } from '../../websocket/protocol';
-import type { ConnectionStatus, SendExamMessage } from '../../websocket/useExamWebSocket';
+import { useWebSocket } from '../../websocket/useWebSocket';
 
-interface Props { connectionStatus: ConnectionStatus; sendMessage: SendExamMessage; }
 const inputClass = 'h-10 w-full rounded-lg border border-[#d6e1e4] px-3 text-[11px] outline-none focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10';
 
 function mergeResponse(current: ServerExam, data: ServerMessageData | null): ServerExam {
@@ -14,7 +13,8 @@ function mergeResponse(current: ServerExam, data: ServerMessageData | null): Ser
   return { ...current, title: data.title ?? current.title, description: data.description ?? current.description, durationMinutes: data.durationMinutes ?? current.durationMinutes, status: data.status ?? current.status, updatedAt: data.updatedAt ?? current.updatedAt };
 }
 
-function ExamOverviewPage({ connectionStatus, sendMessage }: Props) {
+function ExamOverviewPage() {
+  const { status: connectionStatus, sendMessage } = useWebSocket();
   const { examId } = useParams(); const navigate = useNavigate(); const id = Number(examId);
   const [exam, setExam] = useState<ServerExam | null>(null); const [form, setForm] = useState({ title: '', description: '', durationMinutes: '60' }); const [loading, setLoading] = useState(true); const [pending, setPending] = useState<string | null>(null); const [feedback, setFeedback] = useState<Feedback | null>(null); const [editing, setEditing] = useState(false);
   useEffect(() => { if (connectionStatus !== 'connected' || !Number.isFinite(id)) return; const requestId = sendMessage('GET_EXAM', { examId: id }, (message) => { setLoading(false); if (message.type === 'EXAM_DETAILS' && message.data?.id !== undefined && message.data.title && message.data.durationMinutes && message.data.status && message.data.createdBy !== undefined && message.data.createdAt && message.data.updatedAt) { const loaded: ServerExam = { id: message.data.id, title: message.data.title, description: message.data.description ?? null, durationMinutes: message.data.durationMinutes, status: message.data.status, createdBy: message.data.createdBy, createdAt: message.data.createdAt, updatedAt: message.data.updatedAt }; setExam(loaded); setForm({ title: loaded.title, description: loaded.description ?? '', durationMinutes: String(loaded.durationMinutes) }); } else setFeedback({ type: 'error', message: `${message.error?.code ?? 'LOAD_FAILED'}: ${message.error?.message ?? 'Could not load this exam.'}` }); }); if (requestId === null) queueMicrotask(() => { setLoading(false); setFeedback({ type: 'error', message: 'The exam request could not be sent.' }); }); }, [connectionStatus, id, sendMessage]);

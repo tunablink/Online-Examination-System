@@ -2,12 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
 
 import Icon from '../../components/common/Icon';
-import type { ConnectionStatus, SendExamMessage } from '../../websocket/useExamWebSocket';
-
-interface CreateExamPageProps {
-  connectionStatus: ConnectionStatus;
-  sendMessage: SendExamMessage;
-}
+import { useWebSocket } from '../../websocket/useWebSocket';
 
 interface FormState {
   title: string;
@@ -23,8 +18,9 @@ const initialForm: FormState = {
 
 const inputClass = 'h-11 w-full rounded-lg border border-[#d6e1e4] bg-white px-3.5 text-[12px] text-[#27343a] outline-none transition placeholder:text-[#9aa5a9] focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10';
 
-function CreateExamPage({ connectionStatus, sendMessage }: CreateExamPageProps) {
+function CreateExamPage() {
   const navigate = useNavigate();
+  const { status: connectionStatus, sendMessage } = useWebSocket();
   const [form, setForm] = useState<FormState>(initialForm);
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);

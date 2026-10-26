@@ -10,12 +10,18 @@ export interface AuthContextValue {
   user:
     AuthenticatedUser | null;
 
+  sessionNotice: string | null;
+
   login: (
     authenticatedUser:
       AuthenticatedUser,
   ) => void;
 
-  logout: () => void;
+  logout: (
+    notice?: string
+  ) => void;
+
+  clearSessionNotice: () => void;
 }
 
 export const AuthContext =

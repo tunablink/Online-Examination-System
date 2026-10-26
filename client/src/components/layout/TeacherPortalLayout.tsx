@@ -1,12 +1,8 @@
 import { NavLink, Outlet, useNavigate } from 'react-router';
 
 import { useAuth } from '../../auth/useAuth';
-import type { ConnectionStatus } from '../../websocket/useExamWebSocket';
+import { useWebSocket } from '../../websocket/useWebSocket';
 import Icon, { type IconName } from '../common/Icon';
-
-interface TeacherPortalLayoutProps {
-  connectionStatus: ConnectionStatus;
-}
 
 interface NavigationItem {
   label: string;
@@ -27,7 +23,7 @@ const NAVIGATION_GROUPS: Array<{ label: string; items: NavigationItem[] }> = [
   {
     label: 'Manage',
     items: [
-      { label: 'Students', to: '/admin/students/new', icon: 'users' },
+      { label: 'Students', to: '/teacher/students/new', icon: 'users' },
       { label: 'Integrity reports', to: '/teacher/activities', icon: 'shield' },
     ],
   },
@@ -43,9 +39,10 @@ function getInitials(fullName: string): string {
     .toUpperCase();
 }
 
-function TeacherPortalLayout({ connectionStatus }: TeacherPortalLayoutProps) {
+function TeacherPortalLayout() {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { status: connectionStatus } = useWebSocket();
   const displayName = user?.fullName ?? 'Lecturer';
   const accountLabel = user?.username ?? 'Teacher account';
 
