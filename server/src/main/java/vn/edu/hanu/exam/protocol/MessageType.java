@@ -15,6 +15,9 @@ public enum MessageType {
     LOGIN(true),
     LOGGED_IN(false),
 
+    GET_TEACHER_DASHBOARD(true),
+    TEACHER_DASHBOARD(false),
+
     CREATE_EXAM(true),
     EXAM_CREATED(false),
 
