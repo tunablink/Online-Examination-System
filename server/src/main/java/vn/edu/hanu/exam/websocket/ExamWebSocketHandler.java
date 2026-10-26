@@ -6,6 +6,7 @@ import java.util.Optional;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -26,6 +27,7 @@ import vn.edu.hanu.exam.websocket.handler.ExamManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.QuestionManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.StudentExamCatalogMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.TeacherDashboardMessageHandler;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 @Component
@@ -43,8 +45,30 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
 
         private final StudentExamCatalogMessageHandler studentExamCatalogMessageHandler;
 
+        private final TeacherDashboardMessageHandler teacherDashboardMessageHandler;
+
         private final LoginService loginService;
         private final AuthenticatedSessionRegistry authenticatedSessionRegistry;
+
+        @Autowired
+        public ExamWebSocketHandler(
+                        JsonMapper jsonMapper,
+                        RegistrationMessageHandler registrationMessageHandler,
+                        ExamManagementMessageHandler examManagementMessageHandler,
+                        QuestionManagementMessageHandler questionManagementMessageHandler,
+                        StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
+                        TeacherDashboardMessageHandler teacherDashboardMessageHandler,
+                        LoginService loginService,
+                        AuthenticatedSessionRegistry authenticatedSessionRegistry) {
+                this.jsonMapper = jsonMapper;
+                this.registrationMessageHandler = registrationMessageHandler;
+                this.examManagementMessageHandler = examManagementMessageHandler;
+                this.questionManagementMessageHandler = questionManagementMessageHandler;
+                this.studentExamCatalogMessageHandler = studentExamCatalogMessageHandler;
+                this.teacherDashboardMessageHandler = teacherDashboardMessageHandler;
+                this.loginService = loginService;
+                this.authenticatedSessionRegistry = authenticatedSessionRegistry;
+        }
 
         public ExamWebSocketHandler(
                         JsonMapper jsonMapper,
@@ -54,13 +78,15 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                         StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
                         LoginService loginService,
                         AuthenticatedSessionRegistry authenticatedSessionRegistry) {
-                this.jsonMapper = jsonMapper;
-                this.registrationMessageHandler = registrationMessageHandler;
-                this.examManagementMessageHandler = examManagementMessageHandler;
-                this.questionManagementMessageHandler = questionManagementMessageHandler;
-                this.studentExamCatalogMessageHandler = studentExamCatalogMessageHandler;
-                this.loginService = loginService;
-                this.authenticatedSessionRegistry = authenticatedSessionRegistry;
+                this(
+                                jsonMapper,
+                                registrationMessageHandler,
+                                examManagementMessageHandler,
+                                questionManagementMessageHandler,
+                                studentExamCatalogMessageHandler,
+                                null,
+                                loginService,
+                                authenticatedSessionRegistry);
         }
 
         @Override
@@ -146,6 +172,13 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                 handleLogin(
                                                 session,
                                                 clientMessage);
+
+                        case GET_TEACHER_DASHBOARD ->
+                                sendMessage(
+                                                session,
+                                                teacherDashboardMessageHandler.handle(
+                                                                session,
+                                                                clientMessage));
 
                         case CREATE_EXAM ->
                                 sendMessage(
