@@ -2,8 +2,6 @@ import type { QuestionEditorQuestion } from "../../../types/questionEditor";
 
 interface QuestionListItemProps {
   index: number;
-  isFirst: boolean;
-  isLast: boolean;
   actionsEnabled: boolean;
 
   question: QuestionEditorQuestion;
@@ -12,21 +10,14 @@ interface QuestionListItemProps {
 
   onEdit: (question: QuestionEditorQuestion) => void;
 
-  onMoveDown: (questionId: string) => void;
-
-  onMoveUp: (questionId: string) => void;
 }
 
 function QuestionListItem({
   index,
-  isFirst,
-  isLast,
   actionsEnabled,
   question,
   onDelete,
   onEdit,
-  onMoveDown,
-  onMoveUp,
 }: QuestionListItemProps) {
   const correctChoice = question.choices.find((choice) => choice.correct);
 
@@ -114,8 +105,8 @@ function QuestionListItem({
               disabled:opacity-30
             "
             type="button"
-            disabled={!actionsEnabled || isFirst}
-            onClick={() => onMoveUp(question.id)}
+            disabled
+            title="Question reordering is not available yet"
           >
             Move up
           </button>
@@ -131,8 +122,8 @@ function QuestionListItem({
               disabled:opacity-30
             "
             type="button"
-            disabled={!actionsEnabled || isLast}
-            onClick={() => onMoveDown(question.id)}
+            disabled
+            title="Question reordering is not available yet"
           >
             Move down
           </button>
@@ -213,8 +204,9 @@ function QuestionListItem({
           </strong>
         </p>
 
-        <div className="flex gap-2">
-          <button
+        {actionsEnabled && (
+          <div className="flex gap-2">
+            <button
             className="
               rounded-md border
               border-blue-300
@@ -228,12 +220,11 @@ function QuestionListItem({
             "
             type="button"
             onClick={() => onEdit(question)}
-            disabled={!actionsEnabled}
           >
             Edit
-          </button>
+            </button>
 
-          <button
+            <button
             className="
               rounded-md border
               border-red-300
@@ -246,12 +237,12 @@ function QuestionListItem({
               disabled:opacity-40
             "
             type="button"
-            disabled={!actionsEnabled}
             onClick={() => onDelete(question)}
           >
             Delete
-          </button>
-        </div>
+            </button>
+          </div>
+        )}
       </div>
     </article>
   );

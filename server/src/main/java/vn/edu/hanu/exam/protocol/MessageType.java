@@ -42,6 +42,12 @@ public enum MessageType {
     CREATE_QUESTION(true),
     QUESTION_CREATED(false),
 
+    UPDATE_QUESTION(true),
+    QUESTION_UPDATED(false),
+
+    DELETE_QUESTION(true),
+    QUESTION_DELETED(false),
+
     GET_EXAM_QUESTIONS(true),
     EXAM_QUESTIONS(false),
 

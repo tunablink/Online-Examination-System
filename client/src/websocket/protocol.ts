@@ -11,6 +11,8 @@ export type ClientMessageType =
   | 'CLOSE_EXAM'
   | 'DELETE_EXAM'
   | 'CREATE_QUESTION'
+  | 'UPDATE_QUESTION'
+  | 'DELETE_QUESTION'
   | 'GET_EXAM_QUESTIONS'
   | 'GET_AVAILABLE_EXAMS'
   | 'GET_AVAILABLE_EXAM';
@@ -29,6 +31,8 @@ export type ServerMessageType =
   | 'EXAM_CLOSED'
   | 'EXAM_DELETED'
   | 'QUESTION_CREATED'
+  | 'QUESTION_UPDATED'
+  | 'QUESTION_DELETED'
   | 'EXAM_QUESTIONS'
   | 'AVAILABLE_EXAMS'
   | 'AVAILABLE_EXAM_DETAILS'
@@ -92,6 +96,18 @@ export interface CreateQuestionPayload {
   points: number;
   displayOrder: number;
   choices: CreateQuestionChoicePayload[];
+}
+
+export interface UpdateQuestionPayload {
+  questionId: number;
+  content: string;
+  points: number;
+  displayOrder: number;
+  choices: CreateQuestionChoicePayload[];
+}
+
+export interface DeleteQuestionPayload {
+  questionId: number;
 }
 
 export interface TeacherChoiceData {

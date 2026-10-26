@@ -57,6 +57,12 @@ class MessageTypeContractTests {
                                 "CREATE_QUESTION",
                                 "QUESTION_CREATED",
 
+                                "UPDATE_QUESTION",
+                                "QUESTION_UPDATED",
+
+                                "DELETE_QUESTION",
+                                "QUESTION_DELETED",
+
                                 "GET_EXAM_QUESTIONS",
                                 "EXAM_QUESTIONS",
 
@@ -94,6 +100,12 @@ class MessageTypeContractTests {
                                 () -> assertEquals(
                                                 MessageType.GET_EXAM_QUESTIONS,
                                                 MessageType.fromWireValue("get_exam_questions").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.UPDATE_QUESTION,
+                                                MessageType.fromWireValue(" update_question ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.DELETE_QUESTION,
+                                                MessageType.fromWireValue("delete_question").orElseThrow()),
                                 () -> assertEquals(
                                                 MessageType.UPDATE_EXAM,
                                                 MessageType.fromWireValue(" update_exam ").orElseThrow()),
@@ -142,6 +154,8 @@ class MessageTypeContractTests {
                                 MessageType.DELETE_EXAM,
 
                                 MessageType.CREATE_QUESTION,
+                                MessageType.UPDATE_QUESTION,
+                                MessageType.DELETE_QUESTION,
                                 MessageType.GET_EXAM_QUESTIONS,
 
                                 MessageType.GET_AVAILABLE_EXAMS,
@@ -177,6 +191,8 @@ class MessageTypeContractTests {
                                 MessageType.EXAM_DELETED,
 
                                 MessageType.QUESTION_CREATED,
+                                MessageType.QUESTION_UPDATED,
+                                MessageType.QUESTION_DELETED,
                                 MessageType.EXAM_QUESTIONS,
 
                                 MessageType.AVAILABLE_EXAMS,

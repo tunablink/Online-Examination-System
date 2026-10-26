@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { Link, useParams } from "react-router";
 
@@ -7,6 +7,7 @@ import FeedbackMessage, {
 } from "../../components/common/FeedbackMessage";
 
 import type {
+  ExamStatus,
   TeacherChoiceData,
   TeacherQuestionData,
 } from "../../websocket/protocol";
@@ -62,6 +63,7 @@ function toEditorQuestion(
     id: String(question.id),
     content: question.content,
     points: question.points,
+    displayOrder: question.displayOrder,
 
     choices: [...question.choices]
       .sort((left, right) => left.displayOrder - right.displayOrder)
@@ -106,6 +108,10 @@ function QuestionManagementPage() {
 
   const [isPublished, setIsPublished] = useState(false);
 
+  const [examStatus, setExamStatus] = useState<ExamStatus | null>(null);
+
+  const [examTitle, setExamTitle] = useState("Examination");
+
   const [isPublishing, setIsPublishing] = useState(false);
 
   const loadQuestions = useCallback(() => {
@@ -132,6 +138,43 @@ function QuestionManagementPage() {
 
     setIsLoading(true);
     setFeedback(null);
+
+    const examRequestId = sendMessage(
+      "GET_EXAM",
+      { examId: numericExamId },
+      (response) => {
+        if (
+          response.type === "EXAM_DETAILS" &&
+          typeof response.data?.title === "string" &&
+          (response.data.status === "DRAFT" ||
+            response.data.status === "PUBLISHED" ||
+            response.data.status === "CLOSED")
+        ) {
+          setExamTitle(response.data.title);
+          setExamStatus(response.data.status);
+          setIsPublished(response.data.status === "PUBLISHED");
+          return;
+        }
+
+        setFeedback({
+          type: "error",
+          title: "Unable to load examination",
+          message:
+            response.error?.message ??
+            "The server returned unexpected examination details.",
+        });
+      },
+    );
+
+    if (examRequestId === null) {
+      setIsLoading(false);
+      setFeedback({
+        type: "error",
+        title: "Request could not be sent",
+        message: "Wait for the server connection and try again.",
+      });
+      return;
+    }
 
     const requestId = sendMessage(
       "GET_EXAM_QUESTIONS",
@@ -195,8 +238,6 @@ function QuestionManagementPage() {
   const editingQuestion =
     questions.find((question) => question.id === editingQuestionId) ?? null;
 
-  const examTitle = "Draft examination";
-
   const examCode = examId ?? "unknown";
 
   const handleSaveQuestion = (savedQuestion: QuestionEditorQuestion) => {
@@ -227,16 +268,26 @@ function QuestionManagementPage() {
     setIsSaving(true);
     setFeedback(null);
 
+    const isEditing = editingQuestionId !== null;
+    const questionId = Number(editingQuestionId);
+    const displayOrder = isEditing
+      ? (savedQuestion.displayOrder ??
+        questions.findIndex((question) => question.id === editingQuestionId))
+      : questions.length;
+    const expectedResponseType = isEditing
+      ? "QUESTION_UPDATED"
+      : "QUESTION_CREATED";
+
     const requestId = sendMessage(
-      "CREATE_QUESTION",
+      isEditing ? "UPDATE_QUESTION" : "CREATE_QUESTION",
       {
-        examId: numericExamId,
+        ...(isEditing ? { questionId } : { examId: numericExamId }),
 
         content: savedQuestion.content,
 
         points: savedQuestion.points,
 
-        displayOrder: questions.length,
+        displayOrder,
 
         choices: savedQuestion.choices.map((choice, index) => ({
           content: choice.content,
@@ -249,21 +300,27 @@ function QuestionManagementPage() {
       (response) => {
         setIsSaving(false);
         if (
-          response.type === "QUESTION_CREATED" &&
+          response.type === expectedResponseType &&
           isTeacherQuestionData(response.data)
         ) {
-          const createdQuestion = toEditorQuestion(response.data);
+          const persistedQuestion = toEditorQuestion(response.data);
 
-          setQuestions((currentQuestions) => [
-            ...currentQuestions,
-            createdQuestion,
-          ]);
+          setQuestions((currentQuestions) =>
+            isEditing
+              ? currentQuestions.map((question) =>
+                  question.id === persistedQuestion.id
+                    ? persistedQuestion
+                    : question,
+                )
+              : [...currentQuestions, persistedQuestion],
+          );
 
           setQuestionFormVersion((currentVersion) => currentVersion + 1);
+          setEditingQuestionId(null);
 
           setFeedback({
             type: "success",
-            title: "Question created",
+            title: isEditing ? "Question updated" : "Question created",
             message: "The question and its choices were saved to the database.",
           });
 
@@ -272,7 +329,9 @@ function QuestionManagementPage() {
 
         setFeedback({
           type: "error",
-          title: "Unable to create question",
+          title: isEditing
+            ? "Unable to update question"
+            : "Unable to create question",
           message:
             response.error?.message ??
             "The server returned an unexpected response.",
@@ -307,52 +366,58 @@ function QuestionManagementPage() {
       return;
     }
 
-    setQuestions((currentQuestions) =>
-      currentQuestions.filter(
-        (question) => question.id !== pendingDeleteQuestion.id,
-      ),
-    );
-
-    if (editingQuestionId === pendingDeleteQuestion.id) {
-      setEditingQuestionId(null);
+    if (connectionStatus !== "connected" || isSaving) {
+      return;
     }
 
-    setPendingDeleteQuestion(null);
-    setIsPublished(false);
+    const questionToDelete = pendingDeleteQuestion;
+    setIsSaving(true);
+    setFeedback(null);
 
-    setFeedback({
-      type: "success",
-      title: "Question removed",
-      message: "The question has been removed from the frontend draft.",
-    });
-  };
+    const requestId = sendMessage(
+      "DELETE_QUESTION",
+      { questionId: Number(questionToDelete.id) },
+      (response) => {
+        setIsSaving(false);
 
-  const moveQuestion = (questionId: string, direction: -1 | 1) => {
-    setQuestions((currentQuestions) => {
-      const currentIndex = currentQuestions.findIndex(
-        (question) => question.id === questionId,
-      );
+        if (response.type === "QUESTION_DELETED") {
+          setQuestions((currentQuestions) =>
+            currentQuestions.filter(
+              (question) => question.id !== questionToDelete.id,
+            ),
+          );
 
-      const targetIndex = currentIndex + direction;
+          if (editingQuestionId === questionToDelete.id) {
+            setEditingQuestionId(null);
+          }
 
-      if (
-        currentIndex < 0 ||
-        targetIndex < 0 ||
-        targetIndex >= currentQuestions.length
-      ) {
-        return currentQuestions;
-      }
+          setPendingDeleteQuestion(null);
+          setFeedback({
+            type: "success",
+            title: "Question deleted",
+            message:
+              "The question and its choices were deleted from the database.",
+          });
+          return;
+        }
 
-      const reorderedQuestions = [...currentQuestions];
+        setFeedback({
+          type: "error",
+          title: "Unable to delete question",
+          message:
+            response.error?.message ?? "The server rejected the deletion.",
+        });
+      },
+    );
 
-      const [movedQuestion] = reorderedQuestions.splice(currentIndex, 1);
-
-      reorderedQuestions.splice(targetIndex, 0, movedQuestion);
-
-      return reorderedQuestions;
-    });
-
-    setIsPublished(false);
+    if (requestId === null) {
+      setIsSaving(false);
+      setFeedback({
+        type: "error",
+        title: "Request could not be sent",
+        message: "Wait for the WebSocket connection and try again.",
+      });
+    }
   };
 
   const handlePublish = () => {
@@ -511,9 +576,8 @@ function QuestionManagementPage() {
           text-amber-900
         "
       >
-        <strong>Current backend scope:</strong> new questions are saved to
-        PostgreSQL. Editing, deleting, reordering, and publishing are disabled
-        until their server commands are implemented.
+        <strong>Exam status:</strong> {examStatus ?? "Loading"}. Questions can
+        only be created, edited, or deleted while the exam is in DRAFT status.
       </div>
 
       {feedback !== null && (
@@ -534,13 +598,15 @@ function QuestionManagementPage() {
         "
       >
         <div className="space-y-6">
-          <QuestionEditorForm
-            key={editingQuestion?.id ?? `new-question-${questionFormVersion}`}
-            initialQuestion={editingQuestion}
-            isSaving={isSaving}
-            onCancel={() => setEditingQuestionId(null)}
-            onSave={handleSaveQuestion}
-          />
+          {examStatus === "DRAFT" && (
+            <QuestionEditorForm
+              key={editingQuestion?.id ?? `new-question-${questionFormVersion}`}
+              initialQuestion={editingQuestion}
+              isSaving={isSaving}
+              onCancel={() => setEditingQuestionId(null)}
+              onSave={handleSaveQuestion}
+            />
+          )}
 
           <section>
             <div
@@ -585,14 +651,10 @@ function QuestionManagementPage() {
                   <QuestionListItem
                     key={question.id}
                     index={index}
-                    isFirst={index === 0}
-                    isLast={index === questions.length - 1}
-                    actionsEnabled={false}
+                    actionsEnabled={examStatus === "DRAFT"}
                     question={question}
                     onDelete={setPendingDeleteQuestion}
                     onEdit={handleEditQuestion}
-                    onMoveDown={(questionId) => moveQuestion(questionId, 1)}
-                    onMoveUp={(questionId) => moveQuestion(questionId, -1)}
                   />
                 ))}
               </div>
@@ -688,8 +750,8 @@ function QuestionManagementPage() {
                 text-slate-600
               "
             >
-              This action removes the question and all of its choices from the
-              frontend draft.
+              This action permanently removes the question and all of its
+              choices from the database.
             </p>
 
             <p
@@ -734,9 +796,10 @@ function QuestionManagementPage() {
                   hover:bg-red-800
                 "
                 type="button"
+                disabled={isSaving}
                 onClick={handleConfirmDelete}
               >
-                Delete question
+                {isSaving ? "Deleting..." : "Delete question"}
               </button>
             </div>
           </section>

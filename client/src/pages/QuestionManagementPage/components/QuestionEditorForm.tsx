@@ -125,14 +125,6 @@ function QuestionEditorForm({
     const numericPoints = Number(points);
 
     if (
-      !Number.isFinite(numericPoints) ||
-      numericPoints <= 0 ||
-      numericPoints > 100
-    ) {
-      messages.push("Points must be greater than 0 and not exceed 100.");
-    }
-
-        if (
       !Number.isFinite(
         numericPoints,
       ) ||
@@ -188,6 +180,8 @@ function QuestionEditorForm({
 
       points: Number(points),
 
+      displayOrder: initialQuestion?.displayOrder ?? 0,
+
       choices: choices.map((choice) => ({
         ...choice,
         content: choice.content.trim(),
@@ -195,7 +189,6 @@ function QuestionEditorForm({
     };
 
     onSave(savedQuestion);
-
   };
 
   return (
