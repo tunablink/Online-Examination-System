@@ -79,6 +79,194 @@ public class JdbcExamRepository implements ExamRepository {
         return exams.stream().findFirst();
     }
 
+    @Override
+    public Optional<Exam> updateDraft(
+            long examId,
+            long teacherId,
+            String title,
+            String description,
+            int durationMinutes
+    ) {
+        String sql = """
+                UPDATE exams
+                SET title = :title,
+                    description = :description,
+                    duration_minutes = :durationMinutes,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :examId
+                AND created_by = :teacherId
+                AND status = :status
+                """;
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("examId", examId)
+                .addValue("teacherId", teacherId)
+                .addValue("title", title)
+                .addValue("description", description)
+                .addValue("durationMinutes", durationMinutes)
+                .addValue("status", ExamStatus.DRAFT.name());
+
+        int affectedRows = jdbcTemplate.update(sql, parameters);
+
+        if (affectedRows == 0) {
+            return Optional.empty();
+        }
+
+        if (affectedRows != 1) {
+            throw new IllegalStateException(
+                    "Expected one updated exam, but affected "
+                            + affectedRows
+                            + " rows."
+            );
+        }
+
+        return findByIdAndCreatedBy(examId, teacherId);
+    }
+
+    @Override
+    public ExamPublishReadiness getPublishReadiness(long examId) {
+        String sql = """
+                SELECT COUNT(*) AS question_count,
+                       COALESCE(SUM(
+                           CASE WHEN choice_count < 2 THEN 1 ELSE 0 END
+                       ), 0) AS invalid_choice_count,
+                       COALESCE(SUM(
+                           CASE WHEN correct_choice_count <> 1 THEN 1 ELSE 0 END
+                       ), 0) AS invalid_correct_choice_count
+                FROM (
+                    SELECT q.id,
+                           COUNT(c.id) AS choice_count,
+                           COUNT(c.id) FILTER (WHERE c.correct) AS correct_choice_count
+                    FROM questions q
+                    LEFT JOIN choices c ON c.question_id = q.id
+                    WHERE q.exam_id = :examId
+                    GROUP BY q.id
+                ) question_statistics
+                """;
+
+        ExamPublishReadiness readiness = jdbcTemplate.queryForObject(
+                sql,
+                Map.of("examId", examId),
+                (resultSet, rowNumber) -> new ExamPublishReadiness(
+                        resultSet.getInt("question_count"),
+                        resultSet.getInt("invalid_choice_count"),
+                        resultSet.getInt("invalid_correct_choice_count")));
+
+        if (readiness == null) {
+            throw new IllegalStateException("Publish readiness query did not return a result.");
+        }
+
+        return readiness;
+    }
+
+    @Override
+    public Optional<Exam> publishDraft(long examId, long teacherId) {
+        String sql = """
+                UPDATE exams
+                SET status = :publishedStatus,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :examId
+                  AND created_by = :teacherId
+                  AND status = :draftStatus
+                """;
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("examId", examId)
+                .addValue("teacherId", teacherId)
+                .addValue("publishedStatus", ExamStatus.PUBLISHED.name())
+                .addValue("draftStatus", ExamStatus.DRAFT.name());
+
+        int affectedRows = jdbcTemplate.update(sql, parameters);
+
+        if (affectedRows == 0) {
+            return Optional.empty();
+        }
+
+        if (affectedRows != 1) {
+            throw new IllegalStateException(
+                    "Expected one published exam, but affected " + affectedRows + " rows.");
+        }
+
+        return findByIdAndCreatedBy(examId, teacherId);
+    }
+
+    @Override
+    public Optional<Exam> closePublished(long examId, long teacherId) {
+        String sql = """
+                UPDATE exams
+                SET status = :closedStatus,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :examId
+                  AND created_by = :teacherId
+                  AND status = :publishedStatus
+                """;
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("examId", examId)
+                .addValue("teacherId", teacherId)
+                .addValue("closedStatus", ExamStatus.CLOSED.name())
+                .addValue("publishedStatus", ExamStatus.PUBLISHED.name());
+
+        int affectedRows = jdbcTemplate.update(sql, parameters);
+
+        if (affectedRows == 0) {
+            return Optional.empty();
+        }
+
+        if (affectedRows != 1) {
+            throw new IllegalStateException(
+                    "Expected one closed exam, but affected " + affectedRows + " rows.");
+        }
+
+        return findByIdAndCreatedBy(examId, teacherId);
+    }
+
+    @Override
+    public int deleteChoicesByExamId(long examId) {
+        String sql = """
+                DELETE FROM choices
+                WHERE question_id IN (
+                    SELECT id
+                    FROM questions
+                    WHERE exam_id = :examId
+                )
+                """;
+        return jdbcTemplate.update(sql, Map.of("examId", examId));
+    }
+
+    @Override
+    public int deleteQuestionsByExamId(long examId) {
+        String sql = """
+                DELETE FROM questions
+                WHERE exam_id = :examId
+                """;
+        return jdbcTemplate.update(sql, Map.of("examId", examId));
+    }
+
+    @Override
+    public boolean deleteDraft(long examId, long teacherId) {
+        String sql = """
+                DELETE FROM exams
+                WHERE id = :examId
+                  AND created_by = :teacherId
+                  AND status = :draftStatus
+                """;
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("examId", examId)
+                .addValue("teacherId", teacherId)
+                .addValue("draftStatus", ExamStatus.DRAFT.name());
+
+        int affectedRows = jdbcTemplate.update(sql, parameters);
+
+        if (affectedRows > 1) {
+            throw new IllegalStateException(
+                    "Expected at most one deleted exam, but affected " + affectedRows + " rows.");
+        }
+
+        return affectedRows == 1;
+    }
+
     private static Exam mapExam(ResultSet resultSet, int rowNumber) throws SQLException {
         return new Exam(
                 resultSet.getLong("id"),

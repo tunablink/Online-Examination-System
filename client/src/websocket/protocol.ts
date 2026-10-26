@@ -5,6 +5,10 @@ export type ClientMessageType =
   | 'CREATE_EXAM'
   | 'GET_TEACHER_EXAMS'
   | 'GET_EXAM'
+  | 'UPDATE_EXAM'
+  | 'PUBLISH_EXAM'
+  | 'CLOSE_EXAM'
+  | 'DELETE_EXAM'
   | 'CREATE_QUESTION'
   | 'GET_EXAM_QUESTIONS'
   | 'GET_AVAILABLE_EXAMS'
@@ -18,6 +22,10 @@ export type ServerMessageType =
   | 'EXAM_CREATED'
   | 'TEACHER_EXAMS'
   | 'EXAM_DETAILS'
+  | 'EXAM_UPDATED'
+  | 'EXAM_PUBLISHED'
+  | 'EXAM_CLOSED'
+  | 'EXAM_DELETED'
   | 'QUESTION_CREATED'
   | 'EXAM_QUESTIONS'
   | 'AVAILABLE_EXAMS'
@@ -55,8 +63,52 @@ export interface GetExamPayload {
   examId: number;
 }
 
+export interface UpdateExamPayload {
+  examId: number;
+  title: string;
+  description: string;
+  durationMinutes: number;
+}
+
+export interface ExamIdPayload {
+  examId: number;
+}
+
 export interface GetExamQuestionsPayload {
   examId: number;
+}
+
+export interface CreateQuestionChoicePayload {
+  content: string;
+  correct: boolean;
+  displayOrder: number;
+}
+
+export interface CreateQuestionPayload {
+  examId: number;
+  content: string;
+  points: number;
+  displayOrder: number;
+  choices: CreateQuestionChoicePayload[];
+}
+
+export interface TeacherChoiceData {
+  id: number;
+  questionId: number;
+  content: string;
+  correct: boolean;
+  displayOrder: number;
+}
+
+export interface TeacherQuestionData {
+  id: number;
+  examId: number;
+  content: string;
+  points: number;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+  choices: TeacherChoiceData[];
 }
 
 export interface GetAvailableExamPayload {
@@ -106,6 +158,12 @@ export interface ServerMessageData {
   updatedAt?: string;
 
   exams?: ExamDetailsData[];
+  examId?: number;
+  content?: string;
+  points?: number;
+  displayOrder?: number;
+  choices?: TeacherChoiceData[];
+  questions?: TeacherQuestionData[];
 }
 
 export interface ServerMessage {

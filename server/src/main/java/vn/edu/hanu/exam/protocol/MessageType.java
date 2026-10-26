@@ -24,6 +24,18 @@ public enum MessageType {
     GET_EXAM(true),
     EXAM_DETAILS(false),
 
+    UPDATE_EXAM(true),
+    EXAM_UPDATED(false),
+
+    PUBLISH_EXAM(true),
+    EXAM_PUBLISHED(false),
+
+    CLOSE_EXAM(true),
+    EXAM_CLOSED(false),
+
+    DELETE_EXAM(true),
+    EXAM_DELETED(false),
+
     CREATE_QUESTION(true),
     QUESTION_CREATED(false),
 

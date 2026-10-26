@@ -1,47 +1,34 @@
-import type {
-  QuestionEditorQuestion,
-} from '../../../types/questionEditor';
+import type { QuestionEditorQuestion } from "../../../types/questionEditor";
 
 interface QuestionListItemProps {
   index: number;
   isFirst: boolean;
   isLast: boolean;
-  question:
-    QuestionEditorQuestion;
+  actionsEnabled: boolean;
 
-  onDelete: (
-    question:
-      QuestionEditorQuestion,
-  ) => void;
+  question: QuestionEditorQuestion;
 
-  onEdit: (
-    question:
-      QuestionEditorQuestion,
-  ) => void;
+  onDelete: (question: QuestionEditorQuestion) => void;
 
-  onMoveDown: (
-    questionId: string,
-  ) => void;
+  onEdit: (question: QuestionEditorQuestion) => void;
 
-  onMoveUp: (
-    questionId: string,
-  ) => void;
+  onMoveDown: (questionId: string) => void;
+
+  onMoveUp: (questionId: string) => void;
 }
 
 function QuestionListItem({
   index,
   isFirst,
   isLast,
+  actionsEnabled,
   question,
   onDelete,
   onEdit,
   onMoveDown,
   onMoveUp,
 }: QuestionListItemProps) {
-  const correctChoice =
-    question.choices.find(
-      (choice) => choice.correct,
-    );
+  const correctChoice = question.choices.find((choice) => choice.correct);
 
   return (
     <article
@@ -84,10 +71,7 @@ function QuestionListItem({
                 text-slate-600
               "
             >
-              {question.points}{' '}
-              {question.points === 1
-                ? 'point'
-                : 'points'}
+              {question.points} {question.points === 1 ? "point" : "points"}
             </span>
 
             <span
@@ -98,8 +82,7 @@ function QuestionListItem({
                 text-slate-600
               "
             >
-              {question.choices.length}{' '}
-              choices
+              {question.choices.length} choices
             </span>
           </div>
 
@@ -131,10 +114,8 @@ function QuestionListItem({
               disabled:opacity-30
             "
             type="button"
-            disabled={isFirst}
-            onClick={() =>
-              onMoveUp(question.id)
-            }
+            disabled={!actionsEnabled || isFirst}
+            onClick={() => onMoveUp(question.id)}
           >
             Move up
           </button>
@@ -150,10 +131,8 @@ function QuestionListItem({
               disabled:opacity-30
             "
             type="button"
-            disabled={isLast}
-            onClick={() =>
-              onMoveDown(question.id)
-            }
+            disabled={!actionsEnabled || isLast}
+            onClick={() => onMoveDown(question.id)}
           >
             Move down
           </button>
@@ -167,11 +146,10 @@ function QuestionListItem({
           max-md:grid-cols-1
         "
       >
-        {question.choices.map(
-          (choice, choiceIndex) => (
-            <div
-              key={choice.id}
-              className={`
+        {question.choices.map((choice, choiceIndex) => (
+          <div
+            key={choice.id}
+            className={`
                 grid
                 grid-cols-[30px_1fr]
                 items-center gap-3
@@ -191,9 +169,9 @@ function QuestionListItem({
                     `
                 }
               `}
-            >
-              <span
-                className={`
+          >
+            <span
+              className={`
                   grid h-7 w-7
                   place-items-center
                   rounded-full
@@ -210,18 +188,13 @@ function QuestionListItem({
                       `
                   }
                 `}
-              >
-                {String.fromCharCode(
-                  65 + choiceIndex,
-                )}
-              </span>
+            >
+              {String.fromCharCode(65 + choiceIndex)}
+            </span>
 
-              <span>
-                {choice.content}
-              </span>
-            </div>
-          ),
-        )}
+            <span>{choice.content}</span>
+          </div>
+        ))}
       </div>
 
       <div
@@ -234,10 +207,9 @@ function QuestionListItem({
         "
       >
         <p className="text-xs text-slate-500">
-          Correct answer:{' '}
+          Correct answer:{" "}
           <strong className="text-emerald-700">
-            {correctChoice?.content ??
-              'Not selected'}
+            {correctChoice?.content ?? "Not selected"}
           </strong>
         </p>
 
@@ -251,11 +223,12 @@ function QuestionListItem({
               text-blue-700
               transition-colors
               hover:border-blue-600
+              disabled:cursor-not-allowed
+              disabled:opacity-40
             "
             type="button"
-            onClick={() =>
-              onEdit(question)
-            }
+            onClick={() => onEdit(question)}
+            disabled={!actionsEnabled}
           >
             Edit
           </button>
@@ -269,11 +242,12 @@ function QuestionListItem({
               text-red-700
               transition-colors
               hover:border-red-600
+              disabled:cursor-not-allowed
+              disabled:opacity-40
             "
             type="button"
-            onClick={() =>
-              onDelete(question)
-            }
+            disabled={!actionsEnabled}
+            onClick={() => onDelete(question)}
           >
             Delete
           </button>

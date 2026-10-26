@@ -1,113 +1,76 @@
-import {
-  useState,
-  type ChangeEvent,
-  type FormEvent,
-} from 'react';
+import { useState, type ChangeEvent, type FormEvent } from "react";
 
 import type {
   QuestionEditorChoice,
   QuestionEditorQuestion,
-} from '../../../types/questionEditor';
+} from "../../../types/questionEditor";
 
 interface QuestionEditorFormProps {
-  initialQuestion:
-    QuestionEditorQuestion | null;
+  initialQuestion: QuestionEditorQuestion | null;
+
+  isSaving: boolean;
 
   onCancel: () => void;
 
-  onSave: (
-    question:
-      QuestionEditorQuestion,
-  ) => void;
+  onSave: (question: QuestionEditorQuestion) => void;
 }
 
-function createChoice(
-  correct = false,
-): QuestionEditorChoice {
+function createChoice(correct = false): QuestionEditorChoice {
   return {
     id: crypto.randomUUID(),
-    content: '',
+    content: "",
     correct,
   };
 }
 
-function createInitialChoices():
-  QuestionEditorChoice[] {
-  return [
-    createChoice(true),
-    createChoice(),
-    createChoice(),
-    createChoice(),
-  ];
+function createInitialChoices(): QuestionEditorChoice[] {
+  return [createChoice(true), createChoice(), createChoice(), createChoice()];
 }
 
 function QuestionEditorForm({
   initialQuestion,
+  isSaving,
   onCancel,
   onSave,
 }: QuestionEditorFormProps) {
-  const [content, setContent] =
-    useState(
-      initialQuestion?.content ?? '',
-    );
+  const [content, setContent] = useState(initialQuestion?.content ?? "");
 
-  const [points, setPoints] =
-    useState(
-      initialQuestion?.points.toString() ??
-        '1',
-    );
+  const [points, setPoints] = useState(
+    initialQuestion?.points.toString() ?? "1",
+  );
 
-  const [choices, setChoices] =
-    useState<QuestionEditorChoice[]>(
-      () =>
-        initialQuestion?.choices.map(
-          (choice) => ({
-            ...choice,
-          }),
-        ) ??
-        createInitialChoices(),
-    );
+  const [choices, setChoices] = useState<QuestionEditorChoice[]>(
+    () =>
+      initialQuestion?.choices.map((choice) => ({
+        ...choice,
+      })) ?? createInitialChoices(),
+  );
 
-  const [
-    validationMessages,
-    setValidationMessages,
-  ] = useState<string[]>([]);
+  const [validationMessages, setValidationMessages] = useState<string[]>([]);
 
-  const isEditing =
-    initialQuestion !== null;
+  const isEditing = initialQuestion !== null;
 
-  const handleChoiceContentChange = (
-    choiceId: string,
-    value: string,
-  ) => {
-    setChoices(
-      (currentChoices) =>
-        currentChoices.map(
-          (choice) =>
-            choice.id === choiceId
-              ? {
-                  ...choice,
-                  content: value,
-                }
-              : choice,
-        ),
+  const handleChoiceContentChange = (choiceId: string, value: string) => {
+    setChoices((currentChoices) =>
+      currentChoices.map((choice) =>
+        choice.id === choiceId
+          ? {
+              ...choice,
+              content: value,
+            }
+          : choice,
+      ),
     );
 
     setValidationMessages([]);
   };
 
-  const handleCorrectChoiceChange = (
-    choiceId: string,
-  ) => {
-    setChoices(
-      (currentChoices) =>
-        currentChoices.map(
-          (choice) => ({
-            ...choice,
-            correct:
-              choice.id === choiceId,
-          }),
-        ),
+  const handleCorrectChoiceChange = (choiceId: string) => {
+    setChoices((currentChoices) =>
+      currentChoices.map((choice) => ({
+        ...choice,
+        correct: choice.id === choiceId,
+      })),
     );
 
     setValidationMessages([]);
@@ -118,174 +81,121 @@ function QuestionEditorForm({
       return;
     }
 
-    setChoices(
-      (currentChoices) => [
-        ...currentChoices,
-        createChoice(),
-      ],
-    );
+    setChoices((currentChoices) => [...currentChoices, createChoice()]);
   };
 
-  const handleRemoveChoice = (
-    choiceId: string,
-  ) => {
+  const handleRemoveChoice = (choiceId: string) => {
     if (choices.length <= 2) {
       return;
     }
 
-    setChoices(
-      (currentChoices) => {
-        const choiceToRemove =
-          currentChoices.find(
-            (choice) =>
-              choice.id === choiceId,
-          );
+    setChoices((currentChoices) => {
+      const choiceToRemove = currentChoices.find(
+        (choice) => choice.id === choiceId,
+      );
 
-        const remainingChoices =
-          currentChoices.filter(
-            (choice) =>
-              choice.id !== choiceId,
-          );
+      const remainingChoices = currentChoices.filter(
+        (choice) => choice.id !== choiceId,
+      );
 
-        if (
-          choiceToRemove?.correct ===
-            true &&
-          remainingChoices.length > 0
-        ) {
-          return remainingChoices.map(
-            (choice, index) => ({
-              ...choice,
-              correct: index === 0,
-            }),
-          );
-        }
+      if (choiceToRemove?.correct === true && remainingChoices.length > 0) {
+        return remainingChoices.map((choice, index) => ({
+          ...choice,
+          correct: index === 0,
+        }));
+      }
 
-        return remainingChoices;
-      },
-    );
+      return remainingChoices;
+    });
   };
 
   const validate = (): string[] => {
     const messages: string[] = [];
 
-    const normalizedContent =
-      content.trim();
+    const normalizedContent = content.trim();
 
-    if (
-      normalizedContent.length < 5
-    ) {
-      messages.push(
-        'Question content must contain at least 5 characters.',
-      );
+    if (normalizedContent.length < 5) {
+      messages.push("Question content must contain at least 5 characters.");
     }
 
-    if (
-      normalizedContent.length > 2000
-    ) {
-      messages.push(
-        'Question content must not exceed 2000 characters.',
-      );
+    if (normalizedContent.length > 2000) {
+      messages.push("Question content must not exceed 2000 characters.");
     }
 
-    const numericPoints =
-      Number(points);
+    const numericPoints = Number(points);
 
     if (
+      !Number.isFinite(numericPoints) ||
+      numericPoints <= 0 ||
+      numericPoints > 100
+    ) {
+      messages.push("Points must be greater than 0 and not exceed 100.");
+    }
+
+        if (
       !Number.isFinite(
+        numericPoints,
+      ) ||
+      !Number.isInteger(
         numericPoints,
       ) ||
       numericPoints <= 0 ||
       numericPoints > 100
     ) {
       messages.push(
-        'Points must be greater than 0 and not exceed 100.',
+        'Points must be a whole number between 1 and 100.',
       );
     }
 
-    if (
-      choices.length < 2 ||
-      choices.length > 6
-    ) {
-      messages.push(
-        'A question must contain between 2 and 6 choices.',
-      );
+    if (choices.length < 2 || choices.length > 6) {
+      messages.push("A question must contain between 2 and 6 choices.");
     }
 
-    if (
-      choices.some(
-        (choice) =>
-          choice.content.trim().length ===
-          0,
-      )
-    ) {
-      messages.push(
-        'Every choice must have content.',
-      );
+    if (choices.some((choice) => choice.content.trim().length === 0)) {
+      messages.push("Every choice must have content.");
     }
 
-    const correctChoiceCount =
-      choices.filter(
-        (choice) => choice.correct,
-      ).length;
+    const correctChoiceCount = choices.filter(
+      (choice) => choice.correct,
+    ).length;
 
     if (correctChoiceCount !== 1) {
-      messages.push(
-        'Select exactly one correct choice.',
-      );
+      messages.push("Select exactly one correct choice.");
     }
 
     return messages;
   };
 
-  const resetNewQuestionForm = () => {
-    setContent('');
-    setPoints('1');
-    setChoices(
-      createInitialChoices(),
-    );
-    setValidationMessages([]);
-  };
-
-  const handleSubmit = (
-    event:
-      FormEvent<HTMLFormElement>,
-  ) => {
+  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+
+    if (isSaving) {
+      return;
+    }
 
     const messages = validate();
 
-    setValidationMessages(
-      messages,
-    );
+    setValidationMessages(messages);
 
     if (messages.length > 0) {
       return;
     }
 
-    const savedQuestion:
-      QuestionEditorQuestion = {
-        id:
-          initialQuestion?.id ??
-          crypto.randomUUID(),
+    const savedQuestion: QuestionEditorQuestion = {
+      id: initialQuestion?.id ?? crypto.randomUUID(),
 
-        content: content.trim(),
+      content: content.trim(),
 
-        points: Number(points),
+      points: Number(points),
 
-        choices: choices.map(
-          (choice) => ({
-            ...choice,
-            content:
-              choice.content.trim(),
-          }),
-        ),
-      };
+      choices: choices.map((choice) => ({
+        ...choice,
+        content: choice.content.trim(),
+      })),
+    };
 
     onSave(savedQuestion);
 
-    if (!isEditing) {
-      resetNewQuestionForm();
-    }
   };
 
   return (
@@ -322,9 +232,7 @@ function QuestionEditorForm({
               text-slate-950
             "
           >
-            {isEditing
-              ? 'Edit question'
-              : 'Add a question'}
+            {isEditing ? "Edit question" : "Add a question"}
           </h2>
         </div>
 
@@ -347,8 +255,7 @@ function QuestionEditorForm({
         )}
       </div>
 
-      {validationMessages.length >
-        0 && (
+      {validationMessages.length > 0 && (
         <div
           className="
             mt-5 rounded-lg
@@ -369,13 +276,9 @@ function QuestionEditorForm({
               text-red-800
             "
           >
-            {validationMessages.map(
-              (message) => (
-                <li key={message}>
-                  {message}
-                </li>
-              ),
-            )}
+            {validationMessages.map((message) => (
+              <li key={message}>{message}</li>
+            ))}
           </ul>
         </div>
       )}
@@ -406,13 +309,8 @@ function QuestionEditorForm({
           "
           id="question-content"
           value={content}
-          onChange={(
-            event:
-              ChangeEvent<HTMLTextAreaElement>,
-          ) => {
-            setContent(
-              event.target.value,
-            );
+          onChange={(event: ChangeEvent<HTMLTextAreaElement>) => {
+            setContent(event.target.value);
 
             setValidationMessages([]);
           }}
@@ -443,7 +341,7 @@ function QuestionEditorForm({
           Points
         </label>
 
-        <input
+                <input
           className="
             mt-2 min-h-11 w-full
             rounded-md border
@@ -455,19 +353,13 @@ function QuestionEditorForm({
           id="question-points"
           type="number"
           value={points}
-          onChange={(
-            event:
-              ChangeEvent<HTMLInputElement>,
-          ) => {
-            setPoints(
-              event.target.value,
-            );
-
+          onChange={(event: ChangeEvent<HTMLInputElement>) => {
+            setPoints(event.target.value);
             setValidationMessages([]);
           }}
-          min={0.1}
+          min={1}
           max={100}
-          step={0.1}
+          step={1}
           required
         />
       </div>
@@ -502,9 +394,7 @@ function QuestionEditorForm({
               disabled:opacity-40
             "
             type="button"
-            disabled={
-              choices.length >= 6
-            }
+            disabled={choices.length >= 6}
             onClick={handleAddChoice}
           >
             Add choice
@@ -512,11 +402,10 @@ function QuestionEditorForm({
         </div>
 
         <div className="mt-4 grid gap-3">
-          {choices.map(
-            (choice, index) => (
-              <div
-                key={choice.id}
-                className={`
+          {choices.map((choice, index) => (
+            <div
+              key={choice.id}
+              className={`
                   grid
                   grid-cols-[42px_minmax(0,1fr)_auto]
                   items-center gap-3
@@ -533,9 +422,9 @@ function QuestionEditorForm({
                       `
                   }
                 `}
-              >
-                <label
-                  className="
+            >
+              <label
+                className="
                     grid h-9 w-9
                     cursor-pointer
                     place-items-center
@@ -545,29 +434,21 @@ function QuestionEditorForm({
                     text-xs font-bold
                     text-slate-700
                   "
-                  title="Mark as the correct answer"
-                >
-                  <input
-                    className="sr-only"
-                    type="radio"
-                    name="correct-choice"
-                    checked={
-                      choice.correct
-                    }
-                    onChange={() =>
-                      handleCorrectChoiceChange(
-                        choice.id,
-                      )
-                    }
-                  />
-
-                  {String.fromCharCode(
-                    65 + index,
-                  )}
-                </label>
-
+                title="Mark as the correct answer"
+              >
                 <input
-                  className="
+                  className="sr-only"
+                  type="radio"
+                  name="correct-choice"
+                  checked={choice.correct}
+                  onChange={() => handleCorrectChoiceChange(choice.id)}
+                />
+
+                {String.fromCharCode(65 + index)}
+              </label>
+
+              <input
+                className="
                     min-h-11 w-full
                     rounded-md border
                     border-slate-300
@@ -576,23 +457,18 @@ function QuestionEditorForm({
                     placeholder:text-slate-400
                     focus:border-blue-600
                   "
-                  type="text"
-                  value={choice.content}
-                  onChange={(event) =>
-                    handleChoiceContentChange(
-                      choice.id,
-                      event.target.value,
-                    )
-                  }
-                  placeholder={`Choice ${String.fromCharCode(
-                    65 + index,
-                  )}`}
-                  maxLength={1000}
-                  required
-                />
+                type="text"
+                value={choice.content}
+                onChange={(event) =>
+                  handleChoiceContentChange(choice.id, event.target.value)
+                }
+                placeholder={`Choice ${String.fromCharCode(65 + index)}`}
+                maxLength={1000}
+                required
+              />
 
-                <button
-                  className="
+              <button
+                className="
                     rounded-md px-3 py-2
                     text-xs font-semibold
                     text-red-700
@@ -601,21 +477,14 @@ function QuestionEditorForm({
                     disabled:cursor-not-allowed
                     disabled:opacity-30
                   "
-                  type="button"
-                  disabled={
-                    choices.length <= 2
-                  }
-                  onClick={() =>
-                    handleRemoveChoice(
-                      choice.id,
-                    )
-                  }
-                >
-                  Remove
-                </button>
-              </div>
-            ),
-          )}
+                type="button"
+                disabled={choices.length <= 2}
+                onClick={() => handleRemoveChoice(choice.id)}
+              >
+                Remove
+              </button>
+            </div>
+          ))}
         </div>
 
         <p
@@ -624,9 +493,8 @@ function QuestionEditorForm({
             leading-5 text-slate-500
           "
         >
-          The circular letter selected as a radio option is the
-          correct answer. Correct-answer metadata remains on the
-          teacher/server side.
+          The circular letter selected as a radio option is the correct answer.
+          Correct-answer metadata remains on the teacher/server side.
         </p>
       </div>
 
@@ -662,12 +530,13 @@ function QuestionEditorForm({
             text-white
             transition-colors
             hover:bg-blue-800
+            disabled:cursor-not-allowed
+            disabled:bg-slate-400
           "
           type="submit"
+          disabled={isSaving}
         >
-          {isEditing
-            ? 'Save changes'
-            : 'Add question'}
+          {isSaving ? "Saving..." : isEditing ? "Save changes" : "Add question"}
         </button>
       </div>
     </form>

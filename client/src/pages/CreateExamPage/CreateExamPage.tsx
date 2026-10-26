@@ -1,6 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from "react";
 
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 
 import FeedbackMessage, {
   type Feedback,
@@ -164,6 +164,7 @@ function ToggleSetting({
 }
 
 function CreateExamPage() {
+  const navigate = useNavigate();
   const { status: connectionStatus, sendMessage } = useWebSocket();
 
   const [form, setForm] = useState<ExamEditorForm>(EMPTY_FORM);
@@ -173,10 +174,6 @@ function CreateExamPage() {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [createdDraftExamId, setCreatedDraftExamId] = useState<string | null>(
-    null,
-  );
 
   const handleTextChange = (
     event: ChangeEvent<
@@ -198,10 +195,6 @@ function CreateExamPage() {
     if (feedback !== null) {
       setFeedback(null);
     }
-
-    if (createdDraftExamId !== null) {
-      setCreatedDraftExamId(null);
-    }
   };
 
   const handleToggleChange = (event: ChangeEvent<HTMLInputElement>) => {
@@ -214,10 +207,6 @@ function CreateExamPage() {
 
     if (feedback !== null) {
       setFeedback(null);
-    }
-
-    if (createdDraftExamId !== null) {
-      setCreatedDraftExamId(null);
     }
   };
 
@@ -240,74 +229,69 @@ function CreateExamPage() {
 
       return;
     }
-  };
 
-  if (connectionStatus !== "connected") {
-    setFeedback({
-      type: "error",
-      title: "Server connection unavailable",
-      message:
-        "The examination cannot be created until the server connection is restored.",
-    });
+    if (connectionStatus !== "connected") {
+      setFeedback({
+        type: "error",
+        title: "Server connection unavailable",
+        message:
+          "The examination cannot be created until the server connection is restored.",
+      });
 
-    return;
-  }
+      return;
+    }
 
-  setIsSubmitting(true);
-  setCreatedDraftExamId(null);
+    setIsSubmitting(true);
 
-  const requestId = sendMessage(
-    "CREATE_EXAM",
-    {
-      title: form.title.trim(),
-      description: form.description.trim(),
-      durationMinutes: Number(form.durationMinutes),
-    },
-    (response) => {
-      setIsSubmitting(false);
+    const requestId = sendMessage(
+      "CREATE_EXAM",
+      {
+        title: form.title.trim(),
 
-      if (
-        response.type === "EXAM_CREATED" &&
-        typeof response.data?.id === "number"
-      ) {
-        setCreatedDraftExamId(String(response.data.id));
+        description: form.description.trim(),
+
+        durationMinutes: Number(form.durationMinutes),
+      },
+      (response) => {
+        setIsSubmitting(false);
+
+        if (
+          response.type === "EXAM_CREATED" &&
+          typeof response.data?.id === "number"
+        ) {
+          const createdExamId = response.data.id;
+
+          navigate(`/teacher/exams/${createdExamId}/questions`);
+
+          return;
+        }
 
         setFeedback({
-          type: "success",
-          title: "Draft examination created",
+          type: "error",
+          title: "Unable to create examination",
           message:
-            "The draft was saved by the server. You can now continue to question management.",
+            response.error?.message ??
+            "The server returned an unexpected response.",
         });
+      },
+    );
 
-        return;
-      }
+    if (requestId === null) {
+      setIsSubmitting(false);
 
       setFeedback({
         type: "error",
-        title: "Unable to create examination",
+        title: "Request could not be sent",
         message:
-          response.error?.message ??
-          "The server returned an unexpected response.",
+          "The WebSocket connection is not ready. Wait for the connection and try again.",
       });
-    },
-  );
-
-  if (requestId === null) {
-    setIsSubmitting(false);
-
-    setFeedback({
-      type: "error",
-      title: "Request could not be sent",
-      message:
-        "The WebSocket connection is not ready. Wait for the server connection and try again.",
-    });
-  }
+    }
+  };
 
   const handleReset = () => {
     setForm(EMPTY_FORM);
     setErrors({});
     setFeedback(null);
-    setCreatedDraftExamId(null);
   };
 
   const releasePolicyOptions: Array<{
@@ -409,7 +393,10 @@ function CreateExamPage() {
         "
       >
         <strong>Frontend mock:</strong> saving this form currently creates an
-        in-memory demonstration ID. Core draft data is persisted through the Java server. Scheduling, course metadata, result-release policy, randomization, and monitoring settings will be connected in later modules.
+        in-memory demonstration ID. Core draft data is persisted through the
+        Java server. Scheduling, course metadata, result-release policy,
+        randomization, and monitoring settings will be connected in later
+        modules.
       </div>
 
       {feedback !== null && (
@@ -924,24 +911,6 @@ function CreateExamPage() {
                 Reset form
               </button>
             </div>
-
-            {createdDraftExamId !== null && (
-              <Link
-                className="
-                  mt-4 flex min-h-11
-                  items-center justify-center
-                  rounded-md
-                  bg-emerald-700 px-4
-                  text-sm font-semibold
-                  text-white
-                  transition-colors
-                  hover:bg-emerald-800
-                "
-                to={`/teacher/exams/` + `${createdDraftExamId}/questions`}
-              >
-                Continue to questions
-              </Link>
-            )}
           </section>
         </aside>
       </form>

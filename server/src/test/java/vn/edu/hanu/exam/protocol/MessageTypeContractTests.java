@@ -40,6 +40,18 @@ class MessageTypeContractTests {
                 "GET_EXAM",
                 "EXAM_DETAILS",
 
+                "UPDATE_EXAM",
+                "EXAM_UPDATED",
+
+                "PUBLISH_EXAM",
+                "EXAM_PUBLISHED",
+
+                "CLOSE_EXAM",
+                "EXAM_CLOSED",
+
+                "DELETE_EXAM",
+                "EXAM_DELETED",
+
                 "CREATE_QUESTION",
                 "QUESTION_CREATED",
 
@@ -83,6 +95,22 @@ class MessageTypeContractTests {
                 () -> assertEquals(
                         MessageType.GET_EXAM_QUESTIONS,
                         MessageType.fromWireValue("get_exam_questions").orElseThrow()
+                ),
+                () -> assertEquals(
+                        MessageType.UPDATE_EXAM,
+                        MessageType.fromWireValue(" update_exam ").orElseThrow()
+                ),
+                () -> assertEquals(
+                        MessageType.PUBLISH_EXAM,
+                        MessageType.fromWireValue(" publish_exam ").orElseThrow()
+                ),
+                () -> assertEquals(
+                        MessageType.CLOSE_EXAM,
+                        MessageType.fromWireValue(" close_exam ").orElseThrow()
+                ),
+                () -> assertEquals(
+                        MessageType.DELETE_EXAM,
+                        MessageType.fromWireValue(" delete_exam ").orElseThrow()
                 )
         );
     }
@@ -120,6 +148,10 @@ class MessageTypeContractTests {
                 MessageType.CREATE_EXAM,
                 MessageType.GET_TEACHER_EXAMS,
                 MessageType.GET_EXAM,
+                MessageType.UPDATE_EXAM,
+                MessageType.PUBLISH_EXAM,
+                MessageType.CLOSE_EXAM,
+                MessageType.DELETE_EXAM,
 
                 MessageType.CREATE_QUESTION,
                 MessageType.GET_EXAM_QUESTIONS,
@@ -153,6 +185,10 @@ class MessageTypeContractTests {
                 MessageType.EXAM_CREATED,
                 MessageType.TEACHER_EXAMS,
                 MessageType.EXAM_DETAILS,
+                MessageType.EXAM_UPDATED,
+                MessageType.EXAM_PUBLISHED,
+                MessageType.EXAM_CLOSED,
+                MessageType.EXAM_DELETED,
 
                 MessageType.QUESTION_CREATED,
                 MessageType.EXAM_QUESTIONS,

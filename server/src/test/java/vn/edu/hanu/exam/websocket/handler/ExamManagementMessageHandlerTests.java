@@ -25,10 +25,12 @@ import vn.edu.hanu.exam.exception.ExamManagementException;
 import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.exam.CreateExamCommand;
+import vn.edu.hanu.exam.service.exam.DeletedExamDetails;
 import vn.edu.hanu.exam.service.exam.ExamDetails;
 import vn.edu.hanu.exam.service.exam.ExamManagementService;
 import vn.edu.hanu.exam.service.exam.TeacherExamList;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
+import vn.edu.hanu.exam.service.exam.UpdateExamCommand;
 
 class ExamManagementMessageHandlerTests {
     private static final String SESSION_ID = "session-1";
@@ -126,5 +128,352 @@ class ExamManagementMessageHandlerTests {
         assertNull(response.data());
         assertNotNull(response.error());
         assertEquals(expectedCode, response.error().code());
+    }
+
+    @Test
+    void validUpdateReturnsExamUpdatedAndPreservesRequestId() {
+        authenticate(UserRole.TEACHER);
+
+        ExamDetails updatedExam = new ExamDetails(
+                1L,
+                "Updated Java Midterm",
+                "Updated description",
+                90,
+                ExamStatus.DRAFT,
+                10L,
+                OffsetDateTime.parse("2026-10-22T10:00:00+07:00"),
+                OffsetDateTime.parse("2026-10-22T11:00:00+07:00"));
+
+        when(examService.updateDraftExam(
+                eq(1L),
+                eq(10L),
+                eq(new UpdateExamCommand(
+                        "Updated Java Midterm",
+                        "Updated description",
+                        90))))
+                .thenReturn(updatedExam);
+
+        ServerMessage response = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of(
+                        "examId", 1L,
+                        "title", "Updated Java Midterm",
+                        "description", "Updated description",
+                        "durationMinutes", 90));
+
+        assertEquals(REQUEST_ID, response.requestId());
+        assertEquals("EXAM_UPDATED", response.type());
+        assertEquals(updatedExam, response.data());
+        assertNull(response.error());
+
+        verify(examService).updateDraftExam(
+                1L,
+                10L,
+                new UpdateExamCommand(
+                        "Updated Java Midterm",
+                        "Updated description",
+                        90));
+    }
+
+    @Test
+    void studentCannotUpdateExam() {
+        authenticate(UserRole.STUDENT);
+
+        ServerMessage response = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of(
+                        "examId", 1L,
+                        "title", "Updated exam",
+                        "durationMinutes", 90));
+
+        assertError(response, "FORBIDDEN");
+
+        verify(examService, never()).updateDraftExam(
+                anyLong(),
+                anyLong(),
+                any(UpdateExamCommand.class));
+    }
+
+    @Test
+    void nullUpdatePayloadReturnsInvalidPayload() {
+        authenticate(UserRole.TEACHER);
+
+        ServerMessage response = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                null);
+
+        assertError(response, "INVALID_PAYLOAD");
+
+        verify(examService, never()).updateDraftExam(
+                anyLong(),
+                anyLong(),
+                any(UpdateExamCommand.class));
+    }
+
+    @Test
+    void updatePreservesServiceErrorCode() {
+        authenticate(UserRole.TEACHER);
+
+        when(examService.updateDraftExam(
+                eq(1L),
+                eq(10L),
+                any(UpdateExamCommand.class))).thenThrow(new ExamManagementException(
+                        "EXAM_NOT_EDITABLE",
+                        "Only a draft exam can be updated."));
+
+        ServerMessage response = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of(
+                        "examId", 1L,
+                        "title", "Updated exam",
+                        "durationMinutes", 90));
+
+        assertError(response, "EXAM_NOT_EDITABLE");
+    }
+
+    @Test
+    void unexpectedUpdateFailureReturnsInternalServerError() {
+        authenticate(UserRole.TEACHER);
+
+        when(examService.updateDraftExam(
+                eq(1L),
+                eq(10L),
+                any(UpdateExamCommand.class))).thenThrow(new IllegalArgumentException(
+                        "Sensitive internal detail"));
+
+        ServerMessage response = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of(
+                        "examId", 1L,
+                        "title", "Updated exam",
+                        "durationMinutes", 90));
+
+        assertError(response, "INTERNAL_SERVER_ERROR");
+        assertEquals(
+                "An unexpected error occurred.",
+                response.error().message());
+    }
+
+    @Test
+    void unauthenticatedUpdateIsRejected() {
+        ServerMessage response = handler.handleUpdate(
+                "missing-session",
+                REQUEST_ID,
+                Map.of(
+                        "examId", 1L,
+                        "title", "Updated exam",
+                        "durationMinutes", 90));
+
+        assertError(response, "AUTHENTICATION_REQUIRED");
+
+        verify(examService, never()).updateDraftExam(
+                anyLong(),
+                anyLong(),
+                any(UpdateExamCommand.class));
+    }
+
+    @Test
+    void validPublishReturnsExamPublishedAndPreservesRequestId() {
+        authenticate(UserRole.TEACHER);
+
+        ExamDetails publishedExam = new ExamDetails(
+                1L,
+                "Java Midterm",
+                "Core Java",
+                60,
+                ExamStatus.PUBLISHED,
+                10L,
+                OffsetDateTime.parse("2026-10-22T10:00:00+07:00"),
+                OffsetDateTime.parse("2026-10-22T11:00:00+07:00"));
+
+        when(examService.publishExam(1L, 10L)).thenReturn(publishedExam);
+
+        ServerMessage response = handler.handlePublish(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertEquals(REQUEST_ID, response.requestId());
+        assertEquals("EXAM_PUBLISHED", response.type());
+        assertEquals(publishedExam, response.data());
+        assertNull(response.error());
+        verify(examService).publishExam(1L, 10L);
+    }
+
+    @Test
+    void nullPublishPayloadReturnsInvalidPayload() {
+        authenticate(UserRole.TEACHER);
+
+        ServerMessage response = handler.handlePublish(
+                SESSION_ID,
+                REQUEST_ID,
+                null);
+
+        assertError(response, "INVALID_PAYLOAD");
+        verify(examService, never()).publishExam(anyLong(), anyLong());
+    }
+
+    @Test
+    void studentCannotPublishExam() {
+        authenticate(UserRole.STUDENT);
+
+        ServerMessage response = handler.handlePublish(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertError(response, "FORBIDDEN");
+        verify(examService, never()).publishExam(anyLong(), anyLong());
+    }
+
+    @Test
+    void publishPreservesServiceErrorCode() {
+        authenticate(UserRole.TEACHER);
+
+        when(examService.publishExam(1L, 10L)).thenThrow(new ExamManagementException(
+                "EXAM_HAS_NO_QUESTIONS",
+                "The exam must contain at least one question before publication."));
+
+        ServerMessage response = handler.handlePublish(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertError(response, "EXAM_HAS_NO_QUESTIONS");
+    }
+
+    @Test
+    void validCloseReturnsExamClosedAndPreservesRequestId() {
+        authenticate(UserRole.TEACHER);
+
+        ExamDetails closedExam = new ExamDetails(
+                1L,
+                "Java Midterm",
+                "Core Java",
+                60,
+                ExamStatus.CLOSED,
+                10L,
+                OffsetDateTime.parse("2026-10-22T10:00:00+07:00"),
+                OffsetDateTime.parse("2026-10-22T12:00:00+07:00"));
+
+        when(examService.closeExam(1L, 10L)).thenReturn(closedExam);
+
+        ServerMessage response = handler.handleClose(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertEquals(REQUEST_ID, response.requestId());
+        assertEquals("EXAM_CLOSED", response.type());
+        assertEquals(closedExam, response.data());
+        assertNull(response.error());
+        verify(examService).closeExam(1L, 10L);
+    }
+
+    @Test
+    void nullClosePayloadReturnsInvalidPayload() {
+        authenticate(UserRole.TEACHER);
+
+        ServerMessage response = handler.handleClose(
+                SESSION_ID,
+                REQUEST_ID,
+                null);
+
+        assertError(response, "INVALID_PAYLOAD");
+        verify(examService, never()).closeExam(anyLong(), anyLong());
+    }
+
+    @Test
+    void studentCannotCloseExam() {
+        authenticate(UserRole.STUDENT);
+
+        ServerMessage response = handler.handleClose(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertError(response, "FORBIDDEN");
+        verify(examService, never()).closeExam(anyLong(), anyLong());
+    }
+
+    @Test
+    void closePreservesServiceErrorCode() {
+        authenticate(UserRole.TEACHER);
+
+        when(examService.closeExam(1L, 10L)).thenThrow(new ExamManagementException(
+                "EXAM_NOT_CLOSABLE",
+                "Only a published exam can be closed."));
+
+        ServerMessage response = handler.handleClose(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertError(response, "EXAM_NOT_CLOSABLE");
+    }
+
+    @Test
+    void validDeleteReturnsExamDeletedAndPreservesRequestId() {
+        authenticate(UserRole.TEACHER);
+        DeletedExamDetails deletedExam = new DeletedExamDetails(1L);
+        when(examService.deleteDraftExam(1L, 10L)).thenReturn(deletedExam);
+
+        ServerMessage response = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertEquals(REQUEST_ID, response.requestId());
+        assertEquals("EXAM_DELETED", response.type());
+        assertEquals(deletedExam, response.data());
+        assertNull(response.error());
+        verify(examService).deleteDraftExam(1L, 10L);
+    }
+
+    @Test
+    void nullDeletePayloadReturnsInvalidPayload() {
+        authenticate(UserRole.TEACHER);
+
+        ServerMessage response = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                null);
+
+        assertError(response, "INVALID_PAYLOAD");
+        verify(examService, never()).deleteDraftExam(anyLong(), anyLong());
+    }
+
+    @Test
+    void studentCannotDeleteExam() {
+        authenticate(UserRole.STUDENT);
+
+        ServerMessage response = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertError(response, "FORBIDDEN");
+        verify(examService, never()).deleteDraftExam(anyLong(), anyLong());
+    }
+
+    @Test
+    void deletePreservesServiceErrorCode() {
+        authenticate(UserRole.TEACHER);
+
+        when(examService.deleteDraftExam(1L, 10L)).thenThrow(new ExamManagementException(
+                "EXAM_NOT_DELETABLE",
+                "Only a draft exam can be deleted."));
+
+        ServerMessage response = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 1L));
+
+        assertError(response, "EXAM_NOT_DELETABLE");
     }
 }

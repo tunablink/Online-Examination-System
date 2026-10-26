@@ -1,11 +1,9 @@
-import type {
-  QuestionEditorQuestion,
-} from '../../../types/questionEditor';
+import type { QuestionEditorQuestion } from "../../../types/questionEditor";
 
 interface PublishReadinessPanelProps {
   isPublished: boolean;
-  questions:
-    QuestionEditorQuestion[];
+  isPublishing: boolean;
+  questions: QuestionEditorQuestion[];
 
   onPublish: () => void;
 }
@@ -17,69 +15,45 @@ interface ReadinessCheck {
 
 function PublishReadinessPanel({
   isPublished,
+  isPublishing,
   questions,
   onPublish,
 }: PublishReadinessPanelProps) {
-  const totalPoints =
-    questions.reduce(
-      (total, question) =>
-        total + question.points,
-      0,
-    );
+  const totalPoints = questions.reduce(
+    (total, question) => total + question.points,
+    0,
+  );
 
-  const readinessChecks:
-    ReadinessCheck[] = [
-      {
-        label:
-          'At least one question has been added',
-        passed:
-          questions.length > 0,
-      },
-      {
-        label:
-          'Every question has 2–6 choices',
-        passed:
-          questions.every(
-            (question) =>
-              question.choices.length >=
-                2 &&
-              question.choices.length <=
-                6,
-          ),
-      },
-      {
-        label:
-          'Every question has exactly one correct answer',
-        passed:
-          questions.every(
-            (question) =>
-              question.choices.filter(
-                (choice) =>
-                  choice.correct,
-              ).length === 1,
-          ),
-      },
-      {
-        label:
-          'Every question has positive points',
-        passed:
-          questions.every(
-            (question) =>
-              question.points > 0,
-          ),
-      },
-      {
-        label:
-          'Total examination score is greater than zero',
-        passed:
-          totalPoints > 0,
-      },
-    ];
+  const readinessChecks: ReadinessCheck[] = [
+    {
+      label: "At least one question has been added",
+      passed: questions.length > 0,
+    },
+    {
+      label: 'Every question has 2-6 choices',
+      passed: questions.every(
+        (question) =>
+          question.choices.length >= 2 && question.choices.length <= 6,
+      ),
+    },
+    {
+      label: "Every question has exactly one correct answer",
+      passed: questions.every(
+        (question) =>
+          question.choices.filter((choice) => choice.correct).length === 1,
+      ),
+    },
+    {
+      label: "Every question has positive points",
+      passed: questions.every((question) => question.points > 0),
+    },
+    {
+      label: "Total examination score is greater than zero",
+      passed: totalPoints > 0,
+    },
+  ];
 
-  const readyToPublish =
-    readinessChecks.every(
-      (check) => check.passed,
-    );
+  const readyToPublish = readinessChecks.every((check) => check.passed);
 
   return (
     <section
@@ -111,18 +85,17 @@ function PublishReadinessPanel({
       </h2>
 
       <div className="mt-5 grid gap-3">
-        {readinessChecks.map(
-          (check) => (
-            <div
-              key={check.label}
-              className="
+        {readinessChecks.map((check) => (
+          <div
+            key={check.label}
+            className="
                 grid
                 grid-cols-[24px_1fr]
                 items-start gap-3
               "
-            >
-              <span
-                className={`
+          >
+            <span
+              className={`
                   grid h-6 w-6
                   place-items-center
                   rounded-full
@@ -139,29 +112,22 @@ function PublishReadinessPanel({
                       `
                   }
                 `}
-                aria-hidden="true"
-              >
-                {check.passed
-                  ? 'OK'
-                  : '!'}
-              </span>
+              aria-hidden="true"
+            >
+              {check.passed ? "OK" : "!"}
+            </span>
 
-              <p
-                className={`
+            <p
+              className={`
                   pt-0.5 text-xs
                   leading-5
-                  ${
-                    check.passed
-                      ? 'text-slate-700'
-                      : 'text-red-700'
-                  }
+                  ${check.passed ? "text-slate-700" : "text-red-700"}
                 `}
-              >
-                {check.label}
-              </p>
-            </div>
-          ),
-        )}
+            >
+              {check.label}
+            </p>
+          </div>
+        ))}
       </div>
 
       <div
@@ -210,12 +176,11 @@ function PublishReadinessPanel({
           "
         >
           <p className="text-xs font-semibold text-emerald-900">
-            Mock publication complete
+            Publication complete
           </p>
 
           <p className="mt-1 text-xs leading-5 text-emerald-800">
-            The frontend has marked this demonstration exam as
-            published.
+            The Java server saved this examination as published.
           </p>
         </div>
       ) : (
@@ -231,16 +196,21 @@ function PublishReadinessPanel({
             disabled:bg-slate-300
           "
           type="button"
-          disabled={!readyToPublish}
+          disabled={!readyToPublish || isPublishing}
+          title={
+            readyToPublish
+              ? "Publish this examination."
+              : "Complete all readiness checks before publishing."
+          }
           onClick={onPublish}
         >
-          Publish examination
+          {isPublishing ? "Publishing..." : "Publish examination"}
         </button>
       )}
 
       <p className="mt-3 text-[11px] leading-5 text-slate-500">
-        The Java server must repeat all readiness and authorization
-        checks before changing the database status to PUBLISHED.
+        The Java server must repeat all readiness and authorization checks
+        before changing the database status to PUBLISHED.
       </p>
     </section>
   );

@@ -168,6 +168,34 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                                                 session,
                                                                 clientMessage));
 
+                        case UPDATE_EXAM ->
+                                sendMessage(
+                                                session,
+                                                examManagementMessageHandler.handleUpdate(
+                                                                session,
+                                                                clientMessage));
+
+                        case PUBLISH_EXAM ->
+                                sendMessage(
+                                                session,
+                                                examManagementMessageHandler.handlePublish(
+                                                                session,
+                                                                clientMessage));
+
+                        case CLOSE_EXAM ->
+                                sendMessage(
+                                                session,
+                                                examManagementMessageHandler.handleClose(
+                                                                session,
+                                                                clientMessage));
+
+                        case DELETE_EXAM ->
+                                sendMessage(
+                                                session,
+                                                examManagementMessageHandler.handleDelete(
+                                                                session,
+                                                                clientMessage));
+
                         case CREATE_QUESTION ->
                                 sendMessage(
                                                 session,
