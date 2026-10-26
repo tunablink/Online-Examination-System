@@ -9,6 +9,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
@@ -25,9 +26,11 @@ import vn.edu.hanu.exam.exception.QuestionManagementException;
 import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.question.CreateQuestionCommand;
+import vn.edu.hanu.exam.service.question.DeletedQuestionDetails;
 import vn.edu.hanu.exam.service.question.QuestionManagementService;
 import vn.edu.hanu.exam.service.question.TeacherQuestionDetails;
 import vn.edu.hanu.exam.service.question.TeacherQuestionList;
+import vn.edu.hanu.exam.service.question.UpdateQuestionCommand;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 class QuestionManagementMessageHandlerTests {
@@ -321,6 +324,194 @@ class QuestionManagementMessageHandlerTests {
         );
     }
 
+    @Test
+    void authenticatedTeacherCanUpdateQuestion() {
+        authenticate(UserRole.TEACHER);
+
+        TeacherQuestionDetails updatedQuestion = sampleQuestion();
+
+        when(questionService.updateQuestion(
+                eq(TEACHER_ID),
+                any(UpdateQuestionCommand.class)
+        )).thenReturn(updatedQuestion);
+
+        ServerMessage response = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                validUpdatePayload()
+        );
+
+        assertSuccess(
+                response,
+                "QUESTION_UPDATED",
+                updatedQuestion
+        );
+
+        ArgumentCaptor<UpdateQuestionCommand> commandCaptor =
+                ArgumentCaptor.forClass(UpdateQuestionCommand.class);
+
+        verify(questionService).updateQuestion(
+                eq(TEACHER_ID),
+                commandCaptor.capture()
+        );
+
+        UpdateQuestionCommand command = commandCaptor.getValue();
+        assertEquals(100L, command.questionId());
+        assertEquals("Which keyword inherits a Java class?", command.content());
+        assertEquals(3, command.points());
+        assertEquals(0, command.displayOrder());
+        assertEquals(2, command.choices().size());
+        assertEquals(true, command.choices().get(0).correct());
+    }
+
+    @Test
+    void authenticatedTeacherCanDeleteQuestion() {
+        authenticate(UserRole.TEACHER);
+
+        DeletedQuestionDetails deletedDetails = new DeletedQuestionDetails(100L);
+
+        when(questionService.deleteQuestion(TEACHER_ID, 100L))
+                .thenReturn(deletedDetails);
+
+        ServerMessage response = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                validDeletePayload()
+        );
+
+        assertSuccess(
+                response,
+                "QUESTION_DELETED",
+                deletedDetails
+        );
+
+        verify(questionService).deleteQuestion(TEACHER_ID, 100L);
+    }
+
+    @Test
+    void unauthenticatedSessionCannotUpdateOrDeleteQuestion() {
+        ServerMessage updateResponse = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                validUpdatePayload()
+        );
+        assertError(updateResponse, "AUTHENTICATION_REQUIRED");
+
+        ServerMessage deleteResponse = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                validDeletePayload()
+        );
+        assertError(deleteResponse, "AUTHENTICATION_REQUIRED");
+
+        verifyNoInteractions(questionService);
+    }
+
+    @Test
+    void studentCannotUpdateOrDeleteQuestion() {
+        authenticate(UserRole.STUDENT);
+
+        ServerMessage updateResponse = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                validUpdatePayload()
+        );
+        assertError(updateResponse, "FORBIDDEN");
+
+        ServerMessage deleteResponse = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                validDeletePayload()
+        );
+        assertError(deleteResponse, "FORBIDDEN");
+
+        verifyNoInteractions(questionService);
+    }
+
+    @Test
+    void invalidPayloadReturnsInvalidPayloadOnUpdateAndDelete() {
+        authenticate(UserRole.TEACHER);
+
+        ServerMessage updateNull = handler.handleUpdate(SESSION_ID, REQUEST_ID, null);
+        assertError(updateNull, "INVALID_PAYLOAD");
+
+        ServerMessage updateMissingChoices = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("questionId", 100L, "content", "Q", "points", 1, "displayOrder", 0)
+        );
+        assertError(updateMissingChoices, "INVALID_PAYLOAD");
+
+        ServerMessage deleteNull = handler.handleDelete(SESSION_ID, REQUEST_ID, null);
+        assertError(deleteNull, "INVALID_PAYLOAD");
+
+        ServerMessage deleteMissingQuestionId = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of()
+        );
+        assertError(deleteMissingQuestionId, "INVALID_PAYLOAD");
+
+        ServerMessage deleteInvalidType = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("questionId", "not-a-number")
+        );
+        assertError(deleteInvalidType, "INVALID_PAYLOAD");
+
+        verifyNoInteractions(questionService);
+    }
+
+    @Test
+    void serviceExceptionPreservesErrorCodeOnUpdateAndDelete() {
+        authenticate(UserRole.TEACHER);
+
+        when(questionService.updateQuestion(eq(TEACHER_ID), any()))
+                .thenThrow(new QuestionManagementException("QUESTION_NOT_FOUND", "Question not found."));
+
+        ServerMessage updateResponse = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                validUpdatePayload()
+        );
+        assertError(updateResponse, "QUESTION_NOT_FOUND");
+
+        when(questionService.deleteQuestion(TEACHER_ID, 100L))
+                .thenThrow(new QuestionManagementException("QUESTION_NOT_EDITABLE", "Cannot delete."));
+
+        ServerMessage deleteResponse = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                validDeletePayload()
+        );
+        assertError(deleteResponse, "QUESTION_NOT_EDITABLE");
+    }
+
+    @Test
+    void unexpectedExceptionReturnsInternalServerErrorOnUpdateAndDelete() {
+        authenticate(UserRole.TEACHER);
+
+        when(questionService.updateQuestion(eq(TEACHER_ID), any()))
+                .thenThrow(new RuntimeException("Database timeout"));
+
+        ServerMessage updateResponse = handler.handleUpdate(
+                SESSION_ID,
+                REQUEST_ID,
+                validUpdatePayload()
+        );
+        assertError(updateResponse, "INTERNAL_SERVER_ERROR");
+
+        when(questionService.deleteQuestion(TEACHER_ID, 100L))
+                .thenThrow(new RuntimeException("Database timeout"));
+
+        ServerMessage deleteResponse = handler.handleDelete(
+                SESSION_ID,
+                REQUEST_ID,
+                validDeletePayload()
+        );
+        assertError(deleteResponse, "INTERNAL_SERVER_ERROR");
+    }
+
     private void authenticate(UserRole role) {
         sessionRegistry.authenticate(
                 SESSION_ID,
@@ -354,6 +545,31 @@ class QuestionManagementMessageHandlerTests {
                         )
                 )
         );
+    }
+
+    private static Map<String, Object> validUpdatePayload() {
+        return Map.of(
+                "questionId", 100L,
+                "content", "Which keyword inherits a Java class?",
+                "points", 3,
+                "displayOrder", 0,
+                "choices", List.of(
+                        Map.of(
+                                "content", "extends",
+                                "correct", true,
+                                "displayOrder", 0
+                        ),
+                        Map.of(
+                                "content", "implements",
+                                "correct", false,
+                                "displayOrder", 1
+                        )
+                )
+        );
+    }
+
+    private static Map<String, Object> validDeletePayload() {
+        return Map.of("questionId", 100L);
     }
 
     private static Map<String, Object>

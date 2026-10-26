@@ -61,6 +61,16 @@ public class JdbcQuestionRepository implements QuestionRepository {
         return queryOwnedExamStatus(examId, teacherId, true);
     }
 
+    @Override
+    public Optional<QuestionExamContext> findOwnedQuestionContext(long questionId, long teacherId) {
+        return queryOwnedQuestionContext(questionId, teacherId, false);
+    }
+
+    @Override
+    public Optional<QuestionExamContext> findOwnedQuestionContextForUpdate(long questionId, long teacherId) {
+        return queryOwnedQuestionContext(questionId, teacherId, true);
+    }
+
     private Optional<ExamStatus> queryOwnedExamStatus(long examId, long teacherId, boolean lockForUpdate) {
         String sql = """
             SELECT status
@@ -86,6 +96,41 @@ public class JdbcQuestionRepository implements QuestionRepository {
 
     return statuses.stream().findFirst();
 }
+
+    private Optional<QuestionExamContext> queryOwnedQuestionContext(
+            long questionId,
+            long teacherId,
+            boolean lockForUpdate
+    ) {
+        String sql = """
+                SELECT q.id AS question_id,
+                       q.exam_id,
+                       e.status AS exam_status
+                FROM questions q
+                INNER JOIN exams e
+                    ON e.id = q.exam_id
+                WHERE q.id = :questionId
+                  AND e.created_by = :teacherId
+                """
+                + (lockForUpdate ? "FOR UPDATE OF e, q" : "");
+
+        Map<String, Object> parameters = Map.of(
+                "questionId", questionId,
+                "teacherId", teacherId
+        );
+
+        List<QuestionExamContext> results = jdbcTemplate.query(
+                sql,
+                parameters,
+                (resultSet, rowNumber) -> new QuestionExamContext(
+                        resultSet.getLong("question_id"),
+                        resultSet.getLong("exam_id"),
+                        ExamStatus.valueOf(resultSet.getString("exam_status"))
+                )
+        );
+
+        return results.stream().findFirst();
+    }
 
     @Override 
     public Question insertQuestion(long examId, String content, int points, int displayOrder){
@@ -217,7 +262,8 @@ public class JdbcQuestionRepository implements QuestionRepository {
         );
     }
 
-    private Optional<Question> findQuestionById(long questionId) {
+    @Override
+    public Optional<Question> findQuestionById(long questionId) {
         String sql = QUESTION_COLUMNS + """
                 WHERE id = :questionId
                 """;
@@ -229,6 +275,68 @@ public class JdbcQuestionRepository implements QuestionRepository {
         );
 
         return questions.stream().findFirst();
+    }
+
+    @Override
+    public List<Choice> findChoicesByQuestionId(long questionId) {
+        String sql = CHOICE_COLUMNS + """
+                WHERE question_id = :questionId
+                ORDER BY display_order ASC, id ASC
+                """;
+
+        return jdbcTemplate.query(
+                sql,
+                Map.of("questionId", questionId),
+                CHOICE_ROW_MAPPER
+        );
+    }
+
+    @Override
+    public Question updateQuestion(long questionId, String content, int points, int displayOrder) {
+        String sql = """
+                UPDATE questions
+                SET content = :content,
+                    points = :points,
+                    display_order = :displayOrder,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :questionId
+                """;
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("questionId", questionId)
+                .addValue("content", content)
+                .addValue("points", points)
+                .addValue("displayOrder", displayOrder);
+
+        int affectedRows = jdbcTemplate.update(sql, parameters);
+
+        if (affectedRows != 1) {
+            throw new IllegalStateException("Expected one updated question, but affected " + affectedRows + " rows.");
+        }
+
+        return findQuestionById(questionId)
+                .orElseThrow(() -> new IllegalStateException("The updated question could not be read back."));
+    }
+
+    @Override
+    public int deleteChoicesByQuestionId(long questionId) {
+        String sql = """
+                DELETE FROM choices
+                WHERE question_id = :questionId
+                """;
+
+        return jdbcTemplate.update(sql, Map.of("questionId", questionId));
+    }
+
+    @Override
+    public boolean deleteQuestionById(long questionId) {
+        String sql = """
+                DELETE FROM questions
+                WHERE id = :questionId
+                """;
+
+        int affectedRows = jdbcTemplate.update(sql, Map.of("questionId", questionId));
+        return affectedRows == 1;
     }
 
     private Optional<Choice> findChoiceById(long choiceId) {

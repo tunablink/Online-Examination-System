@@ -15,6 +15,7 @@ import vn.edu.hanu.exam.domain.Choice;
 import vn.edu.hanu.exam.domain.ExamStatus;
 import vn.edu.hanu.exam.domain.Question;
 import vn.edu.hanu.exam.exception.QuestionManagementException;
+import vn.edu.hanu.exam.repository.QuestionExamContext;
 import vn.edu.hanu.exam.repository.QuestionRepository;
 import vn.edu.hanu.exam.service.question.CreateQuestionCommand.ChoiceCommand;
 
@@ -23,8 +24,14 @@ public class QuestionManagementService {
     public static final String EXAM_NOT_FOUND =
             "EXAM_NOT_FOUND";
 
+    public static final String QUESTION_NOT_FOUND =
+            "QUESTION_NOT_FOUND";
+
     public static final String EXAM_NOT_EDITABLE =
             "EXAM_NOT_EDITABLE";
+
+    public static final String QUESTION_NOT_EDITABLE =
+            "QUESTION_NOT_EDITABLE";
 
     public static final String INVALID_QUESTION_CONTENT =
             "INVALID_QUESTION_CONTENT";
@@ -37,6 +44,9 @@ public class QuestionManagementService {
 
     public static final String TOO_FEW_CHOICES =
             "TOO_FEW_CHOICES";
+
+    public static final String INVALID_CHOICE_COUNT =
+            "INVALID_CHOICE_COUNT";
 
     public static final String INVALID_CHOICE_CONTENT =
             "INVALID_CHOICE_CONTENT";
@@ -51,6 +61,7 @@ public class QuestionManagementService {
             "DATABASE_ERROR";
 
     private static final int MINIMUM_CHOICE_COUNT = 2;
+    private static final int MAXIMUM_CHOICE_COUNT = 6;
 
     private final QuestionRepository questionRepository;
 
@@ -158,6 +169,95 @@ public class QuestionManagementService {
                             .toList();
 
             return new TeacherQuestionList(details);
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw databaseError(exception);
+        }
+    }
+
+    @Transactional
+    public TeacherQuestionDetails updateQuestion(
+            long teacherId,
+            UpdateQuestionCommand command
+    ) {
+        ValidatedUpdateQuestion validated = validateUpdateCommand(command);
+
+        try {
+            QuestionExamContext context = questionRepository
+                    .findOwnedQuestionContextForUpdate(
+                            validated.questionId(),
+                            teacherId
+                    )
+                    .orElseThrow(
+                            QuestionManagementService::questionNotFound
+                    );
+
+            if (context.examStatus() != ExamStatus.DRAFT) {
+                throw new QuestionManagementException(
+                        QUESTION_NOT_EDITABLE,
+                        "Questions can only be updated in a draft exam."
+                );
+            }
+
+            Question question = questionRepository.updateQuestion(
+                    validated.questionId(),
+                    validated.content(),
+                    validated.points(),
+                    validated.displayOrder()
+            );
+
+            questionRepository.deleteChoicesByQuestionId(validated.questionId());
+
+            List<Choice> updatedChoices = new ArrayList<>();
+            for (UpdateQuestionCommand.ChoiceCommand choice : validated.choices()) {
+                Choice createdChoice = questionRepository.insertChoice(
+                        question.id(),
+                        choice.content(),
+                        choice.correct(),
+                        choice.displayOrder()
+                );
+                updatedChoices.add(createdChoice);
+            }
+
+            return TeacherQuestionDetails.from(question, updatedChoices);
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw databaseError(exception);
+        }
+    }
+
+    @Transactional
+    public DeletedQuestionDetails deleteQuestion(
+            long teacherId,
+            long questionId
+    ) {
+        if (questionId <= 0) {
+            throw questionNotFound();
+        }
+
+        try {
+            QuestionExamContext context = questionRepository
+                    .findOwnedQuestionContextForUpdate(
+                            questionId,
+                            teacherId
+                    )
+                    .orElseThrow(
+                            QuestionManagementService::questionNotFound
+                    );
+
+            if (context.examStatus() != ExamStatus.DRAFT) {
+                throw new QuestionManagementException(
+                        QUESTION_NOT_EDITABLE,
+                        "Questions can only be deleted from a draft exam."
+                );
+            }
+
+            questionRepository.deleteChoicesByQuestionId(questionId);
+
+            boolean deleted = questionRepository.deleteQuestionById(questionId);
+            if (!deleted) {
+                throw new IllegalStateException("Expected question " + questionId + " to be deleted.");
+            }
+
+            return new DeletedQuestionDetails(questionId);
         } catch (DataAccessException | IllegalStateException exception) {
             throw databaseError(exception);
         }
@@ -320,6 +420,132 @@ public class QuestionManagementService {
         return groupedChoices;
     }
 
+    private ValidatedUpdateQuestion validateUpdateCommand(
+            UpdateQuestionCommand command
+    ) {
+        if (command == null) {
+            throw new QuestionManagementException(
+                    INVALID_QUESTION_CONTENT,
+                    "Question data is required."
+            );
+        }
+
+        if (command.questionId() <= 0) {
+            throw questionNotFound();
+        }
+
+        String normalizedContent =
+                normalizeRequiredText(
+                        command.content(),
+                        INVALID_QUESTION_CONTENT,
+                        "Question content is required."
+                );
+
+        if (command.points() <= 0) {
+            throw new QuestionManagementException(
+                    INVALID_QUESTION_POINTS,
+                    "Question points must be greater than zero."
+            );
+        }
+
+        if (command.displayOrder() < 0) {
+            throw new QuestionManagementException(
+                    INVALID_DISPLAY_ORDER,
+                    "Question display order must not be negative."
+            );
+        }
+
+        List<UpdateQuestionCommand.ChoiceCommand> normalizedChoices =
+                validateUpdateChoices(command.choices());
+
+        return new ValidatedUpdateQuestion(
+                command.questionId(),
+                normalizedContent,
+                command.points(),
+                command.displayOrder(),
+                normalizedChoices
+        );
+    }
+
+    private List<UpdateQuestionCommand.ChoiceCommand> validateUpdateChoices(
+            List<UpdateQuestionCommand.ChoiceCommand> choices
+    ) {
+        if (choices == null
+                || choices.size() < MINIMUM_CHOICE_COUNT
+                || choices.size() > MAXIMUM_CHOICE_COUNT) {
+            throw new QuestionManagementException(
+                    INVALID_CHOICE_COUNT,
+                    "A question must have between 2 and 6 choices."
+            );
+        }
+
+        List<UpdateQuestionCommand.ChoiceCommand> normalizedChoices =
+                new ArrayList<>();
+
+        Set<Integer> displayOrders =
+                new HashSet<>();
+
+        int correctChoiceCount = 0;
+
+        for (UpdateQuestionCommand.ChoiceCommand choice : choices) {
+            if (choice == null) {
+                throw new QuestionManagementException(
+                        INVALID_CHOICE_CONTENT,
+                        "Choice data is required."
+                );
+            }
+
+            String normalizedContent =
+                    normalizeRequiredText(
+                            choice.content(),
+                            INVALID_CHOICE_CONTENT,
+                            "Choice content is required."
+                    );
+
+            if (choice.displayOrder() < 0) {
+                throw new QuestionManagementException(
+                        INVALID_DISPLAY_ORDER,
+                        "Choice display order must not be negative."
+                );
+            }
+
+            if (!displayOrders.add(choice.displayOrder())) {
+                throw new QuestionManagementException(
+                        DUPLICATE_CHOICE_ORDER,
+                        "Choice display orders must be unique."
+                );
+            }
+
+            if (choice.correct()) {
+                correctChoiceCount++;
+            }
+
+            normalizedChoices.add(
+                    new UpdateQuestionCommand.ChoiceCommand(
+                            normalizedContent,
+                            choice.correct(),
+                            choice.displayOrder()
+                    )
+            );
+        }
+
+        if (correctChoiceCount != 1) {
+            throw new QuestionManagementException(
+                    INVALID_CORRECT_CHOICE_COUNT,
+                    "A question must have exactly one correct choice."
+            );
+        }
+
+        return List.copyOf(normalizedChoices);
+    }
+
+    private static QuestionManagementException questionNotFound() {
+        return new QuestionManagementException(
+                QUESTION_NOT_FOUND,
+                "Question was not found."
+        );
+    }
+
     private static QuestionManagementException examNotFound() {
         return new QuestionManagementException(
                 EXAM_NOT_FOUND,
@@ -343,6 +569,15 @@ public class QuestionManagementService {
             int points,
             int displayOrder,
             List<ChoiceCommand> choices
+    ) {
+    }
+
+    private record ValidatedUpdateQuestion(
+            long questionId,
+            String content,
+            int points,
+            int displayOrder,
+            List<UpdateQuestionCommand.ChoiceCommand> choices
     ) {
     }
 }

@@ -22,6 +22,7 @@ import vn.edu.hanu.exam.domain.Choice;
 import vn.edu.hanu.exam.domain.ExamStatus;
 import vn.edu.hanu.exam.domain.Question;
 import vn.edu.hanu.exam.exception.QuestionManagementException;
+import vn.edu.hanu.exam.repository.QuestionExamContext;
 import vn.edu.hanu.exam.repository.QuestionRepository;
 import vn.edu.hanu.exam.service.question.CreateQuestionCommand.ChoiceCommand;
 
@@ -601,6 +602,272 @@ class QuestionManagementServiceTests {
                 .findAllChoicesByExamId(EXAM_ID);
     }
 
+    @Test
+    void updateQuestionLocksDraftExamReplacesChoicesAndReturnsDetails() {
+        UpdateQuestionCommand command = new UpdateQuestionCommand(
+                QUESTION_ID,
+                "  Updated question content  ",
+                3,
+                1,
+                List.of(
+                        new UpdateQuestionCommand.ChoiceCommand("  Option A  ", true, 0),
+                        new UpdateQuestionCommand.ChoiceCommand("  Option B  ", false, 1)
+                )
+        );
+
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenReturn(Optional.of(new QuestionExamContext(QUESTION_ID, EXAM_ID, ExamStatus.DRAFT)));
+
+        OffsetDateTime timestamp = OffsetDateTime.parse("2026-10-24T15:00:00+07:00");
+        Question updatedQuestion = new Question(
+                QUESTION_ID,
+                EXAM_ID,
+                "Updated question content",
+                3,
+                1,
+                timestamp,
+                timestamp
+        );
+
+        when(questionRepository.updateQuestion(QUESTION_ID, "Updated question content", 3, 1))
+                .thenReturn(updatedQuestion);
+
+        Choice choiceA = new Choice(201L, QUESTION_ID, "Option A", true, 0);
+        Choice choiceB = new Choice(202L, QUESTION_ID, "Option B", false, 1);
+
+        when(questionRepository.insertChoice(QUESTION_ID, "Option A", true, 0))
+                .thenReturn(choiceA);
+        when(questionRepository.insertChoice(QUESTION_ID, "Option B", false, 1))
+                .thenReturn(choiceB);
+
+        TeacherQuestionDetails result = questionService.updateQuestion(TEACHER_ID, command);
+
+        assertEquals(QUESTION_ID, result.id());
+        assertEquals(EXAM_ID, result.examId());
+        assertEquals("Updated question content", result.content());
+        assertEquals(3, result.points());
+        assertEquals(1, result.displayOrder());
+        assertEquals(2, result.choices().size());
+        assertEquals("Option A", result.choices().get(0).content());
+        assertEquals(true, result.choices().get(0).correct());
+
+        InOrder inOrder = inOrder(questionRepository);
+        inOrder.verify(questionRepository).findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID);
+        inOrder.verify(questionRepository).updateQuestion(QUESTION_ID, "Updated question content", 3, 1);
+        inOrder.verify(questionRepository).deleteChoicesByQuestionId(QUESTION_ID);
+        inOrder.verify(questionRepository).insertChoice(QUESTION_ID, "Option A", true, 0);
+        inOrder.verify(questionRepository).insertChoice(QUESTION_ID, "Option B", false, 1);
+    }
+
+    @Test
+    void updateQuestionRejectsInvalidIdOrData() {
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_FOUND,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(0L, "Q", 1, 0, validUpdateChoices()))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_QUESTION_CONTENT,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(QUESTION_ID, "   ", 1, 0, validUpdateChoices()))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_QUESTION_POINTS,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(QUESTION_ID, "Q", 0, 0, validUpdateChoices()))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_DISPLAY_ORDER,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(QUESTION_ID, "Q", 1, -1, validUpdateChoices()))
+        );
+    }
+
+    @Test
+    void updateQuestionRejectsInvalidChoiceCount() {
+        assertCode(
+                QuestionManagementService.INVALID_CHOICE_COUNT,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(
+                        QUESTION_ID, "Q", 1, 0,
+                        List.of(new UpdateQuestionCommand.ChoiceCommand("A", true, 0))
+                ))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_CHOICE_COUNT,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(
+                        QUESTION_ID, "Q", 1, 0,
+                        List.of(
+                                new UpdateQuestionCommand.ChoiceCommand("A", true, 0),
+                                new UpdateQuestionCommand.ChoiceCommand("B", false, 1),
+                                new UpdateQuestionCommand.ChoiceCommand("C", false, 2),
+                                new UpdateQuestionCommand.ChoiceCommand("D", false, 3),
+                                new UpdateQuestionCommand.ChoiceCommand("E", false, 4),
+                                new UpdateQuestionCommand.ChoiceCommand("F", false, 5),
+                                new UpdateQuestionCommand.ChoiceCommand("G", false, 6)
+                        )
+                ))
+        );
+    }
+
+    @Test
+    void updateQuestionRejectsInvalidChoiceContentAndOrder() {
+        assertCode(
+                QuestionManagementService.INVALID_CHOICE_CONTENT,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(
+                        QUESTION_ID, "Q", 1, 0,
+                        List.of(
+                                new UpdateQuestionCommand.ChoiceCommand("  ", true, 0),
+                                new UpdateQuestionCommand.ChoiceCommand("B", false, 1)
+                        )
+                ))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_DISPLAY_ORDER,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(
+                        QUESTION_ID, "Q", 1, 0,
+                        List.of(
+                                new UpdateQuestionCommand.ChoiceCommand("A", true, -1),
+                                new UpdateQuestionCommand.ChoiceCommand("B", false, 1)
+                        )
+                ))
+        );
+
+        assertCode(
+                QuestionManagementService.DUPLICATE_CHOICE_ORDER,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(
+                        QUESTION_ID, "Q", 1, 0,
+                        List.of(
+                                new UpdateQuestionCommand.ChoiceCommand("A", true, 0),
+                                new UpdateQuestionCommand.ChoiceCommand("B", false, 0)
+                        )
+                ))
+        );
+    }
+
+    @Test
+    void updateQuestionRejectsZeroOrMultipleCorrectChoices() {
+        assertCode(
+                QuestionManagementService.INVALID_CORRECT_CHOICE_COUNT,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(
+                        QUESTION_ID, "Q", 1, 0,
+                        List.of(
+                                new UpdateQuestionCommand.ChoiceCommand("A", false, 0),
+                                new UpdateQuestionCommand.ChoiceCommand("B", false, 1)
+                        )
+                ))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_CORRECT_CHOICE_COUNT,
+                () -> questionService.updateQuestion(TEACHER_ID, new UpdateQuestionCommand(
+                        QUESTION_ID, "Q", 1, 0,
+                        List.of(
+                                new UpdateQuestionCommand.ChoiceCommand("A", true, 0),
+                                new UpdateQuestionCommand.ChoiceCommand("B", true, 1)
+                        )
+                ))
+        );
+    }
+
+    @Test
+    void updateQuestionRejectsWhenQuestionNotFoundOrNonDraft() {
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenReturn(Optional.empty());
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_FOUND,
+                () -> questionService.updateQuestion(TEACHER_ID, validUpdateCommand())
+        );
+
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenReturn(Optional.of(new QuestionExamContext(QUESTION_ID, EXAM_ID, ExamStatus.PUBLISHED)));
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_EDITABLE,
+                () -> questionService.updateQuestion(TEACHER_ID, validUpdateCommand())
+        );
+
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenReturn(Optional.of(new QuestionExamContext(QUESTION_ID, EXAM_ID, ExamStatus.CLOSED)));
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_EDITABLE,
+                () -> questionService.updateQuestion(TEACHER_ID, validUpdateCommand())
+        );
+    }
+
+    @Test
+    void updateQuestionWrapsDataAccessException() {
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenThrow(new DataAccessResourceFailureException("DB error"));
+
+        assertCode(
+                QuestionManagementService.DATABASE_ERROR,
+                () -> questionService.updateQuestion(TEACHER_ID, validUpdateCommand())
+        );
+    }
+
+    @Test
+    void deleteQuestionDeletesChoicesThenQuestionInDraftExam() {
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenReturn(Optional.of(new QuestionExamContext(QUESTION_ID, EXAM_ID, ExamStatus.DRAFT)));
+        when(questionRepository.deleteChoicesByQuestionId(QUESTION_ID)).thenReturn(2);
+        when(questionRepository.deleteQuestionById(QUESTION_ID)).thenReturn(true);
+
+        DeletedQuestionDetails result = questionService.deleteQuestion(TEACHER_ID, QUESTION_ID);
+
+        assertEquals(QUESTION_ID, result.questionId());
+
+        InOrder inOrder = inOrder(questionRepository);
+        inOrder.verify(questionRepository).findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID);
+        inOrder.verify(questionRepository).deleteChoicesByQuestionId(QUESTION_ID);
+        inOrder.verify(questionRepository).deleteQuestionById(QUESTION_ID);
+    }
+
+    @Test
+    void deleteQuestionRejectsInvalidIdOrNotFoundOrNonDraft() {
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_FOUND,
+                () -> questionService.deleteQuestion(TEACHER_ID, 0L)
+        );
+
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenReturn(Optional.empty());
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_FOUND,
+                () -> questionService.deleteQuestion(TEACHER_ID, QUESTION_ID)
+        );
+
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenReturn(Optional.of(new QuestionExamContext(QUESTION_ID, EXAM_ID, ExamStatus.PUBLISHED)));
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_EDITABLE,
+                () -> questionService.deleteQuestion(TEACHER_ID, QUESTION_ID)
+        );
+
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenReturn(Optional.of(new QuestionExamContext(QUESTION_ID, EXAM_ID, ExamStatus.CLOSED)));
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_EDITABLE,
+                () -> questionService.deleteQuestion(TEACHER_ID, QUESTION_ID)
+        );
+    }
+
+    @Test
+    void deleteQuestionWrapsDataAccessException() {
+        when(questionRepository.findOwnedQuestionContextForUpdate(QUESTION_ID, TEACHER_ID))
+                .thenThrow(new DataAccessResourceFailureException("DB error"));
+
+        assertCode(
+                QuestionManagementService.DATABASE_ERROR,
+                () -> questionService.deleteQuestion(TEACHER_ID, QUESTION_ID)
+        );
+    }
+
     private static CreateQuestionCommand validCommand() {
         return new CreateQuestionCommand(
                 EXAM_ID,
@@ -608,6 +875,16 @@ class QuestionManagementServiceTests {
                 1,
                 0,
                 validChoices()
+        );
+    }
+
+    private static UpdateQuestionCommand validUpdateCommand() {
+        return new UpdateQuestionCommand(
+                QUESTION_ID,
+                "Updated Question",
+                2,
+                0,
+                validUpdateChoices()
         );
     }
 
@@ -619,6 +896,21 @@ class QuestionManagementServiceTests {
                         0
                 ),
                 new ChoiceCommand(
+                        "Choice B",
+                        false,
+                        1
+                )
+        );
+    }
+
+    private static List<UpdateQuestionCommand.ChoiceCommand> validUpdateChoices() {
+        return List.of(
+                new UpdateQuestionCommand.ChoiceCommand(
+                        "Choice A",
+                        true,
+                        0
+                ),
+                new UpdateQuestionCommand.ChoiceCommand(
                         "Choice B",
                         false,
                         1

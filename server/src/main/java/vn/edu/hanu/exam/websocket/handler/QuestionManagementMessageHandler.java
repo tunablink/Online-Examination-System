@@ -19,14 +19,23 @@ import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.question.CreateQuestionCommand;
 import vn.edu.hanu.exam.service.question.QuestionManagementService;
+import vn.edu.hanu.exam.service.question.UpdateQuestionCommand;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.websocket.dto.CreateQuestionPayload;
+import vn.edu.hanu.exam.websocket.dto.DeleteQuestionPayload;
 import vn.edu.hanu.exam.websocket.dto.GetExamQuestionsPayload;
+import vn.edu.hanu.exam.websocket.dto.UpdateQuestionPayload;
 
 @Component
 public class QuestionManagementMessageHandler {
     static final String TYPE_QUESTION_CREATED =
             "QUESTION_CREATED";
+
+    static final String TYPE_QUESTION_UPDATED =
+            "QUESTION_UPDATED";
+
+    static final String TYPE_QUESTION_DELETED =
+            "QUESTION_DELETED";
 
     static final String TYPE_EXAM_QUESTIONS =
             "EXAM_QUESTIONS";
@@ -147,6 +156,97 @@ public class QuestionManagementMessageHandler {
                             questionService.findAllByExamId(
                                     teacher.id(),
                                     input.examId()
+                            )
+                    );
+                }
+        );
+    }
+
+    public ServerMessage handleUpdate(
+            WebSocketSession session,
+            ClientMessage message
+    ) {
+        return handleUpdate(
+                session.getId(),
+                message.requestId(),
+                message.payload()
+        );
+    }
+
+    public ServerMessage handleUpdate(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload
+    ) {
+        return withTeacher(
+                sessionId,
+                requestId,
+                teacher -> {
+                    UpdateQuestionPayload input =
+                            convertUpdatePayload(payload);
+
+                    List<UpdateQuestionCommand.ChoiceCommand> choices =
+                            input.choices().stream()
+                                    .map(choice ->
+                                            new UpdateQuestionCommand
+                                                    .ChoiceCommand(
+                                                    choice.content(),
+                                                    choice.correct(),
+                                                    choice.displayOrder()
+                                            )
+                                    )
+                                    .toList();
+
+                    UpdateQuestionCommand command =
+                            new UpdateQuestionCommand(
+                                    input.questionId(),
+                                    input.content(),
+                                    input.points(),
+                                    input.displayOrder(),
+                                    choices
+                            );
+
+                    return ServerMessage.success(
+                            requestId,
+                            TYPE_QUESTION_UPDATED,
+                            questionService.updateQuestion(
+                                    teacher.id(),
+                                    command
+                            )
+                    );
+                }
+        );
+    }
+
+    public ServerMessage handleDelete(
+            WebSocketSession session,
+            ClientMessage message
+    ) {
+        return handleDelete(
+                session.getId(),
+                message.requestId(),
+                message.payload()
+        );
+    }
+
+    public ServerMessage handleDelete(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload
+    ) {
+        return withTeacher(
+                sessionId,
+                requestId,
+                teacher -> {
+                    DeleteQuestionPayload input =
+                            convertDeletePayload(payload);
+
+                    return ServerMessage.success(
+                            requestId,
+                            TYPE_QUESTION_DELETED,
+                            questionService.deleteQuestion(
+                                    teacher.id(),
+                                    input.questionId()
                             )
                     );
                 }
@@ -284,6 +384,84 @@ public class QuestionManagementMessageHandler {
                     );
 
             if (input.examId() == null) {
+                throw new InvalidPayloadException();
+            }
+
+            return input;
+        } catch (JacksonException | IllegalArgumentException exception) {
+            throw new InvalidPayloadException();
+        }
+    }
+
+    private UpdateQuestionPayload convertUpdatePayload(
+            Map<String, Object> payload
+    ) {
+        if (payload == null) {
+            throw new InvalidPayloadException();
+        }
+
+        validateIntegralField(payload.get("questionId"));
+        validateIntegralField(payload.get("points"));
+        validateIntegralField(payload.get("displayOrder"));
+
+        validateOptionalString(payload.get("content"));
+
+        Object rawChoices = payload.get("choices");
+
+        if (!(rawChoices instanceof List<?> choices)) {
+            throw new InvalidPayloadException();
+        }
+
+        for (Object rawChoice : choices) {
+            validateRawChoice(rawChoice);
+        }
+
+        try {
+            UpdateQuestionPayload input =
+                    jsonMapper.convertValue(
+                            payload,
+                            UpdateQuestionPayload.class
+                    );
+
+            if (input.questionId() == null
+                    || input.points() == null
+                    || input.displayOrder() == null
+                    || input.choices() == null) {
+                throw new InvalidPayloadException();
+            }
+
+            for (UpdateQuestionPayload.ChoicePayload choice
+                    : input.choices()) {
+                if (choice == null
+                        || choice.correct() == null
+                        || choice.displayOrder() == null) {
+                    throw new InvalidPayloadException();
+                }
+            }
+
+            return input;
+        } catch (JacksonException | IllegalArgumentException exception) {
+            throw new InvalidPayloadException();
+        }
+    }
+
+    private DeleteQuestionPayload convertDeletePayload(
+            Map<String, Object> payload
+    ) {
+        if (payload == null) {
+            throw new InvalidPayloadException();
+        }
+
+        validateIntegralField(payload.get("questionId"));
+
+        try {
+            DeleteQuestionPayload input =
+                    jsonMapper.convertValue(
+                            payload,
+                            DeleteQuestionPayload.class
+                    );
+
+            if (input.questionId() == null) {
                 throw new InvalidPayloadException();
             }
 
