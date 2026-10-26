@@ -14,14 +14,17 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import vn.edu.hanu.exam.exception.QuestionManagementException;
 import vn.edu.hanu.exam.service.question.CreateQuestionCommand;
 import vn.edu.hanu.exam.service.question.CreateQuestionCommand.ChoiceCommand;
+import vn.edu.hanu.exam.service.question.DeletedQuestionDetails;
 import vn.edu.hanu.exam.service.question.QuestionManagementService;
 import vn.edu.hanu.exam.service.question.TeacherQuestionDetails;
 import vn.edu.hanu.exam.service.question.TeacherQuestionList;
+import vn.edu.hanu.exam.service.question.UpdateQuestionCommand;
 
 @SpringBootTest
 class QuestionManagementServiceIntegrationTests {
@@ -422,6 +425,249 @@ class QuestionManagementServiceIntegrationTests {
         }
     }
 
+    @Test
+    @Transactional
+    void updatePersistsModifiedQuestionAndReplacesChoices() {
+        long teacherId = insertTeacher("update");
+        long examId = insertExam(teacherId, "Update exam", "DRAFT");
+
+        CreateQuestionCommand createCmd = validCommand(examId, 0);
+        TeacherQuestionDetails created = questionService.createQuestion(teacherId, createCmd);
+
+        UpdateQuestionCommand updateCmd = new UpdateQuestionCommand(
+                created.id(),
+                "Which keyword implements an interface?",
+                5,
+                1,
+                List.of(
+                        new UpdateQuestionCommand.ChoiceCommand("implements", true, 0),
+                        new UpdateQuestionCommand.ChoiceCommand("extends", false, 1),
+                        new UpdateQuestionCommand.ChoiceCommand("interface", false, 2)
+                )
+        );
+
+        TeacherQuestionDetails updated = questionService.updateQuestion(teacherId, updateCmd);
+
+        assertEquals(created.id(), updated.id());
+        assertEquals("Which keyword implements an interface?", updated.content());
+        assertEquals(5, updated.points());
+        assertEquals(1, updated.displayOrder());
+        assertEquals(3, updated.choices().size());
+        assertEquals("implements", updated.choices().get(0).content());
+        assertTrue(updated.choices().get(0).correct());
+
+        String contentInDb = namedJdbcTemplate.queryForObject(
+                "SELECT content FROM questions WHERE id = :id",
+                Map.of("id", created.id()),
+                String.class
+        );
+        assertEquals("Which keyword implements an interface?", contentInDb);
+        assertEquals(3, countChoices(created.id()));
+    }
+
+    @Test
+    @Transactional
+    void updateRejectsInvalidInput() {
+        long teacherId = insertTeacher("update-invalid");
+        long examId = insertExam(teacherId, "Update invalid exam", "DRAFT");
+        TeacherQuestionDetails created = questionService.createQuestion(teacherId, validCommand(examId, 0));
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_FOUND,
+                () -> questionService.updateQuestion(teacherId, new UpdateQuestionCommand(0L, "Q", 1, 0, validUpdateChoices()))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_QUESTION_CONTENT,
+                () -> questionService.updateQuestion(teacherId, new UpdateQuestionCommand(created.id(), "  ", 1, 0, validUpdateChoices()))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_QUESTION_POINTS,
+                () -> questionService.updateQuestion(teacherId, new UpdateQuestionCommand(created.id(), "Q", 0, 0, validUpdateChoices()))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_CHOICE_COUNT,
+                () -> questionService.updateQuestion(teacherId, new UpdateQuestionCommand(
+                        created.id(), "Q", 1, 0,
+                        List.of(new UpdateQuestionCommand.ChoiceCommand("Only one", true, 0))
+                ))
+        );
+
+        assertCode(
+                QuestionManagementService.INVALID_CORRECT_CHOICE_COUNT,
+                () -> questionService.updateQuestion(teacherId, new UpdateQuestionCommand(
+                        created.id(), "Q", 1, 0,
+                        List.of(
+                                new UpdateQuestionCommand.ChoiceCommand("A", false, 0),
+                                new UpdateQuestionCommand.ChoiceCommand("B", false, 1)
+                        )
+                ))
+        );
+    }
+
+    @Test
+    @Transactional
+    void teacherCannotUpdateAnotherTeachersQuestion() {
+        long teacherA = insertTeacher("owner-update");
+        long teacherB = insertTeacher("other-update");
+        long examId = insertExam(teacherA, "Owner exam", "DRAFT");
+        TeacherQuestionDetails created = questionService.createQuestion(teacherA, validCommand(examId, 0));
+
+        UpdateQuestionCommand command = new UpdateQuestionCommand(
+                created.id(),
+                "Hacked question",
+                1,
+                0,
+                validUpdateChoices()
+        );
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_FOUND,
+                () -> questionService.updateQuestion(teacherB, command)
+        );
+    }
+
+    @Test
+    @Transactional
+    void cannotUpdateQuestionInPublishedOrClosedExam() {
+        long teacherId = insertTeacher("status-update");
+        long examId = insertExam(teacherId, "Published exam", "DRAFT");
+        TeacherQuestionDetails created = questionService.createQuestion(teacherId, validCommand(examId, 0));
+
+        namedJdbcTemplate.update(
+                "UPDATE exams SET status = 'PUBLISHED' WHERE id = :id",
+                Map.of("id", examId)
+        );
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_EDITABLE,
+                () -> questionService.updateQuestion(teacherId, new UpdateQuestionCommand(
+                        created.id(), "New content", 1, 0, validUpdateChoices()
+                ))
+        );
+
+        namedJdbcTemplate.update(
+                "UPDATE exams SET status = 'CLOSED' WHERE id = :id",
+                Map.of("id", examId)
+        );
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_EDITABLE,
+                () -> questionService.updateQuestion(teacherId, new UpdateQuestionCommand(
+                        created.id(), "New content", 1, 0, validUpdateChoices()
+                ))
+        );
+    }
+
+    @Test
+    @Transactional
+    void deleteRemovesBothQuestionAndChoices() {
+        long teacherId = insertTeacher("delete");
+        long examId = insertExam(teacherId, "Delete exam", "DRAFT");
+        TeacherQuestionDetails created = questionService.createQuestion(teacherId, validCommand(examId, 0));
+
+        DeletedQuestionDetails deleted = questionService.deleteQuestion(teacherId, created.id());
+
+        assertEquals(created.id(), deleted.questionId());
+        assertEquals(0, countQuestions(examId));
+        assertEquals(0, countChoices(created.id()));
+    }
+
+    @Test
+    @Transactional
+    void teacherCannotDeleteAnotherTeachersQuestion() {
+        long teacherA = insertTeacher("owner-delete");
+        long teacherB = insertTeacher("other-delete");
+        long examId = insertExam(teacherA, "Owner exam", "DRAFT");
+        TeacherQuestionDetails created = questionService.createQuestion(teacherA, validCommand(examId, 0));
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_FOUND,
+                () -> questionService.deleteQuestion(teacherB, created.id())
+        );
+
+        assertEquals(1, countQuestions(examId));
+        assertEquals(2, countChoices(created.id()));
+    }
+
+    @Test
+    @Transactional
+    void cannotDeleteQuestionInPublishedOrClosedExam() {
+        long teacherId = insertTeacher("status-delete");
+        long examId = insertExam(teacherId, "Published delete exam", "DRAFT");
+        TeacherQuestionDetails created = questionService.createQuestion(teacherId, validCommand(examId, 0));
+
+        namedJdbcTemplate.update(
+                "UPDATE exams SET status = 'PUBLISHED' WHERE id = :id",
+                Map.of("id", examId)
+        );
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_EDITABLE,
+                () -> questionService.deleteQuestion(teacherId, created.id())
+        );
+
+        namedJdbcTemplate.update(
+                "UPDATE exams SET status = 'CLOSED' WHERE id = :id",
+                Map.of("id", examId)
+        );
+
+        assertCode(
+                QuestionManagementService.QUESTION_NOT_EDITABLE,
+                () -> questionService.deleteQuestion(teacherId, created.id())
+        );
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void deleteFailureRollsBackChoicesAndQuestion() {
+        long teacherId = insertTeacher("delete-rollback");
+        long examId = insertExam(teacherId, "Delete rollback exam", "DRAFT");
+        CreateQuestionCommand command = validCommand(examId, 0);
+        TeacherQuestionDetails created = questionService.createQuestion(teacherId, command);
+        long questionId = created.id();
+
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        String functionName = "fail_del_q_" + suffix;
+        String triggerName = "trig_del_q_" + suffix;
+
+        try {
+            jdbcTemplate.execute("""
+                    CREATE FUNCTION %s()
+                    RETURNS trigger AS $$
+                    BEGIN
+                        RAISE EXCEPTION 'forced question delete failure';
+                    END;
+                    $$ LANGUAGE plpgsql
+                    """.formatted(functionName));
+
+            jdbcTemplate.execute("""
+                    CREATE TRIGGER %s
+                    BEFORE DELETE ON questions
+                    FOR EACH ROW
+                    EXECUTE FUNCTION %s()
+                    """.formatted(triggerName, functionName));
+
+            assertCode(
+                    QuestionManagementService.DATABASE_ERROR,
+                    () -> questionService.deleteQuestion(teacherId, questionId)
+            );
+
+            assertEquals(2, countChoices(questionId));
+            assertEquals(1, countQuestions(examId));
+        } finally {
+            try {
+                jdbcTemplate.execute("DROP TRIGGER IF EXISTS " + triggerName + " ON questions");
+            } finally {
+                jdbcTemplate.execute("DROP FUNCTION IF EXISTS " + functionName + "()");
+            }
+
+            cleanupExamAndTeacher(examId, teacherId);
+        }
+    }
+
     private long insertTeacher(String label) {
         String suffix = UUID.randomUUID()
                 .toString()
@@ -520,6 +766,20 @@ class QuestionManagementServiceIntegrationTests {
                 WHERE exam_id = :examId
                 """,
                 Map.of("examId", examId),
+                Long.class
+        );
+
+        return count == null ? 0 : count;
+    }
+
+    private long countChoices(long questionId) {
+        Long count = namedJdbcTemplate.queryForObject(
+                """
+                SELECT COUNT(*)
+                FROM choices
+                WHERE question_id = :questionId
+                """,
+                Map.of("questionId", questionId),
                 Long.class
         );
 
@@ -647,6 +907,21 @@ class QuestionManagementServiceIntegrationTests {
                                 false,
                                 1
                         )
+                )
+        );
+    }
+
+    private static List<UpdateQuestionCommand.ChoiceCommand> validUpdateChoices() {
+        return List.of(
+                new UpdateQuestionCommand.ChoiceCommand(
+                        "Choice 1",
+                        true,
+                        0
+                ),
+                new UpdateQuestionCommand.ChoiceCommand(
+                        "Choice 2",
+                        false,
+                        1
                 )
         );
     }
