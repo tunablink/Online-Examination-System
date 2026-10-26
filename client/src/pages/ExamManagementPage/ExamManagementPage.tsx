@@ -141,7 +141,7 @@ function ExamManagementPage() {
         Array.isArray(receivedExams) &&
         receivedExams.every(isExamDetailsData)
       ) {
-        setExams(receivedExams);
+        setExams(receivedExams as ExamDetailsData[]);
 
         return;
       }

@@ -1,135 +1,50 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
 import { Link } from "react-router";
+
+import FeedbackMessage, {
+  type Feedback,
+} from "../../components/common/FeedbackMessage";
+
 import StudentPortalHeader from "../../components/layout/StudentPortalHeader";
 
-import { MOCK_STUDENT_EXAMS } from "../../mocks/exams";
-
-import type { ExamStatus, StudentExam } from "../../types/exam";
 import { useAuth } from "../../auth/useAuth";
 
-type ExamFilter = "ALL" | "ACTIVE" | "UPCOMING" | "COMPLETED";
+import { type AvailableExamDetailsData } from "../../websocket/protocol";
 
-interface StatusAppearance {
-  label: string;
-  badgeClassName: string;
-  dotClassName: string;
-}
+import { useWebSocket } from "../../websocket/useWebSocket";
 
-const STATUS_APPEARANCE: Record<ExamStatus, StatusAppearance> = {
-  AVAILABLE: {
-    label: "Available now",
-    badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    dotClassName: "bg-emerald-500",
-  },
-
-  IN_PROGRESS: {
-    label: "In progress",
-    badgeClassName: "border-blue-200 bg-blue-50 text-blue-800",
-    dotClassName: "bg-blue-500",
-  },
-
-  UPCOMING: {
-    label: "Upcoming",
-    badgeClassName: "border-amber-200 bg-amber-50 text-amber-800",
-    dotClassName: "bg-amber-500",
-  },
-
-  SUBMITTED: {
-    label: "Submitted",
-    badgeClassName: "border-slate-200 bg-slate-50 text-slate-700",
-    dotClassName: "bg-slate-500",
-  },
-
-  RESULT_RELEASED: {
-    label: "Result released",
-    badgeClassName: "border-violet-200 bg-violet-50 text-violet-800",
-    dotClassName: "bg-violet-500",
-  },
-};
-
-const FILTERS: Array<{
-  value: ExamFilter;
-  label: string;
-}> = [
-  {
-    value: "ALL",
-    label: "All examinations",
-  },
-  {
-    value: "ACTIVE",
-    label: "Available",
-  },
-  {
-    value: "UPCOMING",
-    label: "Upcoming",
-  },
-  {
-    value: "COMPLETED",
-    label: "Completed",
-  },
-];
-
-const DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-function formatExamDate(value: string): string {
-  return DATE_FORMATTER.format(new Date(value));
-}
-
-function matchesFilter(exam: StudentExam, filter: ExamFilter): boolean {
-  if (filter === "ALL") {
-    return true;
+function isAvailableExamDetailsData(
+  value: unknown,
+): value is AvailableExamDetailsData {
+  if (typeof value !== "object" || value === null) {
+    return false;
   }
 
-  if (filter === "ACTIVE") {
-    return exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS";
-  }
+  const candidate = value as Record<string, unknown>;
 
-  if (filter === "UPCOMING") {
-    return exam.status === "UPCOMING";
-  }
-
-  return exam.status === "SUBMITTED" || exam.status === "RESULT_RELEASED";
+  return (
+    typeof candidate.id === "number" &&
+    typeof candidate.title === "string" &&
+    (typeof candidate.description === "string" ||
+      candidate.description === null) &&
+    typeof candidate.durationMinutes === "number" &&
+    typeof candidate.questionCount === "number" &&
+    typeof candidate.totalPoints === "number"
+  );
 }
 
 interface ExamCardProps {
-  exam: StudentExam;
+  exam: AvailableExamDetailsData;
 }
 
 function ExamCard({ exam }: ExamCardProps) {
-  const statusAppearance = STATUS_APPEARANCE[exam.status];
-
-  const destination =
-    exam.status === "RESULT_RELEASED"
-      ? `/student/exams/${exam.id}/result`
-      : `/student/exams/${exam.id}`;
-
-  const actionLabel =
-    exam.status === "AVAILABLE"
-      ? "View and enter exam"
-      : exam.status === "IN_PROGRESS"
-        ? "Continue examination"
-        : exam.status === "RESULT_RELEASED"
-          ? "View result"
-          : exam.status === "SUBMITTED"
-            ? "View submission"
-            : "View details";
-
   return (
     <article
       className="
-        rounded-xl border border-slate-200
-        bg-white p-5
+        rounded-xl border border-slate-200 bg-white p-5
         transition-all duration-200
-        hover:-translate-y-0.5
-        hover:border-slate-300
+        hover:-translate-y-0.5 hover:border-slate-300
         hover:shadow-[0_12px_30px_rgb(15_23_42/0.08)]
       "
     >
@@ -140,55 +55,37 @@ function ExamCard({ exam }: ExamCardProps) {
         "
       >
         <div className="min-w-0">
-          <div
-            className="
-              flex flex-wrap items-center gap-2
-              text-xs font-semibold
-            "
-          >
-            <span className="text-blue-700">{exam.courseCode}</span>
-
-            <span
-              className="
-                h-1 w-1 rounded-full bg-slate-300
-              "
-              aria-hidden="true"
-            />
-
-            <span className="text-slate-500">{exam.examCode}</span>
-          </div>
+          <p className="text-xs font-semibold text-blue-700">
+            Published examination
+          </p>
 
           <h3
             className="
-              mt-3 text-lg font-semibold
-              leading-7 tracking-[-0.02em]
-              text-slate-950
+              mt-3 text-lg font-semibold leading-7
+              tracking-[-0.02em] text-slate-950
             "
           >
             {exam.title}
           </h3>
 
-          <p className="mt-1 text-sm text-slate-500">{exam.courseName}</p>
+          <p className="mt-2 text-sm leading-6 text-slate-500">
+            {exam.description?.trim() || "No description was provided."}
+          </p>
         </div>
 
         <span
-          className={`
-            inline-flex shrink-0 items-center
-            gap-2 rounded-full border
-            px-2.5 py-1.5
-            text-xs font-semibold
-            ${statusAppearance.badgeClassName}
-          `}
+          className="
+            inline-flex shrink-0 items-center gap-2
+            rounded-full border border-emerald-200
+            bg-emerald-50 px-2.5 py-1.5
+            text-xs font-semibold text-emerald-800
+          "
         >
           <span
-            className={`
-              h-1.5 w-1.5 rounded-full
-              ${statusAppearance.dotClassName}
-            `}
+            className="h-1.5 w-1.5 rounded-full bg-emerald-500"
             aria-hidden="true"
           />
-
-          {statusAppearance.label}
+          Available
         </span>
       </div>
 
@@ -199,21 +96,6 @@ function ExamCard({ exam }: ExamCardProps) {
           max-sm:grid-cols-1
         "
       >
-        <div>
-          <p
-            className="
-              text-[10px] font-bold uppercase
-              tracking-[0.12em] text-slate-400
-            "
-          >
-            Starts
-          </p>
-
-          <p className="mt-1.5 text-xs font-medium text-slate-700">
-            {formatExamDate(exam.startsAt)}
-          </p>
-        </div>
-
         <div>
           <p
             className="
@@ -243,52 +125,34 @@ function ExamCard({ exam }: ExamCardProps) {
             {exam.questionCount} questions
           </p>
         </div>
+
+        <div>
+          <p
+            className="
+              text-[10px] font-bold uppercase
+              tracking-[0.12em] text-slate-400
+            "
+          >
+            Total points
+          </p>
+
+          <p className="mt-1.5 text-xs font-medium text-slate-700">
+            {exam.totalPoints} points
+          </p>
+        </div>
       </div>
 
-      <div
-        className="
-          mt-4 flex items-center justify-between gap-4
-          max-sm:flex-col max-sm:items-stretch
-        "
-      >
-        <div className="text-xs text-slate-500">
-          {exam.status === "RESULT_RELEASED" &&
-          exam.score !== undefined &&
-          exam.totalScore !== undefined ? (
-            <p>
-              Score:{" "}
-              <strong className="text-slate-900">
-                {exam.score}/{exam.totalScore}
-              </strong>
-            </p>
-          ) : (
-            <p>End time: {formatExamDate(exam.endsAt)}</p>
-          )}
-        </div>
-
+      <div className="mt-4 flex justify-end">
         <Link
-          className={`
+          className="
             inline-flex min-h-10 items-center
-            justify-center rounded-md px-4
-            text-xs font-semibold
-            transition-colors
-            ${
-              exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS"
-                ? `
-                  bg-blue-700 text-white
-                  hover:bg-blue-800
-                `
-                : `
-                  border border-slate-300
-                  bg-white text-slate-800
-                  hover:border-blue-700
-                  hover:text-blue-700
-                `
-            }
-          `}
-          to={destination}
+            justify-center rounded-md bg-blue-700
+            px-4 text-xs font-semibold text-white
+            transition-colors hover:bg-blue-800
+          "
+          to={`/student/exams/${exam.id}`}
         >
-          {actionLabel}
+          View examination
           <span className="ml-2 text-base leading-none" aria-hidden="true">
             →
           </span>
@@ -301,26 +165,82 @@ function ExamCard({ exam }: ExamCardProps) {
 function StudentDashboardPage() {
   const { user } = useAuth();
 
+  const { status: connectionStatus, sendMessage } = useWebSocket();
+
   const displayName = user?.fullName ?? "Student";
-  const [activeFilter, setActiveFilter] = useState<ExamFilter>("ALL");
 
-  const filteredExams = useMemo(
-    () =>
-      MOCK_STUDENT_EXAMS.filter((exam) => matchesFilter(exam, activeFilter)),
-    [activeFilter],
-  );
+  const [exams, setExams] = useState<AvailableExamDetailsData[]>([]);
 
-  const availableCount = MOCK_STUDENT_EXAMS.filter(
-    (exam) => exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS",
-  ).length;
+  const [isLoading, setIsLoading] = useState(false);
 
-  const upcomingCount = MOCK_STUDENT_EXAMS.filter(
-    (exam) => exam.status === "UPCOMING",
-  ).length;
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const completedCount = MOCK_STUDENT_EXAMS.filter(
-    (exam) => exam.status === "SUBMITTED" || exam.status === "RESULT_RELEASED",
-  ).length;
+  const loadAvailableExams = useCallback(() => {
+    if (connectionStatus !== "connected") {
+      setIsLoading(false);
+
+      setFeedback({
+        type: "error",
+        title: "Server connection unavailable",
+        message:
+          "Published examinations cannot be loaded until the server connection is restored.",
+      });
+
+      return;
+    }
+
+    setIsLoading(true);
+    setFeedback(null);
+
+    const requestId = sendMessage("GET_AVAILABLE_EXAMS", {}, (response) => {
+      setIsLoading(false);
+
+      const receivedExams = response.data?.exams;
+
+      if (
+        response.type === "AVAILABLE_EXAMS" &&
+        Array.isArray(receivedExams) &&
+        receivedExams.every(isAvailableExamDetailsData)
+      ) {
+        setExams(receivedExams as AvailableExamDetailsData[]);
+
+        return;
+      }
+
+      setFeedback({
+        type: "error",
+        title: "Unable to load examinations",
+        message:
+          response.error?.message ??
+          "The server returned an unexpected examination list.",
+      });
+    });
+
+    if (requestId === null) {
+      setIsLoading(false);
+
+      setFeedback({
+        type: "error",
+        title: "Request could not be sent",
+        message:
+          "The WebSocket connection is not ready. Wait for the connection and try again.",
+      });
+    }
+  }, [connectionStatus, sendMessage]);
+
+  useEffect(() => {
+    if (connectionStatus !== "connected") {
+      return;
+    }
+
+    const loadTimer = window.setTimeout(() => {
+      loadAvailableExams();
+    }, 0);
+
+    return () => {
+      window.clearTimeout(loadTimer);
+    };
+  }, [connectionStatus, loadAvailableExams]);
 
   return (
     <main className="min-h-screen bg-[#f4f7fb] text-slate-950">
@@ -359,7 +279,7 @@ function StudentDashboardPage() {
             </h1>
 
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              Review your assigned examinations and check their availability
+              Review published examinations and read the examination information
               before entering an examination room.
             </p>
           </div>
@@ -371,7 +291,7 @@ function StudentDashboardPage() {
               text-xs leading-5 text-blue-900
             "
           >
-            <p className="font-semibold">Server connection required</p>
+            <p className="font-semibold">WebSocket connection required</p>
 
             <p className="mt-1 text-blue-700">
               Keep this browser open during an active examination.
@@ -398,37 +318,39 @@ function StudentDashboardPage() {
                 tracking-[0.14em] text-emerald-700
               "
             >
-              Available now
+              Published examinations
             </p>
 
             <p className="mt-3 text-3xl font-semibold text-emerald-950">
-              {availableCount}
+              {exams.length}
             </p>
 
-            <p className="mt-2 text-xs text-emerald-800">Ready to enter</p>
+            <p className="mt-2 text-xs text-emerald-800">
+              Available from the examination catalog
+            </p>
           </article>
 
           <article
             className="
-              rounded-lg border border-amber-200
-              bg-amber-50 p-5
+              rounded-lg border border-blue-200
+              bg-blue-50 p-5
             "
           >
             <p
               className="
                 text-[10px] font-bold uppercase
-                tracking-[0.14em] text-amber-700
+                tracking-[0.14em] text-blue-700
               "
             >
-              Upcoming
+              Connection
             </p>
 
-            <p className="mt-3 text-3xl font-semibold text-amber-950">
-              {upcomingCount}
+            <p className="mt-3 text-lg font-semibold text-blue-950">
+              {connectionStatus === "connected" ? "Connected" : "Unavailable"}
             </p>
 
-            <p className="mt-2 text-xs text-amber-800">
-              Scheduled examinations
+            <p className="mt-2 text-xs text-blue-800">
+              The catalog is loaded through WebSocket.
             </p>
           </article>
 
@@ -444,14 +366,17 @@ function StudentDashboardPage() {
                 tracking-[0.14em] text-slate-500
               "
             >
-              Completed
+              Examination attempts
             </p>
 
-            <p className="mt-3 text-3xl font-semibold text-slate-950">
-              {completedCount}
+            <p className="mt-3 text-lg font-semibold text-slate-950">
+              Coming next
             </p>
 
-            <p className="mt-2 text-xs text-slate-500">Submitted or graded</p>
+            <p className="mt-2 text-xs text-slate-500">
+              Start, auto-save, and submission will be connected after the
+              catalog flow.
+            </p>
           </article>
         </section>
 
@@ -469,81 +394,84 @@ function StudentDashboardPage() {
                   tracking-[-0.02em] text-slate-950
                 "
               >
-                Assigned examinations
+                Published examinations
               </h2>
 
               <p className="mt-1 text-sm text-slate-500">
-                {filteredExams.length}{" "}
-                {filteredExams.length === 1 ? "examination" : "examinations"}
+                {exams.length}{" "}
+                {exams.length === 1 ? "examination" : "examinations"}
               </p>
             </div>
 
-            <div
+            <button
               className="
-                flex flex-wrap gap-1
-                rounded-lg border border-slate-200
-                bg-white p-1
+                inline-flex min-h-10 items-center
+                justify-center rounded-md border
+                border-slate-300 bg-white px-4
+                text-xs font-semibold text-slate-700
+                transition-colors hover:border-blue-700
+                hover:text-blue-700
+                disabled:cursor-not-allowed
+                disabled:opacity-50
               "
-              aria-label="Filter examinations"
+              type="button"
+              onClick={loadAvailableExams}
+              disabled={isLoading || connectionStatus !== "connected"}
             >
-              {FILTERS.map((filter) => {
-                const isActive = activeFilter === filter.value;
-
-                return (
-                  <button
-                    key={filter.value}
-                    className={`
-                      min-h-9 rounded-md px-3
-                      text-xs font-semibold
-                      transition-colors
-                      ${
-                        isActive
-                          ? `
-                            bg-slate-900
-                            text-white
-                          `
-                          : `
-                            text-slate-600
-                            hover:bg-slate-100
-                            hover:text-slate-950
-                          `
-                      }
-                    `}
-                    type="button"
-                    onClick={() => setActiveFilter(filter.value)}
-                  >
-                    {filter.label}
-                  </button>
-                );
-              })}
-            </div>
+              {isLoading ? "Loading…" : "Refresh list"}
+            </button>
           </div>
 
-          {filteredExams.length > 0 ? (
+          {feedback !== null ? (
+            <div className="mt-5">
+              <FeedbackMessage
+                feedback={feedback}
+                onClose={() => setFeedback(null)}
+              />
+            </div>
+          ) : null}
+
+          {isLoading ? (
+            <div
+              className="
+                mt-5 rounded-xl border border-slate-200
+                bg-white px-6 py-16 text-center
+              "
+            >
+              <p className="text-sm font-semibold text-slate-800">
+                Loading published examinations…
+              </p>
+
+              <p className="mt-2 text-xs text-slate-500">
+                Please wait while the examination server responds.
+              </p>
+            </div>
+          ) : exams.length > 0 ? (
             <div
               className="
                 mt-5 grid grid-cols-2 gap-5
                 max-lg:grid-cols-1
               "
             >
-              {filteredExams.map((exam) => (
+              {exams.map((exam) => (
                 <ExamCard key={exam.id} exam={exam} />
               ))}
             </div>
           ) : (
             <div
               className="
-                mt-5 rounded-xl
-                border border-dashed border-slate-300
-                bg-white px-6 py-16 text-center
+                mt-5 rounded-xl border border-dashed
+                border-slate-300 bg-white px-6 py-16
+                text-center
               "
             >
               <p className="text-sm font-semibold text-slate-800">
-                No examinations in this category
+                No published examinations are available
               </p>
 
               <p className="mt-2 text-xs text-slate-500">
-                Try selecting a different filter.
+                Ask your teacher to publish an examination after adding its
+                questions.
               </p>
             </div>
           )}

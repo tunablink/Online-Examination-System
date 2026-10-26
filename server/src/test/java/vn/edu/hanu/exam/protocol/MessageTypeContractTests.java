@@ -12,196 +12,180 @@ import org.junit.jupiter.api.Test;
 
 class MessageTypeContractTests {
 
-    @Test
-    void containsTheRequiredProtocolMessageTypes() {
-        Set<String> actualMessageTypes =
-                Stream.of(MessageType.values())
-                        .map(Enum::name)
-                        .collect(Collectors.toSet());
+        @Test
+        void containsTheRequiredProtocolMessageTypes() {
+                Set<String> actualMessageTypes = Stream.of(MessageType.values())
+                                .map(Enum::name)
+                                .collect(Collectors.toSet());
 
-        Set<String> expectedMessageTypes = Set.of(
-                "CONNECTED",
+                Set<String> expectedMessageTypes = Set.of(
+                                "CONNECTED",
 
-                "PING",
-                "PONG",
+                                "PING",
+                                "PONG",
 
-                "REGISTER",
-                "REGISTERED",
+                                "REGISTER",
+                                "REGISTERED",
 
-                "LOGIN",
-                "LOGGED_IN",
+                                "LOGIN",
+                                "LOGGED_IN",
 
-                "CREATE_EXAM",
-                "EXAM_CREATED",
+                                "CREATE_EXAM",
+                                "EXAM_CREATED",
 
-                "GET_TEACHER_EXAMS",
-                "TEACHER_EXAMS",
+                                "GET_TEACHER_DASHBOARD",
+                                "TEACHER_DASHBOARD",
 
-                "GET_EXAM",
-                "EXAM_DETAILS",
+                                "GET_TEACHER_EXAMS",
+                                "TEACHER_EXAMS",
 
-                "UPDATE_EXAM",
-                "EXAM_UPDATED",
+                                "GET_EXAM",
+                                "EXAM_DETAILS",
 
-                "PUBLISH_EXAM",
-                "EXAM_PUBLISHED",
+                                "UPDATE_EXAM",
+                                "EXAM_UPDATED",
 
-                "CLOSE_EXAM",
-                "EXAM_CLOSED",
+                                "PUBLISH_EXAM",
+                                "EXAM_PUBLISHED",
 
-                "DELETE_EXAM",
-                "EXAM_DELETED",
+                                "CLOSE_EXAM",
+                                "EXAM_CLOSED",
 
-                "CREATE_QUESTION",
-                "QUESTION_CREATED",
+                                "DELETE_EXAM",
+                                "EXAM_DELETED",
 
-                "GET_EXAM_QUESTIONS",
-                "EXAM_QUESTIONS",
+                                "CREATE_QUESTION",
+                                "QUESTION_CREATED",
 
-                "GET_AVAILABLE_EXAMS",
-                "AVAILABLE_EXAMS",
+                                "GET_EXAM_QUESTIONS",
+                                "EXAM_QUESTIONS",
 
-                "GET_AVAILABLE_EXAM",
-                "AVAILABLE_EXAM_DETAILS",
+                                "GET_AVAILABLE_EXAMS",
+                                "AVAILABLE_EXAMS",
 
-                "ERROR"
-        );
+                                "GET_AVAILABLE_EXAM",
+                                "AVAILABLE_EXAM_DETAILS",
 
-        assertEquals(
-                expectedMessageTypes,
-                actualMessageTypes
-        );
-    }
+                                "ERROR");
 
-    @Test
-    void parsesKnownMessageTypesWithoutDependingOnCaseOrSpaces() {
-        assertAll(
-                () -> assertEquals(
-                        MessageType.PING,
-                        MessageType.fromWireValue("PING").orElseThrow()
-                ),
-                () -> assertEquals(
-                        MessageType.REGISTER,
-                        MessageType.fromWireValue(" register ").orElseThrow()
-                ),
-                () -> assertEquals(
-                        MessageType.LOGIN,
-                        MessageType.fromWireValue("LoGiN").orElseThrow()
-                ),
-                () -> assertEquals(
-                        MessageType.CREATE_EXAM,
-                        MessageType.fromWireValue(" create_exam ").orElseThrow()
-                ),
-                () -> assertEquals(
-                        MessageType.GET_EXAM_QUESTIONS,
-                        MessageType.fromWireValue("get_exam_questions").orElseThrow()
-                ),
-                () -> assertEquals(
-                        MessageType.UPDATE_EXAM,
-                        MessageType.fromWireValue(" update_exam ").orElseThrow()
-                ),
-                () -> assertEquals(
-                        MessageType.PUBLISH_EXAM,
-                        MessageType.fromWireValue(" publish_exam ").orElseThrow()
-                ),
-                () -> assertEquals(
-                        MessageType.CLOSE_EXAM,
-                        MessageType.fromWireValue(" close_exam ").orElseThrow()
-                ),
-                () -> assertEquals(
-                        MessageType.DELETE_EXAM,
-                        MessageType.fromWireValue(" delete_exam ").orElseThrow()
-                )
-        );
-    }
+                assertEquals(
+                                expectedMessageTypes,
+                                actualMessageTypes);
+        }
 
-    @Test
-    void rejectsMissingOrUnsupportedMessageTypes() {
-        assertAll(
-                () -> assertTrue(
-                        MessageType.fromWireValue(null).isEmpty()
-                ),
-                () -> assertTrue(
-                        MessageType.fromWireValue("").isEmpty()
-                ),
-                () -> assertTrue(
-                        MessageType.fromWireValue("   ").isEmpty()
-                ),
-                () -> assertTrue(
-                        MessageType.fromWireValue("UNKNOWN").isEmpty()
-                )
-        );
-    }
+        @Test
+        void parsesKnownMessageTypesWithoutDependingOnCaseOrSpaces() {
+                assertAll(
+                                () -> assertEquals(
+                                                MessageType.PING,
+                                                MessageType.fromWireValue("PING").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.REGISTER,
+                                                MessageType.fromWireValue(" register ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.LOGIN,
+                                                MessageType.fromWireValue("LoGiN").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.GET_TEACHER_DASHBOARD,
+                                                MessageType.fromWireValue(" get_teacher_dashboard ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.CREATE_EXAM,
+                                                MessageType.fromWireValue(" create_exam ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.GET_EXAM_QUESTIONS,
+                                                MessageType.fromWireValue("get_exam_questions").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.UPDATE_EXAM,
+                                                MessageType.fromWireValue(" update_exam ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.PUBLISH_EXAM,
+                                                MessageType.fromWireValue(" publish_exam ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.CLOSE_EXAM,
+                                                MessageType.fromWireValue(" close_exam ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.DELETE_EXAM,
+                                                MessageType.fromWireValue(" delete_exam ").orElseThrow()));
+        }
 
-    @Test
-    void acceptsOnlyClientCommandTypesFromClient() {
-        Set<MessageType> actualClientCommandTypes =
-                Stream.of(MessageType.values())
-                        .filter(MessageType::isAcceptedFromClient)
-                        .collect(Collectors.toSet());
+        @Test
+        void rejectsMissingOrUnsupportedMessageTypes() {
+                assertAll(
+                                () -> assertTrue(
+                                                MessageType.fromWireValue(null).isEmpty()),
+                                () -> assertTrue(
+                                                MessageType.fromWireValue("").isEmpty()),
+                                () -> assertTrue(
+                                                MessageType.fromWireValue("   ").isEmpty()),
+                                () -> assertTrue(
+                                                MessageType.fromWireValue("UNKNOWN").isEmpty()));
+        }
 
-        Set<MessageType> expectedClientCommandTypes = Set.of(
-                MessageType.PING,
-                MessageType.REGISTER,
-                MessageType.LOGIN,
+        @Test
+        void acceptsOnlyClientCommandTypesFromClient() {
+                Set<MessageType> actualClientCommandTypes = Stream.of(MessageType.values())
+                                .filter(MessageType::isAcceptedFromClient)
+                                .collect(Collectors.toSet());
 
-                MessageType.CREATE_EXAM,
-                MessageType.GET_TEACHER_EXAMS,
-                MessageType.GET_EXAM,
-                MessageType.UPDATE_EXAM,
-                MessageType.PUBLISH_EXAM,
-                MessageType.CLOSE_EXAM,
-                MessageType.DELETE_EXAM,
+                Set<MessageType> expectedClientCommandTypes = Set.of(
+                                MessageType.PING,
+                                MessageType.REGISTER,
+                                MessageType.LOGIN,
 
-                MessageType.CREATE_QUESTION,
-                MessageType.GET_EXAM_QUESTIONS,
+                                MessageType.CREATE_EXAM,
+                                MessageType.GET_TEACHER_DASHBOARD,
+                                MessageType.GET_TEACHER_EXAMS,
+                                MessageType.GET_EXAM,
+                                MessageType.UPDATE_EXAM,
+                                MessageType.PUBLISH_EXAM,
+                                MessageType.CLOSE_EXAM,
+                                MessageType.DELETE_EXAM,
 
-                MessageType.GET_AVAILABLE_EXAMS,
-                MessageType.GET_AVAILABLE_EXAM
-        );
+                                MessageType.CREATE_QUESTION,
+                                MessageType.GET_EXAM_QUESTIONS,
 
-        assertEquals(
-                expectedClientCommandTypes,
-                actualClientCommandTypes
-        );
-    }
+                                MessageType.GET_AVAILABLE_EXAMS,
+                                MessageType.GET_AVAILABLE_EXAM);
 
-    @Test
-    void rejectsServerOnlyMessageTypesFromClient() {
-        Set<MessageType> actualServerOnlyMessageTypes =
-                Stream.of(MessageType.values())
-                        .filter(messageType -> !messageType.isAcceptedFromClient())
-                        .collect(Collectors.toSet());
+                assertEquals(
+                                expectedClientCommandTypes,
+                                actualClientCommandTypes);
+        }
 
-        Set<MessageType> expectedServerOnlyMessageTypes = Set.of(
-                MessageType.CONNECTED,
+        @Test
+        void rejectsServerOnlyMessageTypesFromClient() {
+                Set<MessageType> actualServerOnlyMessageTypes = Stream.of(MessageType.values())
+                                .filter(messageType -> !messageType.isAcceptedFromClient())
+                                .collect(Collectors.toSet());
 
-                MessageType.PONG,
+                Set<MessageType> expectedServerOnlyMessageTypes = Set.of(
+                                MessageType.CONNECTED,
 
-                MessageType.REGISTERED,
+                                MessageType.PONG,
 
-                MessageType.LOGGED_IN,
+                                MessageType.REGISTERED,
 
-                MessageType.EXAM_CREATED,
-                MessageType.TEACHER_EXAMS,
-                MessageType.EXAM_DETAILS,
-                MessageType.EXAM_UPDATED,
-                MessageType.EXAM_PUBLISHED,
-                MessageType.EXAM_CLOSED,
-                MessageType.EXAM_DELETED,
+                                MessageType.LOGGED_IN,
 
-                MessageType.QUESTION_CREATED,
-                MessageType.EXAM_QUESTIONS,
+                                MessageType.EXAM_CREATED,
+                                MessageType.TEACHER_DASHBOARD,
+                                MessageType.TEACHER_EXAMS,
+                                MessageType.EXAM_DETAILS,
+                                MessageType.EXAM_UPDATED,
+                                MessageType.EXAM_PUBLISHED,
+                                MessageType.EXAM_CLOSED,
+                                MessageType.EXAM_DELETED,
 
-                MessageType.AVAILABLE_EXAMS,
-                MessageType.AVAILABLE_EXAM_DETAILS,
+                                MessageType.QUESTION_CREATED,
+                                MessageType.EXAM_QUESTIONS,
 
-                MessageType.ERROR
-        );
+                                MessageType.AVAILABLE_EXAMS,
+                                MessageType.AVAILABLE_EXAM_DETAILS,
 
-        assertEquals(
-                expectedServerOnlyMessageTypes,
-                actualServerOnlyMessageTypes
-        );
-    }
+                                MessageType.ERROR);
+
+                assertEquals(
+                                expectedServerOnlyMessageTypes,
+                                actualServerOnlyMessageTypes);
+        }
 }

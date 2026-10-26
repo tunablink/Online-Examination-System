@@ -147,6 +147,15 @@ export interface TeacherDashboardData {
   recentExams: TeacherDashboardExamData[];
 }
 
+export interface AvailableExamDetailsData {
+  id: number;
+  title: string;
+  description: string | null;
+  durationMinutes: number;
+  questionCount: number;
+  totalPoints: number;
+}
+
 export interface ClientMessage {
   requestId: string;
   type: ClientMessageType;
@@ -178,7 +187,7 @@ export interface ServerMessageData {
   createdAt?: string;
   updatedAt?: string;
 
-  exams?: ExamDetailsData[];
+  exams?: unknown[];
   examId?: number;
   content?: string;
   points?: number;
