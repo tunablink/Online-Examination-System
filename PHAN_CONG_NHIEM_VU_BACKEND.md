@@ -7,7 +7,8 @@ Hai nhiệm vụ dưới đây được chọn để có phạm vi vừa phải,
 ```text
 Linh:     Question Management — update và delete question
 Hải Yến:  Teacher Student Directory — xem danh sách/chi tiết sinh viên
-Leader:   Tích hợp protocol/router trung tâm, React client, review và merge
+Hoàng Yến: Teacher Dashboard Summary — backend, WebSocket và giao diện dashboard
+Leader:   Review, merge, hỗ trợ tích hợp và giữ các phần không được giao
 ```
 
 Các chức năng đã có như tạo đề, publish, close, delete draft exam, tạo question, lấy question và student exam catalog phải tiếp tục hoạt động bình thường.
@@ -386,19 +387,208 @@ Gửi leader: branch/PR, commit hash, danh sách file, JSON request/response m�
 
 ---
 
-# 5. Trách nhiệm của leader
+# 5. Nhiệm vụ của Hoàng Yến
 
-Leader giữ các file trung tâm để tránh conflict:
+## 5.1. Tên nhiệm vụ
+
+**Hoàn thiện Teacher Dashboard Summary từ backend đến giao diện**
+
+Đây là một feature hoàn chỉnh: teacher đăng nhập, dashboard gửi WebSocket request, Java server đọc PostgreSQL và dashboard hiển thị số liệu thật. Không dùng mock data cho các số liệu thuộc feature này.
+
+Protocol:
 
 ```text
+GET_TEACHER_DASHBOARD -> TEACHER_DASHBOARD
+```
+
+Feature bao gồm:
+
+- Backend repository, service và WebSocket handler.
+- Bổ sung message type và central WebSocket routing.
+- Cập nhật TypeScript protocol.
+- Thay dữ liệu mock của Teacher Dashboard bằng dữ liệu từ server.
+- Có loading, error, empty và success state ở giao diện.
+- Unit/integration test backend, ESLint và production build client.
+
+Không làm trong nhiệm vụ này:
+
+- Không tạo/sửa/xóa exam.
+- Không tạo/sửa/xóa question.
+- Không sửa database schema.
+- Không làm student directory, attempt, auto-save, submit, grading, monitoring hoặc anti-cheating.
+
+## 5.2. Backend contract
+
+Request không cần payload nghiệp vụ:
+
+```json
+{
+  "requestId": "req-teacher-dashboard-1",
+  "type": "GET_TEACHER_DASHBOARD",
+  "payload": {}
+}
+```
+
+Response thành công:
+
+```json
+{
+  "requestId": "req-teacher-dashboard-1",
+  "type": "TEACHER_DASHBOARD",
+  "data": {
+    "totalExams": 8,
+    "draftExamCount": 3,
+    "publishedExamCount": 2,
+    "closedExamCount": 3,
+    "recentExams": [
+      {
+        "id": 12,
+        "title": "Java Programming Final Exam",
+        "description": "Multiple choice final examination",
+        "durationMinutes": 90,
+        "status": "PUBLISHED",
+        "questionCount": 25,
+        "createdAt": "2026-10-26T09:00:00Z",
+        "updatedAt": "2026-10-26T10:30:00Z"
+      }
+    ]
+  },
+  "error": null
+}
+```
+
+Các rule bắt buộc:
+
+- Chỉ teacher đã đăng nhập được gọi command.
+- Lấy teacher từ `AuthenticatedSessionRegistry`; không nhận `teacherId` từ client.
+- Query chỉ trả exam có `created_by = :teacherId`.
+- Trả tổng số đề, số `DRAFT`, `PUBLISHED`, `CLOSED` và tối đa 5 đề gần cập nhật nhất.
+- Mỗi recent exam có `questionCount` chính xác.
+- Sort recent exam bằng `updated_at DESC, id DESC`.
+- Teacher chưa có đề vẫn là success với count bằng `0` và `recentExams: []`.
+- Không trả question content, choice content, correct answer, password/password hash hoặc session data.
+- Session chưa login trả `AUTHENTICATION_REQUIRED`; student gọi command trả `FORBIDDEN`.
+
+Error code dự kiến:
+
+```text
+AUTHENTICATION_REQUIRED
+FORBIDDEN
+DATABASE_ERROR
+INTERNAL_SERVER_ERROR
+```
+
+## 5.3. Frontend requirements
+
+Sửa Teacher Dashboard để gửi `GET_TEACHER_DASHBOARD` khi WebSocket đã connected và render response `TEACHER_DASHBOARD`.
+
+Giao diện cần có:
+
+- Bốn statistic cards: total examinations, draft, published, closed.
+- Recent examinations list/table: title, status, question count, duration, updated time.
+- Link mở exam và link Manage questions khi phù hợp.
+- Loading state trong khi chờ response.
+- Empty state khi teacher chưa có exam, kèm link tạo đề đầu tiên.
+- Error state khi server trả `ERROR`, timeout hoặc WebSocket mất kết nối.
+- Nút Try again gửi lại request dashboard.
+
+Không thay đổi giao diện hay logic của Create Exam và Question Management ngoài các link điều hướng cần thiết.
+
+## 5.4. File được phép sửa
+
+```text
+server/src/main/java/vn/edu/hanu/exam/repository/TeacherDashboardRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcTeacherDashboardRepository.java
+server/src/main/java/vn/edu/hanu/exam/service/dashboard/**
+server/src/main/java/vn/edu/hanu/exam/exception/TeacherDashboardException.java
+server/src/main/java/vn/edu/hanu/exam/websocket/handler/TeacherDashboardMessageHandler.java
 server/src/main/java/vn/edu/hanu/exam/protocol/MessageType.java
 server/src/main/java/vn/edu/hanu/exam/websocket/ExamWebSocketHandler.java
-client/**
+server/src/test/java/**/TeacherDashboard*Tests.java
+
+client/src/websocket/protocol.ts
+client/src/pages/TeacherDashboardPage/TeacherDashboardPage.tsx
+client/src/pages/TeacherDashboardPage/components/**
+```
+
+## 5.5. File không được sửa
+
+```text
+server/src/main/resources/schema.sql
+server/src/main/java/vn/edu/hanu/exam/repository/ExamRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcExamRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/QuestionRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcQuestionRepository.java
+server/src/main/java/vn/edu/hanu/exam/service/exam/**
+server/src/main/java/vn/edu/hanu/exam/service/question/**
+client/src/pages/CreateExamPage/**
+client/src/pages/QuestionManagementPage/**
 README.md
 PHAN_CONG_NHIEM_VU_BACKEND.md
 ```
 
-Sau khi review code, leader sẽ tích hợp các message:
+## 5.6. Test và quality gate bắt buộc
+
+1. Teacher lấy dashboard thành công.
+2. Tổng số exam và count theo từng status đúng.
+3. Dashboard không thấy exam của teacher khác.
+4. `questionCount` trong recent exam đúng.
+5. Recent exams đúng thứ tự và chỉ có tối đa 5 item.
+6. Teacher chưa có exam nhận count `0` và list rỗng.
+7. Session chưa login trả `AUTHENTICATION_REQUIRED`.
+8. Student gọi command trả `FORBIDDEN`.
+9. Response giữ nguyên `requestId`.
+10. Lỗi database không lộ stack trace và được đổi thành `DATABASE_ERROR`.
+11. Teacher dashboard client có loading, empty, error và retry state.
+12. `mvn test`, `npm run lint`, `npm run build` đều pass.
+13. `git diff --check` không báo lỗi.
+
+## 5.7. Bàn giao
+
+Branch đề xuất:
+
+```text
+feature/hoang-yen-teacher-dashboard
+```
+
+Commit đề xuất:
+
+```text
+feat(server): add teacher dashboard summary
+test(server): cover teacher dashboard summary
+feat(client): load teacher dashboard from websocket
+```
+
+Trước khi gửi Pull Request, chạy:
+
+```powershell
+cd server
+$env:DB_PASSWORD = '<local-postgresql-password>'
+mvn test
+
+cd ..\client
+npm run lint
+npm run build
+
+cd ..
+git diff --check
+git status --short
+```
+
+Gửi leader: branch/PR, commit hash, danh sách file, ảnh feature chạy thành công, JSON request/response thực tế và kết quả các lệnh quality gate.
+
+---
+
+# 6. Trách nhiệm của leader
+
+Leader giữ các file trung tâm để tránh conflict, trừ phạm vi đã giao riêng cho Hoàng Yến ở mục 5:
+
+```text
+README.md
+PHAN_CONG_NHIEM_VU_BACKEND.md
+```
+
+Leader sẽ tích hợp sau khi review code của Linh và Hải Yến các message:
 
 ```text
 UPDATE_QUESTION
@@ -412,9 +602,17 @@ GET_STUDENT
 STUDENT_DETAILS
 ```
 
+Hoàng Yến được phép tích hợp trực tiếp hai message thuộc feature dashboard của mình:
+
+```text
+GET_TEACHER_DASHBOARD
+TEACHER_DASHBOARD
+```
+
 Thứ tự merge đề xuất:
 
 1. Merge phần Linh, chạy `mvn test` toàn bộ.
 2. Merge phần Hải Yến, chạy `mvn test` toàn bộ.
-3. Leader thêm protocol/router trung tâm và test lại.
-4. Leader nối UI Question Management và Teacher Student page với backend thật.
+3. Review và merge phần Hoàng Yến, chạy `mvn test`, `npm run lint` và `npm run build`.
+4. Leader thêm protocol/router trung tâm cho Linh và Hải Yến, sau đó test lại.
+5. Leader nối UI Question Management và Teacher Student page với backend thật.
