@@ -1,506 +1,155 @@
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router';
 
-import {
-  MOCK_TEACHER_EXAMS,
-} from '../../mocks/teacher';
-
-import type {
-  TeacherExam,
-  TeacherExamStatus,
-} from '../../types/teacher';
 import { useAuth } from '../../auth/useAuth';
+import Icon, { type IconName } from '../../components/common/Icon';
+import { MOCK_MONITORED_SESSIONS, MOCK_SUSPICIOUS_ACTIVITIES } from '../../mocks/monitoring';
+import type { ServerExam } from '../../websocket/protocol';
+import type { ConnectionStatus, SendExamMessage } from '../../websocket/useExamWebSocket';
 
-const DATE_FORMATTER =
-  new Intl.DateTimeFormat(
-    'en-GB',
-    {
-      day: '2-digit',
-      month: 'short',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,
-    },
-  );
-
-function formatDate(value: string): string {
-  const parsedDate = new Date(value);
-
-  if (Number.isNaN(parsedDate.getTime())) {
-    return 'Unknown schedule';
-  }
-
-  return DATE_FORMATTER.format(parsedDate);
+interface TeacherDashboardPageProps {
+  connectionStatus: ConnectionStatus;
+  sendMessage: SendExamMessage;
 }
 
-function getStatusAppearance(
-  status: TeacherExamStatus,
-) {
-  if (status === 'PUBLISHED') {
-    return {
-      label: 'Published',
-      className:
-        'border-emerald-200 bg-emerald-50 text-emerald-800',
-      dotClassName: 'bg-emerald-500',
-    };
-  }
+const dateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+});
 
-  if (status === 'CLOSED') {
-    return {
-      label: 'Closed',
-      className:
-        'border-slate-200 bg-slate-100 text-slate-700',
-      dotClassName: 'bg-slate-500',
-    };
-  }
-
-  return {
-    label: 'Draft',
-    className:
-      'border-amber-200 bg-amber-50 text-amber-800',
-    dotClassName: 'bg-amber-500',
+function MetricCard({ icon, label, value, note, tone = 'teal' }: { icon: IconName; label: string; value: number | string; note: string; tone?: 'teal' | 'amber' | 'red' }) {
+  const tones = {
+    teal: 'text-[#00778b] border-[#d7e6e9]',
+    amber: 'text-[#a6670a] border-[#eadfcf]',
+    red: 'text-[#bd2f35] border-[#ecdadd]',
   };
-}
-
-interface RecentExamRowProps {
-  exam: TeacherExam;
-}
-
-function RecentExamRow({
-  exam,
-}: RecentExamRowProps) {
-  const statusAppearance =
-    getStatusAppearance(exam.status);
-
   return (
-    <article
-      className="
-        grid grid-cols-[minmax(0,1fr)_auto]
-        items-center gap-5
-        border-b border-slate-100
-        px-5 py-4
-        last:border-b-0
-        max-sm:grid-cols-1
-      "
-    >
-      <div className="min-w-0">
-        <div
-          className="
-            flex flex-wrap items-center
-            gap-2 text-xs font-semibold
-          "
-        >
-          <span className="text-blue-700">
-            {exam.courseCode}
-          </span>
-
-          <span
-            className="
-              h-1 w-1 rounded-full
-              bg-slate-300
-            "
-            aria-hidden="true"
-          />
-
-          <span className="text-slate-500">
-            {exam.examCode}
-          </span>
-        </div>
-
-        <h3
-          className="
-            mt-2 truncate text-sm
-            font-semibold text-slate-950
-          "
-        >
-          {exam.title}
-        </h3>
-
-        <p className="mt-1 text-xs text-slate-500">
-          Starts {formatDate(exam.startsAt)}
-        </p>
+    <article className="rounded-xl border border-[#dde7ea] bg-white p-4 shadow-[0_1px_2px_rgba(15,42,51,.02)]">
+      <div className="flex items-start justify-between gap-3">
+        <span className={`grid h-9 w-9 place-items-center rounded-full border bg-[#f7fafb] ${tones[tone]}`}><Icon name={icon} size={17} /></span>
+        <span className="rounded-full border border-[#e1e8eb] px-2 py-1 text-[9px] font-semibold text-[#6d7b80]">{note}</span>
       </div>
-
-      <div
-        className="
-          flex items-center gap-3
-          max-sm:justify-between
-        "
-      >
-        <span
-          className={`
-            inline-flex items-center gap-2
-            rounded-full border
-            px-2.5 py-1.5
-            text-xs font-semibold
-            ${statusAppearance.className}
-          `}
-        >
-          <span
-            className={`
-              h-1.5 w-1.5
-              rounded-full
-              ${statusAppearance.dotClassName}
-            `}
-            aria-hidden="true"
-          />
-
-          {statusAppearance.label}
-        </span>
-
-        <Link
-          className="
-            rounded-md border
-            border-slate-300
-            bg-white px-3 py-2
-            text-xs font-semibold
-            text-slate-700
-            transition-colors
-            hover:border-blue-600
-            hover:text-blue-700
-          "
-          to={`/teacher/exams/${exam.id}`}
-        >
-          Manage
-        </Link>
-      </div>
+      <p className="mt-5 text-[10px] font-bold uppercase tracking-[.08em] text-[#7d8b90]">{label}</p>
+      <p className={`mt-1 text-[28px] font-bold tracking-[-.04em] ${tone === 'red' ? 'text-[#bd2f35]' : 'text-[#172126]'}`}>{value}</p>
     </article>
   );
 }
 
-function TeacherDashboardPage() {
-    const {user} = useAuth();
+function TeacherDashboardPage({ connectionStatus, sendMessage }: TeacherDashboardPageProps) {
+  const { user } = useAuth();
+  const [exams, setExams] = useState<ServerExam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-    const displayName = user?.fullName ?? 'Lecturer';
-  const totalExamCount =
-    MOCK_TEACHER_EXAMS.length;
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    const requestId = sendMessage('GET_TEACHER_EXAMS', {}, (message) => {
+      setLoading(false);
+      if (message.type === 'TEACHER_EXAMS' && Array.isArray(message.data?.exams)) {
+        setError(null);
+        setExams(message.data.exams);
+        return;
+      }
+      setError(message.error?.message ?? 'Could not load examinations.');
+    });
+    if (requestId === null) {
+      queueMicrotask(() => {
+        setLoading(false);
+        setError('The examination server is not ready.');
+      });
+    }
+  }, [connectionStatus, sendMessage]);
 
-  const publishedCount =
-    MOCK_TEACHER_EXAMS.filter(
-      (exam) =>
-        exam.status === 'PUBLISHED',
-    ).length;
+  const totals = useMemo(() => ({
+    published: exams.filter((exam) => exam.status === 'PUBLISHED').length,
+    draft: exams.filter((exam) => exam.status === 'DRAFT').length,
+    closed: exams.filter((exam) => exam.status === 'CLOSED').length,
+  }), [exams]);
 
-  const activeAttemptCount =
-    MOCK_TEACHER_EXAMS.reduce(
-      (total, exam) =>
-        total +
-        exam.activeAttemptCount,
-      0,
-    );
-
-  const suspiciousActivityCount =
-    MOCK_TEACHER_EXAMS.reduce(
-      (total, exam) =>
-        total +
-        exam.suspiciousActivityCount,
-      0,
-    );
+  const activeStudents = MOCK_MONITORED_SESSIONS.filter((session) => session.attemptStatus === 'TAKING').length;
+  const flagged = MOCK_SUSPICIOUS_ACTIVITIES.length;
+  const displayName = user?.fullName ?? 'Lecturer';
 
   return (
-    <>
-      <section
-        className="
-          flex items-end
-          justify-between gap-8
-          max-md:flex-col
-          max-md:items-start
-        "
-      >
+    <div>
+      <section className="flex items-start justify-between gap-6 max-md:flex-col">
         <div>
-          <p
-            className="
-              text-[11px] font-bold uppercase
-              tracking-[0.16em]
-              text-blue-700
-            "
-          >
-            Lecturer dashboard
-          </p>
-
-          <h1
-            className="
-              mt-3 text-3xl font-semibold
-              tracking-[-0.035em]
-              text-slate-950
-            "
-          >
-            Welcome, {displayName}
-          </h1>
-
-          <p
-            className="
-              mt-3 max-w-2xl
-              text-sm leading-6
-              text-slate-600
-            "
-          >
-            Manage examinations, review live sessions, and monitor
-            suspicious activity from one workspace.
-          </p>
-        </div>
-
-        <Link
-          className="
-            inline-flex min-h-11
-            items-center justify-center
-            rounded-md bg-blue-700
-            px-5 text-sm font-semibold
-            text-white transition-colors
-            hover:bg-blue-800
-          "
-          to="/teacher/exams/new"
-        >
-          Create examination
-        </Link>
-      </section>
-
-      <section
-        className="
-          mt-8 grid grid-cols-4 gap-4
-          max-xl:grid-cols-2
-          max-sm:grid-cols-1
-        "
-        aria-label="Teacher dashboard statistics"
-      >
-        <article
-          className="
-            rounded-xl border
-            border-slate-200
-            bg-white p-5
-          "
-        >
-          <p
-            className="
-              text-[10px] font-bold uppercase
-              tracking-[0.14em]
-              text-slate-500
-            "
-          >
-            Total examinations
-          </p>
-
-          <p className="mt-3 text-3xl font-semibold text-slate-950">
-            {totalExamCount}
-          </p>
-
-          <p className="mt-2 text-xs text-slate-500">
-            Across your courses
-          </p>
-        </article>
-
-        <article
-          className="
-            rounded-xl border
-            border-emerald-200
-            bg-emerald-50 p-5
-          "
-        >
-          <p
-            className="
-              text-[10px] font-bold uppercase
-              tracking-[0.14em]
-              text-emerald-700
-            "
-          >
-            Published
-          </p>
-
-          <p className="mt-3 text-3xl font-semibold text-emerald-950">
-            {publishedCount}
-          </p>
-
-          <p className="mt-2 text-xs text-emerald-800">
-            Available or scheduled
-          </p>
-        </article>
-
-        <article
-          className="
-            rounded-xl border
-            border-blue-200
-            bg-blue-50 p-5
-          "
-        >
-          <p
-            className="
-              text-[10px] font-bold uppercase
-              tracking-[0.14em]
-              text-blue-700
-            "
-          >
-            Active attempts
-          </p>
-
-          <p className="mt-3 text-3xl font-semibold text-blue-950">
-            {activeAttemptCount}
-          </p>
-
-          <p className="mt-2 text-xs text-blue-800">
-            Students currently taking exams
-          </p>
-        </article>
-
-        <article
-          className="
-            rounded-xl border
-            border-red-200
-            bg-red-50 p-5
-          "
-        >
-          <p
-            className="
-              text-[10px] font-bold uppercase
-              tracking-[0.14em]
-              text-red-700
-            "
-          >
-            Suspicious events
-          </p>
-
-          <p className="mt-3 text-3xl font-semibold text-red-950">
-            {suspiciousActivityCount}
-          </p>
-
-          <p className="mt-2 text-xs text-red-800">
-            Signals requiring review
-          </p>
-        </article>
-      </section>
-
-      <div
-        className="
-          mt-8 grid
-          grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]
-          gap-6
-          max-xl:grid-cols-1
-        "
-      >
-        <section
-          className="
-            overflow-hidden rounded-xl
-            border border-slate-200
-            bg-white
-          "
-        >
-          <div
-            className="
-              flex items-center
-              justify-between gap-5
-              border-b border-slate-200
-              px-5 py-4
-            "
-          >
-            <div>
-              <h2 className="text-sm font-semibold text-slate-950">
-                Recent examinations
-              </h2>
-
-              <p className="mt-1 text-xs text-slate-500">
-                Draft, scheduled, active, and closed examinations.
-              </p>
-            </div>
-
-            <Link
-              className="
-                text-xs font-semibold
-                text-blue-700
-                hover:text-blue-800
-              "
-              to="/teacher/exams"
-            >
-              View all
-            </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-[25px] font-bold tracking-[-.04em] text-[#172126]">Teacher Dashboard</h1>
+            <span className="rounded-full border border-[#dfe7e9] bg-white px-2.5 py-1 text-[9px] font-semibold text-[#617077]"><span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#c77d16]" />Academic Term 2026 / Q4</span>
           </div>
+          <p className="mt-1 text-[12px] text-[#6d7b80]">Welcome back, <strong className="text-[#425157]">{displayName}</strong> — live oversight & academic analytics</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#dbe5e8] bg-white px-3 text-[10px] font-semibold text-[#64747a]"><Icon name="refresh" size={14} /> {connectionStatus === 'connected' ? 'Live data synced' : 'Reconnecting'}</span>
+          <Link className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-[11px] font-semibold text-white hover:bg-[#006273]" to="/teacher/exams/new"><Icon name="plus" size={15} /> Create Exam</Link>
+        </div>
+      </section>
 
+      {error && <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#efd8da] bg-[#fff6f6] px-4 py-3 text-[11px] text-[#a82b31]"><Icon name="alert" size={15} />{error}</div>}
+
+      <section className="mt-5 grid grid-cols-5 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2 max-sm:grid-cols-1" aria-label="Dashboard metrics">
+        <MetricCard icon="document" label="Total exams" value={loading ? '—' : exams.length} note={`${totals.draft} draft`} />
+        <MetricCard icon="activity" label="Active monitoring" value={totals.published} note="Live now" />
+        <MetricCard icon="users" label="Active students" value={activeStudents} note="Preview" />
+        <MetricCard icon="check" label="Closed exams" value={totals.closed} note="Completed" tone="amber" />
+        <MetricCard icon="alert" label="Flagged reviews" value={flagged} note="Needs action" tone="red" />
+      </section>
+
+      <section className="mt-5 flex items-center justify-between gap-5 rounded-xl border border-[#dce7ea] bg-white p-5 max-lg:flex-col max-lg:items-start">
+        <div className="flex items-center gap-5">
+          <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-[7px] border-[#cfe8ec] border-r-[#00778b] text-center">
+            <span className="text-sm font-bold text-[#26363c]">LIVE<small className="block text-[8px] font-semibold text-[#a36b16]">SESSION</small></span>
+          </div>
           <div>
-            {MOCK_TEACHER_EXAMS.map(
-              (exam) => (
-                <RecentExamRow
-                  key={exam.id}
-                  exam={exam}
-                />
-              ),
-            )}
+            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[.08em] text-[#76858b]"><span className="h-2 w-2 rounded-full bg-[#00849a]" /> Live monitoring</div>
+            <h2 className="mt-2 text-[17px] font-bold tracking-[-.025em] text-[#1d292e]">Java Concurrency & System Design</h2>
+            <p className="mt-1 text-[11px] text-[#6b7a80]">Real-time proctor preview · {activeStudents} candidates currently active</p>
+            <div className="mt-3 flex flex-wrap gap-4 text-[10px] font-semibold text-[#53636a]"><span><Icon className="mr-1 inline text-[#00778b]" name="users" size={13} />{MOCK_MONITORED_SESSIONS.length} enrolled</span><span><Icon className="mr-1 inline text-[#bf7920]" name="check" size={13} />1 finished</span><span className="text-[#bd2f35]"><Icon className="mr-1 inline" name="flag" size={13} />{flagged} alerts</span></div>
+          </div>
+        </div>
+        <Link className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#bed8dd] bg-white px-4 text-[11px] font-semibold text-[#00778b] hover:bg-[#f0f8f9]" to="/teacher/monitoring"><Icon name="camera" size={15} />Launch Live Proctor Screen</Link>
+      </section>
+
+      <div className="mt-5 grid grid-cols-[minmax(0,2fr)_340px] gap-5 max-xl:grid-cols-1">
+        <section className="overflow-hidden rounded-xl border border-[#dce7ea] bg-white">
+          <div className="flex items-center justify-between border-b border-[#e7edef] px-5 py-4">
+            <div><h2 className="text-sm font-bold text-[#27343a]">Recent examinations</h2><p className="mt-1 text-[10px] text-[#7a888d]">Data loaded through the authenticated WebSocket session</p></div>
+            <Link className="text-[10px] font-semibold text-[#00778b]" to="/teacher/exams">View all schedules <Icon className="inline" name="arrow-right" size={12} /></Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left">
+              <thead className="bg-[#f1f5f6] text-[9px] font-bold uppercase tracking-[.06em] text-[#65747a]"><tr><th className="px-5 py-3">Exam name & code</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead>
+              <tbody>
+                {loading && <tr><td className="px-5 py-8 text-center text-xs text-[#7a888d]" colSpan={5}>Loading examination schedules…</td></tr>}
+                {!loading && exams.length === 0 && <tr><td className="px-5 py-10 text-center text-xs text-[#7a888d]" colSpan={5}>No examinations yet. Create your first draft to begin.</td></tr>}
+                {exams.slice(0, 5).map((exam) => (
+                  <tr className="border-t border-[#edf1f2]" key={exam.id}>
+                    <td className="px-5 py-4"><p className="text-[12px] font-semibold text-[#29363b]">{exam.title}</p><p className="mt-1 text-[9px] text-[#849197]">EX-{String(exam.id).padStart(4, '0')}</p></td>
+                    <td className="px-4 py-4 text-[10px] text-[#596970]">{dateFormatter.format(new Date(exam.createdAt))}</td>
+                    <td className="px-4 py-4 text-[10px] font-semibold text-[#53636a]">{exam.durationMinutes} mins</td>
+                    <td className="px-4 py-4"><span className={`rounded-full border px-2 py-1 text-[9px] font-semibold ${exam.status === 'PUBLISHED' ? 'border-[#b9dce2] bg-[#eff9fa] text-[#00778b]' : exam.status === 'CLOSED' ? 'border-[#dfe5e7] bg-[#f3f5f6] text-[#69787e]' : 'border-[#ead6b8] bg-[#fff8ed] text-[#9a6415]'}`}>{exam.status}</span></td>
+                    <td className="px-5 py-4 text-right"><Link className="text-[10px] font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}`}>Manage <Icon className="inline" name="arrow-right" size={11} /></Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
 
-        <aside
-          className="
-            rounded-xl border
-            border-slate-200
-            bg-white p-5
-          "
-        >
-          <h2 className="text-sm font-semibold text-slate-950">
-            Quick actions
-          </h2>
-
-          <p className="mt-1 text-xs leading-5 text-slate-500">
-            Frequently used lecturer tools.
-          </p>
-
-          <div className="mt-5 grid gap-3">
-            <Link
-              className="
-                rounded-lg border
-                border-blue-200
-                bg-blue-50 p-4
-                transition-colors
-                hover:border-blue-400
-              "
-              to="/teacher/exams/new"
-            >
-              <p className="text-sm font-semibold text-blue-900">
-                Create examination
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-blue-700">
-                Configure schedule, duration, and publication policy.
-              </p>
-            </Link>
-
-            <Link
-              className="
-                rounded-lg border
-                border-slate-200
-                bg-slate-50 p-4
-                transition-colors
-                hover:border-blue-300
-              "
-              to="/teacher/monitoring"
-            >
-              <p className="text-sm font-semibold text-slate-900">
-                Open live monitoring
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-slate-600">
-                Review online, disconnected, and submitted sessions.
-              </p>
-            </Link>
-
-            <Link
-              className="
-                rounded-lg border
-                border-red-200
-                bg-red-50 p-4
-                transition-colors
-                hover:border-red-400
-              "
-              to="/teacher/activities"
-            >
-              <p className="text-sm font-semibold text-red-900">
-                Review suspicious activity
-              </p>
-
-              <p className="mt-1 text-xs leading-5 text-red-700">
-                Inspect deterministic anti-cheating signals.
-              </p>
-            </Link>
+        <aside className="rounded-xl border border-[#dce7ea] bg-white p-5">
+          <div className="flex items-center justify-between"><h2 className="text-sm font-bold text-[#27343a]">Live Proctor Feed</h2><span className="h-2 w-2 rounded-full bg-[#c32c34]" /></div>
+          <p className="mt-1 text-[10px] text-[#7a888d]">Recent candidate anomalies & events</p>
+          <div className="mt-4 grid gap-2.5">
+            {MOCK_SUSPICIOUS_ACTIVITIES.slice(0, 3).map((event) => (
+              <article className="rounded-lg bg-[#f2f6f7] p-3" key={event.id}>
+                <div className="flex gap-3"><span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white ${event.severity === 'HIGH' ? 'text-[#bd2f35]' : 'text-[#a36a12]'}`}><Icon name={event.severity === 'HIGH' ? 'alert' : 'monitor'} size={14} /></span><div><p className="text-[10px] font-semibold text-[#39484e]">{event.type.replaceAll('_', ' ')}</p><p className="mt-1 text-[9px] text-[#68777d]">Candidate: <strong>{event.studentName}</strong></p></div></div>
+              </article>
+            ))}
           </div>
+          <Link className="mt-4 inline-flex items-center gap-1 text-[10px] font-semibold text-[#00778b]" to="/teacher/activities">Full security audit <Icon name="arrow-right" size={12} /></Link>
         </aside>
       </div>
-    </>
+    </div>
   );
 }
 

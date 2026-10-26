@@ -58,22 +58,22 @@ function App() {
           path="/teacher"
           element={<TeacherPortalLayout connectionStatus={status} />}
         >
-          <Route index element={<TeacherDashboardPage />} />
+          <Route index element={<TeacherDashboardPage connectionStatus={status} sendMessage={sendMessage} />} />
 
-          <Route path="exams" element={<ExamManagementPage />} />
+          <Route path="exams" element={<ExamManagementPage connectionStatus={status} sendMessage={sendMessage} />} />
 
-          <Route path="exams/new" element={<CreateExamPage />} />
+          <Route path="exams/new" element={<CreateExamPage connectionStatus={status} sendMessage={sendMessage} />} />
 
           <Route
             path="exams/:examId/questions"
-            element={<QuestionManagementPage />}
+            element={<QuestionManagementPage connectionStatus={status} sendMessage={sendMessage} />}
           />
 
-          <Route path="exams/:examId" element={<ExamOverviewPage />} />
+          <Route path="exams/:examId" element={<ExamOverviewPage connectionStatus={status} sendMessage={sendMessage} />} />
 
-          <Route path="monitoring" element={<ExamMonitoringPage />} />
+          <Route path="monitoring" element={<ExamMonitoringPage connectionStatus={status} sendMessage={sendMessage} />} />
 
-          <Route path="monitoring/:examId" element={<ExamMonitoringPage />} />
+          <Route path="monitoring/:examId" element={<ExamMonitoringPage connectionStatus={status} sendMessage={sendMessage} />} />
 
           <Route path="activities" element={<SuspiciousActivityPage />} />
         </Route>

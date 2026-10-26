@@ -23,6 +23,7 @@ import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.LoginCommand;
 import vn.edu.hanu.exam.service.LoginService;
 import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.ExamManagementMessageHandler;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 @Component
@@ -36,12 +37,18 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
 
     private final LoginService loginService;
     private final AuthenticatedSessionRegistry authenticatedSessionRegistry;
+    private ExamManagementMessageHandler examManagementMessageHandler;
 
     public ExamWebSocketHandler(JsonMapper jsonMapper, RegistrationMessageHandler registrationMessageHandler, LoginService loginService, AuthenticatedSessionRegistry authenticatedSessionRegistry) {
         this.jsonMapper = jsonMapper;
         this.registrationMessageHandler = registrationMessageHandler;
         this.loginService = loginService;
         this.authenticatedSessionRegistry = authenticatedSessionRegistry;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    void setExamManagementMessageHandler(ExamManagementMessageHandler examManagementMessageHandler) {
+        this.examManagementMessageHandler = examManagementMessageHandler;
     }
 
     @Override
@@ -129,6 +136,14 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                             session,
                             clientMessage
                     );
+
+            case CREATE_EXAM -> sendMessage(session, examManagementMessageHandler.handleCreate(session, clientMessage));
+            case GET_TEACHER_EXAMS -> sendMessage(session, examManagementMessageHandler.handleList(session, clientMessage));
+            case GET_EXAM -> sendMessage(session, examManagementMessageHandler.handleGet(session, clientMessage));
+            case UPDATE_EXAM -> sendMessage(session, examManagementMessageHandler.handleUpdate(session, clientMessage));
+            case PUBLISH_EXAM -> sendMessage(session, examManagementMessageHandler.handlePublish(session, clientMessage));
+            case CLOSE_EXAM -> sendMessage(session, examManagementMessageHandler.handleClose(session, clientMessage));
+            case DELETE_EXAM -> sendMessage(session, examManagementMessageHandler.handleDelete(session, clientMessage));
 
             default ->
                     sendUnsupportedMessageType(

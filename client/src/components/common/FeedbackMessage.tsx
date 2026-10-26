@@ -1,80 +1,11 @@
-export interface Feedback {
-  type: 'success' | 'error';
-  title?: string;
-  message: string;
-}
+import Icon from './Icon';
 
-interface FeedbackMessageProps {
-  feedback: Feedback;
-  onClose: () => void;
-}
+export interface Feedback { type: 'success' | 'error'; title?: string; message: string; }
+interface FeedbackMessageProps { feedback: Feedback; onClose: () => void; }
 
-const FEEDBACK_STYLES: Record<
-  Feedback['type'],
-  string
-> = {
-  success:
-    'border-emerald-200 bg-emerald-50 text-emerald-900',
-
-  error:
-    'border-red-200 bg-red-50 text-red-900',
-};
-
-function FeedbackMessage({
-  feedback,
-  onClose,
-}: FeedbackMessageProps) {
-  const defaultTitle =
-    feedback.type === 'success'
-      ? 'Request completed'
-      : 'Something went wrong';
-
-  return (
-    <div
-      className={`
-        relative mb-6 grid grid-cols-[28px_1fr]
-        gap-3 rounded-md border p-4 pr-12
-        ${FEEDBACK_STYLES[feedback.type]}
-      `}
-      role="alert"
-    >
-      <span
-        className="
-          grid h-7 w-7 place-items-center
-          rounded-full border border-current
-          text-sm font-bold
-        "
-        aria-hidden="true"
-      >
-        {feedback.type === 'success' ? '✓' : '!'}
-      </span>
-
-      <div>
-        <strong className="block text-sm font-semibold">
-          {feedback.title ?? defaultTitle}
-        </strong>
-
-        <p className="mt-1 text-xs leading-5 opacity-90">
-          {feedback.message}
-        </p>
-      </div>
-
-      <button
-        type="button"
-        className="
-          absolute right-3 top-3
-          grid h-7 w-7 place-items-center
-          rounded text-lg leading-none opacity-70
-          transition-opacity
-          hover:bg-black/5 hover:opacity-100
-        "
-        aria-label="Close notification"
-        onClick={onClose}
-      >
-        ×
-      </button>
-    </div>
-  );
+function FeedbackMessage({ feedback, onClose }: FeedbackMessageProps) {
+  const success = feedback.type === 'success';
+  return <div className={`relative mb-5 flex items-start gap-3 rounded-lg border p-4 pr-11 ${success ? 'border-[#b9dfe4] bg-[#eff9fa] text-[#22525c]' : 'border-[#edc9cc] bg-[#fff4f4] text-[#99282e]'}`} role="alert"><span className={`grid h-7 w-7 shrink-0 place-items-center rounded-full ${success ? 'bg-[#d7f0f3] text-[#00778b]' : 'bg-[#ffe2e3] text-[#bd2f35]'}`}><Icon name={success ? 'check' : 'alert'} size={14} /></span><div><strong className="block text-[11px] font-bold">{feedback.title ?? (success ? 'Request completed' : 'Something went wrong')}</strong><p className="mt-1 text-[10px] leading-5 opacity-90">{feedback.message}</p></div><button aria-label="Close notification" className="absolute right-3 top-3 grid h-7 w-7 place-items-center rounded text-lg opacity-60 hover:bg-black/5 hover:opacity-100" onClick={onClose} type="button">×</button></div>;
 }
 
 export default FeedbackMessage;

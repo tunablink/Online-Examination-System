@@ -1,65 +1,17 @@
-import type {ConnectionStatus} from '../../websocket/useExamWebSocket';
+import type { ConnectionStatus } from '../../websocket/useExamWebSocket';
 
-interface ConnectionBadgeProps {
-  status: ConnectionStatus;
-}
+interface ConnectionBadgeProps { status: ConnectionStatus; }
 
-const CONNECTION_LABEL: Record<ConnectionStatus,string> = {
-  connecting: 'Connecting...',
-  connected: 'Server connected',
-  disconnected: 'Disconnected',
-  error: 'Connection error',
+const labels: Record<ConnectionStatus, string> = { connecting: 'Connecting…', connected: 'Server connected', disconnected: 'Disconnected', error: 'Connection error' };
+const styles: Record<ConnectionStatus, string> = {
+  connecting: 'border-[#ead9bc] bg-[#fff8ed] text-[#986313]',
+  connected: 'border-[#b7dce2] bg-[#eff9fa] text-[#00778b]',
+  disconnected: 'border-[#d8e0e3] bg-[#f2f5f6] text-[#617177]',
+  error: 'border-[#edc9cc] bg-[#fff3f3] text-[#b32c33]',
 };
 
-const STATUS_STYLES: Record<ConnectionStatus,
-  {
-    indicator: string;
-    badge: string
-}> = {
-  connecting: {
-    indicator: 'bg-amber-600',
-    badge: 'border-amber-200 text-amber-800',
-  },
-
-  connected: {
-    indicator: 'bg-emerald-600',
-    badge: 'border-emerald-200 text-emerald-800',
-  },
-
-  disconnected: {
-    indicator: 'bg-slate-500',
-    badge: 'border-slate-300 text-slate-700',
-  },
-
-  error: {
-    indicator: 'bg-red-600',
-    badge: 'border-red-200 text-red-800',
-  },
-};
-
-function ConnectionBadge({status}: ConnectionBadgeProps) {
-  const statusStyle = STATUS_STYLES[status];
-
-  return (
-    <span
-      className={`
-        inline-flex min-h-8 items-center gap-2
-        rounded border bg-white px-3 py-1.5
-        text-xs font-semibold
-        ${statusStyle.badge}
-      `}
-    >
-      <span
-        className={`
-          h-2 w-2 rounded-full
-          ${statusStyle.indicator}
-        `}
-        aria-hidden="true"
-      />
-
-      {CONNECTION_LABEL[status]}
-    </span>
-  );
+function ConnectionBadge({ status }: ConnectionBadgeProps) {
+  return <span className={`inline-flex min-h-8 items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold ${styles[status]}`}><span className={`h-1.5 w-1.5 rounded-full ${status === 'connected' ? 'bg-[#00849a]' : status === 'connecting' ? 'bg-[#c68624]' : 'bg-[#bd2f35]'}`} />{labels[status]}</span>;
 }
 
 export default ConnectionBadge;

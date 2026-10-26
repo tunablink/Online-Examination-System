@@ -28,6 +28,20 @@ class MessageTypeContractTests {
                 "REGISTERED",
                 "LOGIN",
                 "LOGGED_IN",
+                "CREATE_EXAM",
+                "EXAM_CREATED",
+                "GET_TEACHER_EXAMS",
+                "TEACHER_EXAMS",
+                "GET_EXAM",
+                "EXAM_DETAILS",
+                "UPDATE_EXAM",
+                "EXAM_UPDATED",
+                "PUBLISH_EXAM",
+                "EXAM_PUBLISHED",
+                "CLOSE_EXAM",
+                "EXAM_CLOSED",
+                "DELETE_EXAM",
+                "EXAM_DELETED",
                 "ERROR"
         );
 
@@ -84,6 +98,27 @@ class MessageTypeContractTests {
                 ),
                 () -> assertTrue(
                         MessageType.LOGIN.isAcceptedFromClient()
+                ),
+                () -> assertTrue(
+                        MessageType.CREATE_EXAM.isAcceptedFromClient()
+                ),
+                () -> assertTrue(
+                        MessageType.GET_TEACHER_EXAMS.isAcceptedFromClient()
+                ),
+                () -> assertTrue(
+                        MessageType.GET_EXAM.isAcceptedFromClient()
+                ),
+                () -> assertTrue(
+                        MessageType.UPDATE_EXAM.isAcceptedFromClient()
+                ),
+                () -> assertTrue(
+                        MessageType.PUBLISH_EXAM.isAcceptedFromClient()
+                ),
+                () -> assertTrue(
+                        MessageType.CLOSE_EXAM.isAcceptedFromClient()
+                ),
+                () -> assertTrue(
+                        MessageType.DELETE_EXAM.isAcceptedFromClient()
                 )
         );
     }
@@ -102,6 +137,27 @@ class MessageTypeContractTests {
                 ),
                 () -> assertFalse(
                         MessageType.LOGGED_IN.isAcceptedFromClient()
+                ),
+                () -> assertFalse(
+                        MessageType.EXAM_CREATED.isAcceptedFromClient()
+                ),
+                () -> assertFalse(
+                        MessageType.TEACHER_EXAMS.isAcceptedFromClient()
+                ),
+                () -> assertFalse(
+                        MessageType.EXAM_DETAILS.isAcceptedFromClient()
+                ),
+                () -> assertFalse(
+                        MessageType.EXAM_UPDATED.isAcceptedFromClient()
+                ),
+                () -> assertFalse(
+                        MessageType.EXAM_PUBLISHED.isAcceptedFromClient()
+                ),
+                () -> assertFalse(
+                        MessageType.EXAM_CLOSED.isAcceptedFromClient()
+                ),
+                () -> assertFalse(
+                        MessageType.EXAM_DELETED.isAcceptedFromClient()
                 ),
                 () -> assertFalse(
                         MessageType.ERROR.isAcceptedFromClient()

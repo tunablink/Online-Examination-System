@@ -1,611 +1,93 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
 
-import {
-  Link,
-  useNavigate,
-  useParams,
-} from 'react-router';
-
-import ConnectionBadge from '../../components/common/ConnectionBadge';
-
+import Icon from '../../components/common/Icon';
+import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
 import { MOCK_EXAM_ATTEMPT } from '../../mocks/attempt';
-
-import type {
-  AnswerMap,
-  AutosaveStatus,
-} from '../../types/attempt';
-
-import type {
-  ConnectionStatus,
-} from '../../websocket/useExamWebSocket';
-
-import ExamTimer from './components/ExamTimer';
+import type { AnswerMap, AutosaveStatus } from '../../types/attempt';
+import type { ConnectionStatus } from '../../websocket/useExamWebSocket';
 import QuestionNavigator from './components/QuestionNavigator';
 import QuestionPanel from './components/QuestionPanel';
 import SubmitExamDialog from './components/SubmitExamDialog';
 
-interface ExamRoomPageProps {
-  connectionStatus: ConnectionStatus;
+interface ExamRoomPageProps { connectionStatus: ConnectionStatus; }
+const autosaveLabels: Record<AutosaveStatus, string> = { IDLE: 'Ready to save', SAVING: 'Saving…', SAVED: 'Autosaved just now', ERROR: 'Save failed' };
+
+function formatTime(value: number) {
+  const safe = Math.max(0, Math.floor(value));
+  return [Math.floor(safe / 3600), Math.floor((safe % 3600) / 60), safe % 60].map((part) => String(part).padStart(2, '0')).join(':');
 }
 
-const AUTOSAVE_LABELS: Record<
-  AutosaveStatus,
-  string
-> = {
-  IDLE: 'No unsaved changes',
-  SAVING: 'Saving answer...',
-  SAVED: 'Answer saved',
-  ERROR: 'Answer could not be saved',
-};
-
-function ExamRoomPage({
-  connectionStatus,
-}: ExamRoomPageProps) {
+function ExamRoomPage({ connectionStatus }: ExamRoomPageProps) {
   const navigate = useNavigate();
-
-  const { examId } = useParams<{
-    examId: string;
-  }>();
-
-  const [currentQuestionIndex, setCurrentQuestionIndex] =
-    useState(0);
-
-  const [answers, setAnswers] =
-    useState<AnswerMap>({});
-
-  const [
-    flaggedQuestionIds,
-    setFlaggedQuestionIds,
-  ] = useState<Set<string>>(
-    () => new Set(),
-  );
-
-  const [autosaveStatus, setAutosaveStatus] =
-    useState<AutosaveStatus>('IDLE');
-
-  const [remainingSeconds, setRemainingSeconds] =
-    useState(
-      MOCK_EXAM_ATTEMPT.durationSeconds,
-    );
-
-  const [showSubmitDialog, setShowSubmitDialog] =
-    useState(false);
-
-  const [submitted, setSubmitted] =
-    useState(false);
-
-  const autosaveTimerRef =
-    useRef<number | null>(null);
-
-  const attemptMatchesRoute =
-    MOCK_EXAM_ATTEMPT.examId === examId;
-
-  const questions =
-    MOCK_EXAM_ATTEMPT.questions;
-
-  const currentQuestion =
-    questions[currentQuestionIndex];
-
-  const answeredCount =
-    Object.keys(answers).length;
+  const { examId } = useParams();
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+  const [answers, setAnswers] = useState<AnswerMap>({});
+  const [flaggedQuestionIds, setFlaggedQuestionIds] = useState<Set<string>>(() => new Set());
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('IDLE');
+  const [remainingSeconds, setRemainingSeconds] = useState(MOCK_EXAM_ATTEMPT.durationSeconds);
+  const [showSubmitDialog, setShowSubmitDialog] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+  const autosaveTimerRef = useRef<number | null>(null);
+  const questions = MOCK_EXAM_ATTEMPT.questions;
+  const currentQuestion = questions[currentQuestionIndex];
+  const answeredCount = Object.keys(answers).length;
 
   useEffect(() => {
-    if (submitted) {
-      return;
-    }
-
-    const timerId = window.setInterval(() => {
-      setRemainingSeconds(
-        (currentRemainingSeconds) =>
-          Math.max(
-            0,
-            currentRemainingSeconds - 1,
-          ),
-      );
-    }, 1000);
-
-    return () => {
-      window.clearInterval(timerId);
-    };
+    if (submitted) return;
+    const timer = window.setInterval(() => setRemainingSeconds((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearInterval(timer);
   }, [submitted]);
 
-  useEffect(() => {
-    return () => {
-      if (autosaveTimerRef.current !== null) {
-        window.clearTimeout(
-          autosaveTimerRef.current,
-        );
-      }
-    };
-  }, []);
+  useEffect(() => () => { if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current); }, []);
 
-  if (!attemptMatchesRoute) {
-    return (
-      <main
-        className="
-          grid min-h-screen place-items-center
-          bg-[#f4f7fb] p-6
-        "
-      >
-        <section
-          className="
-            w-full max-w-lg rounded-xl
-            border border-slate-200
-            bg-white p-8 text-center
-          "
-        >
-          <p
-            className="
-              text-[11px] font-bold uppercase
-              tracking-[0.14em] text-red-600
-            "
-          >
-            Attempt unavailable
-          </p>
-
-          <h1
-            className="
-              mt-3 text-2xl font-semibold
-              text-slate-950
-            "
-          >
-            Examination attempt not found
-          </h1>
-
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            This mock attempt does not match the examination in the
-            current route.
-          </p>
-
-          <Link
-            className="
-              mt-6 inline-flex min-h-11
-              items-center justify-center
-              rounded-md bg-blue-700 px-5
-              text-sm font-semibold text-white
-            "
-            to="/student/exams"
-          >
-            Return to examinations
-          </Link>
-        </section>
-      </main>
-    );
+  if (MOCK_EXAM_ATTEMPT.examId !== examId) {
+    return <main className="grid min-h-screen place-items-center bg-[#f5f9fb] p-6"><section className="w-full max-w-lg rounded-xl border border-[#dce7ea] bg-white p-8 text-center"><Icon className="mx-auto text-[#bd2f35]" name="alert" size={28} /><h1 className="mt-4 text-xl font-bold">Examination attempt not found</h1><Link className="mt-5 inline-flex text-sm font-semibold text-[#00778b]" to="/student/exams">Return to examinations</Link></section></main>;
   }
 
-  const handleSelectChoice = (
-    questionId: string,
-    choiceId: string,
-  ) => {
-    setAnswers((currentAnswers) => ({
-      ...currentAnswers,
-      [questionId]: choiceId,
-    }));
-
+  const selectChoice = (questionId: string, choiceId: string) => {
+    setAnswers((current) => ({ ...current, [questionId]: choiceId }));
     setAutosaveStatus('SAVING');
-
-    if (autosaveTimerRef.current !== null) {
-      window.clearTimeout(
-        autosaveTimerRef.current,
-      );
-    }
-
-    /*
-     * Đây chỉ là mô phỏng độ trễ auto-save.
-     * Sau này đoạn này sẽ gọi sendMessage('SAVE_ANSWER', ...).
-     */
-    autosaveTimerRef.current =
-      window.setTimeout(() => {
-        setAutosaveStatus('SAVED');
-        autosaveTimerRef.current = null;
-      }, 700);
+    if (autosaveTimerRef.current !== null) window.clearTimeout(autosaveTimerRef.current);
+    autosaveTimerRef.current = window.setTimeout(() => { setAutosaveStatus('SAVED'); autosaveTimerRef.current = null; }, 700);
   };
 
-  const handleToggleFlag = (
-    questionId: string,
-  ) => {
-    setFlaggedQuestionIds(
-      (currentFlaggedIds) => {
-        const nextFlaggedIds =
-          new Set(currentFlaggedIds);
-
-        if (
-          nextFlaggedIds.has(questionId)
-        ) {
-          nextFlaggedIds.delete(questionId);
-        } else {
-          nextFlaggedIds.add(questionId);
-        }
-
-        return nextFlaggedIds;
-      },
-    );
-  };
-
-  const handlePreviousQuestion = () => {
-    setCurrentQuestionIndex(
-      (currentIndex) =>
-        Math.max(0, currentIndex - 1),
-    );
-  };
-
-  const handleNextQuestion = () => {
-    setCurrentQuestionIndex(
-      (currentIndex) =>
-        Math.min(
-          questions.length - 1,
-          currentIndex + 1,
-        ),
-    );
-  };
-
-  const handleConfirmSubmit = () => {
-    /*
-     * Sau này chỉ set submitted khi server trả SUBMITTED.
-     * Không được tự tin client đã nộp thành công.
-     */
-    setShowSubmitDialog(false);
-    setSubmitted(true);
-  };
+  const toggleFlag = (questionId: string) => setFlaggedQuestionIds((current) => {
+    const next = new Set(current);
+    if (next.has(questionId)) next.delete(questionId); else next.add(questionId);
+    return next;
+  });
 
   if (submitted) {
-    return (
-      <main
-        className="
-          grid min-h-screen place-items-center
-          bg-[#f4f7fb] p-6
-        "
-      >
-        <section
-          className="
-            w-full max-w-xl rounded-xl
-            border border-emerald-200
-            bg-white p-9 text-center
-            shadow-[0_20px_50px_rgb(15_23_42/0.08)]
-          "
-        >
-          <div
-            className="
-              mx-auto grid h-14 w-14
-              place-items-center rounded-full
-              bg-emerald-100
-              text-lg font-bold text-emerald-700
-            "
-            aria-hidden="true"
-          >
-            OK
-          </div>
-
-          <p
-            className="
-              mt-6 text-[11px] font-bold uppercase
-              tracking-[0.15em] text-emerald-700
-            "
-          >
-            Submission recorded
-          </p>
-
-          <h1
-            className="
-              mt-3 text-2xl font-semibold
-              tracking-[-0.03em] text-slate-950
-            "
-          >
-            Your examination has been submitted
-          </h1>
-
-          <p className="mt-3 text-sm leading-6 text-slate-600">
-            This is currently a frontend mock. The final version will
-            show this confirmation only after the Java server commits
-            the submission successfully.
-          </p>
-
-          <button
-            className="
-              mt-7 min-h-11 rounded-md
-              bg-blue-700 px-5
-              text-sm font-semibold text-white
-              transition-colors hover:bg-blue-800
-            "
-            type="button"
-            onClick={() =>
-              navigate('/student/exams', {
-                replace: true,
-              })
-            }
-          >
-            Return to examinations
-          </button>
-        </section>
-      </main>
-    );
+    return <main className="grid min-h-screen place-items-center bg-[#f5f9fb] p-6"><section className="w-full max-w-xl rounded-xl border border-[#c7e2e6] bg-white p-9 text-center shadow-[0_20px_50px_rgba(15,42,51,.08)]"><span className="mx-auto grid h-14 w-14 place-items-center rounded-full bg-[#e8f7f8] text-[#00778b]"><Icon name="check" size={26} /></span><p className="mt-5 text-[10px] font-bold uppercase tracking-[.12em] text-[#00778b]">Submission recorded locally</p><h1 className="mt-2 text-2xl font-bold tracking-[-.03em]">Your examination has been submitted</h1><p className="mt-3 text-[11px] leading-5 text-[#718087]">The submission service is still scheduled for the next backend milestone. This preview preserves the existing local confirmation behavior.</p><button className="mt-6 h-10 rounded-lg bg-[#00778b] px-5 text-[11px] font-semibold text-white" onClick={() => navigate('/student/exams', { replace: true })} type="button">Return to dashboard</button></section></main>;
   }
 
   return (
-    <main className="min-h-screen bg-[#eef2f7] text-slate-950">
-      <header
-        className="
-          sticky top-0 z-30
-          border-b border-slate-200
-          bg-white/95 backdrop-blur
-        "
-      >
-        <div
-          className="
-            mx-auto flex min-h-[72px]
-            w-full max-w-[1440px]
-            items-center justify-between
-            gap-6 px-6
-            max-md:flex-col
-            max-md:items-stretch
-            max-md:gap-3 max-md:py-3
-            max-sm:px-4
-          "
-        >
-          <div className="min-w-0">
-            <div
-              className="
-                flex flex-wrap items-center gap-2
-                text-[10px] font-bold uppercase
-                tracking-[0.14em] text-blue-700
-              "
-            >
-              <span>
-                {MOCK_EXAM_ATTEMPT.courseCode}
-              </span>
-
-              <span aria-hidden="true">/</span>
-
-              <span>
-                {MOCK_EXAM_ATTEMPT.examCode}
-              </span>
-            </div>
-
-            <h1
-              className="
-                mt-1 truncate text-sm
-                font-semibold text-slate-950
-              "
-            >
-              {MOCK_EXAM_ATTEMPT.examTitle}
-            </h1>
-          </div>
-
-          <div
-            className="
-              flex items-center gap-4
-              max-md:justify-between
-            "
-          >
-            <ConnectionBadge
-              status={connectionStatus}
-            />
-
-            <ExamTimer
-              remainingSeconds={
-                remainingSeconds
-              }
-            />
-
-            <button
-              className="
-                min-h-11 rounded-md
-                bg-red-700 px-4
-                text-xs font-semibold text-white
-                transition-colors
-                hover:bg-red-800
-              "
-              type="button"
-              onClick={() =>
-                setShowSubmitDialog(true)
-              }
-            >
-              Submit examination
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <div
-        className="
-          mx-auto grid w-full max-w-[1440px]
-          grid-cols-[260px_minmax(0,1fr)]
-          items-start gap-6 px-6 py-6
-          max-lg:grid-cols-1
-          max-sm:px-4
-        "
-      >
-        <aside
-          className="
-            sticky top-[96px] space-y-4
-            max-lg:static
-          "
-        >
-          <QuestionNavigator
-            questions={questions}
-            currentQuestionIndex={
-              currentQuestionIndex
-            }
-            answers={answers}
-            flaggedQuestionIds={
-              flaggedQuestionIds
-            }
-            onSelectQuestion={
-              setCurrentQuestionIndex
-            }
-          />
-
-          <section
-            className="
-              rounded-xl border border-slate-200
-              bg-white p-5
-            "
-          >
-            <p
-              className="
-                text-[10px] font-bold uppercase
-                tracking-[0.13em] text-slate-400
-              "
-            >
-              Progress
-            </p>
-
-            <div className="mt-3 flex items-end justify-between">
-              <p className="text-2xl font-semibold text-slate-950">
-                {answeredCount}
-              </p>
-
-              <p className="text-xs text-slate-500">
-                of {questions.length} answered
-              </p>
-            </div>
-
-            <div
-              className="
-                mt-3 h-2 overflow-hidden
-                rounded-full bg-slate-100
-              "
-            >
-              <div
-                className="
-                  h-full rounded-full
-                  bg-emerald-500
-                  transition-[width]
-                "
-                style={{
-                  width: `${
-                    (answeredCount /
-                      questions.length) *
-                    100
-                  }%`,
-                }}
-              />
-            </div>
-
-            <p
-              className={`
-                mt-4 text-xs font-semibold
-                ${
-                  autosaveStatus === 'ERROR'
-                    ? 'text-red-700'
-                    : autosaveStatus === 'SAVING'
-                      ? 'text-amber-700'
-                      : autosaveStatus === 'SAVED'
-                        ? 'text-emerald-700'
-                        : 'text-slate-500'
-                }
-              `}
-            >
-              {AUTOSAVE_LABELS[
-                autosaveStatus
-              ]}
-            </p>
-          </section>
-        </aside>
-
-        <div className="min-w-0">
-          <QuestionPanel
-            question={currentQuestion}
-            questionNumber={
-              currentQuestionIndex + 1
-            }
-            totalQuestions={
-              questions.length
-            }
-            selectedChoiceId={
-              answers[currentQuestion.id]
-            }
-            isFlagged={flaggedQuestionIds.has(
-              currentQuestion.id,
-            )}
-            disabled={
-              remainingSeconds <= 0 ||
-              connectionStatus !== 'connected'
-            }
-            onSelectChoice={
-              handleSelectChoice
-            }
-            onToggleFlag={
-              handleToggleFlag
-            }
-          />
-
-          <div
-            className="
-              mt-5 flex items-center
-              justify-between gap-4
-              rounded-xl border
-              border-slate-200
-              bg-white p-4
-            "
-          >
-            <button
-              className="
-                min-h-11 rounded-md
-                border border-slate-300
-                bg-white px-4
-                text-sm font-semibold
-                text-slate-700
-                transition-colors
-                hover:border-blue-400
-                hover:text-blue-700
-                disabled:cursor-not-allowed
-                disabled:opacity-40
-              "
-              type="button"
-              disabled={
-                currentQuestionIndex === 0
-              }
-              onClick={
-                handlePreviousQuestion
-              }
-            >
-              Previous question
-            </button>
-
-            <p className="text-xs text-slate-500 max-sm:hidden">
-              Question{' '}
-              {currentQuestionIndex + 1} of{' '}
-              {questions.length}
-            </p>
-
-            <button
-              className="
-                min-h-11 rounded-md
-                bg-blue-700 px-4
-                text-sm font-semibold text-white
-                transition-colors
-                hover:bg-blue-800
-                disabled:cursor-not-allowed
-                disabled:bg-slate-300
-              "
-              type="button"
-              disabled={
-                currentQuestionIndex ===
-                questions.length - 1
-              }
-              onClick={handleNextQuestion}
-            >
-              Next question
-            </button>
-          </div>
+    <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
+      <StudentPortalHeader compact currentSection={`${MOCK_EXAM_ATTEMPT.examTitle} · ${MOCK_EXAM_ATTEMPT.examCode}`} onSubmit={() => setShowSubmitDialog(true)} timerLabel={formatTime(remainingSeconds)} />
+      <div className="border-b border-[#e2eaed] bg-white">
+        <div className="mx-auto flex min-h-[78px] max-w-[1460px] items-center justify-between gap-5 px-6 max-md:flex-col max-md:items-start max-md:py-4 max-sm:px-4">
+          <div><div className="flex flex-wrap items-center gap-2"><span className="h-2 w-2 rounded-full bg-[#00778b]" /><h1 className="text-[22px] font-bold tracking-[-.03em] max-sm:text-[19px]">{MOCK_EXAM_ATTEMPT.courseCode}: {MOCK_EXAM_ATTEMPT.examTitle}</h1><span className="rounded-full bg-[#edf1f2] px-2.5 py-1 text-[11px] font-semibold text-[#53636a]">Mid-Semester Exam</span></div><div className="mt-2 flex flex-wrap gap-3 text-[12px] font-semibold text-[#607178]"><span className="inline-flex items-center gap-1"><Icon className="text-[#00778b]" name="shield" size={14} />Secure AI Proctor Active: Cam & Mic On</span><span className="inline-flex items-center gap-1 text-[#00778b]"><Icon name="refresh" size={14} />{autosaveLabels[autosaveStatus]}</span><span className={connectionStatus === 'connected' ? 'text-[#00778b]' : 'text-[#b42b31]'}>{connectionStatus === 'connected' ? '● Live connection' : '● Connection interrupted'}</span></div></div>
+          <div className="flex gap-2"><span className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef3f4] px-3 text-[12px] font-semibold"><Icon className="text-[#9b6a00]" name="clock" size={15} />{formatTime(remainingSeconds)} remaining</span><button className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef3f4] px-3 text-[12px] font-semibold" onClick={() => setShowSubmitDialog(true)} type="button"><Icon className="text-[#00778b]" name="eye" size={15} />Review & submit</button></div>
         </div>
       </div>
 
-      {showSubmitDialog && (
-        <SubmitExamDialog
-          answeredCount={answeredCount}
-          totalQuestions={questions.length}
-          onCancel={() =>
-            setShowSubmitDialog(false)
-          }
-          onConfirm={handleConfirmSubmit}
-        />
-      )}
+      <div className="mx-auto grid w-full max-w-[1460px] grid-cols-[minmax(0,1fr)_390px] items-start gap-6 px-6 py-6 max-xl:grid-cols-1 max-sm:px-4">
+        <div className="min-w-0">
+          <QuestionPanel disabled={remainingSeconds <= 0 || connectionStatus !== 'connected'} isFlagged={flaggedQuestionIds.has(currentQuestion.id)} onSelectChoice={selectChoice} onToggleFlag={toggleFlag} question={currentQuestion} questionNumber={currentQuestionIndex + 1} selectedChoiceId={answers[currentQuestion.id]} totalQuestions={questions.length} />
+          <div className="mt-4 flex items-center justify-between rounded-xl border border-[#dce7ea] bg-white p-4">
+            <button className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef2f3] px-4 text-[12px] font-semibold text-[#4e5f65] disabled:opacity-40" disabled={currentQuestionIndex === 0} onClick={() => setCurrentQuestionIndex((value) => Math.max(0, value - 1))} type="button"><Icon name="arrow-left" size={14} />Previous</button>
+            <button className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00778b] px-5 text-[12px] font-semibold text-white hover:bg-[#006273] disabled:bg-[#b8c9cd]" disabled={currentQuestionIndex === questions.length - 1} onClick={() => setCurrentQuestionIndex((value) => Math.min(questions.length - 1, value + 1))} type="button">Save & next<Icon name="arrow-right" size={14} /></button>
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-[#dce7ea] bg-white px-5 py-4 text-[11px] text-[#617177] max-sm:flex-col"><span><strong className="text-[#405057]">Hotkeys:</strong> Alt + N Next · Alt + P Previous · 1…4 Choose option</span><button type="button">⚠ Report ambiguity</button></div>
+        </div>
+
+        <aside className="sticky top-[88px] grid gap-5 max-xl:static">
+          <QuestionNavigator answers={answers} currentQuestionIndex={currentQuestionIndex} flaggedQuestionIds={flaggedQuestionIds} onSelectQuestion={setCurrentQuestionIndex} questions={questions} />
+          <section className="rounded-xl border border-[#dce7ea] bg-white p-5"><p className="text-[10px] font-bold uppercase tracking-[.07em] text-[#5c6b71]">Approved exam toolset</p><div className="mt-3 grid grid-cols-2 gap-2"><div className="rounded-lg bg-[#eef2f3] p-3"><Icon className="text-[#00778b]" name="document" size={15} /><p className="mt-2 text-[10px] font-semibold">Calculator</p><p className="text-[8px] text-[#7c898e]">Scientific mode</p></div><div className="rounded-lg bg-[#eef2f3] p-3"><Icon className="text-[#00778b]" name="book" size={15} /><p className="mt-2 text-[10px] font-semibold">Formulas</p><p className="text-[8px] text-[#7c898e]">Course reference</p></div></div><button className="mt-4 text-[10px] font-semibold text-[#00778b]" type="button">Open digital scratchpad →</button></section>
+        </aside>
+      </div>
+      {showSubmitDialog && <SubmitExamDialog answeredCount={answeredCount} onCancel={() => setShowSubmitDialog(false)} onConfirm={() => { setShowSubmitDialog(false); setSubmitted(true); }} totalQuestions={questions.length} />}
     </main>
   );
 }

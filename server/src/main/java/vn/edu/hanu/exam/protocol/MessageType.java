@@ -11,6 +11,20 @@ public enum MessageType {
     REGISTERED(false),
     LOGIN(true),
     LOGGED_IN(false),
+    CREATE_EXAM(true),
+    EXAM_CREATED(false),
+    GET_TEACHER_EXAMS(true),
+    TEACHER_EXAMS(false),
+    GET_EXAM(true),
+    EXAM_DETAILS(false),
+    UPDATE_EXAM(true),
+    EXAM_UPDATED(false),
+    PUBLISH_EXAM(true),
+    EXAM_PUBLISHED(false),
+    CLOSE_EXAM(true),
+    EXAM_CLOSED(false),
+    DELETE_EXAM(true),
+    EXAM_DELETED(false),
     ERROR(false);
 
     private final boolean acceptedFromClient;

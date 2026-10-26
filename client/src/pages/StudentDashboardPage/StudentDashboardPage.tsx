@@ -1,298 +1,53 @@
-import { useMemo, useState } from "react";
-import { Link } from "react-router";
-import StudentPortalHeader from "../../components/layout/StudentPortalHeader";
+import { useMemo, useState } from 'react';
+import { Link } from 'react-router';
 
-import { MOCK_STUDENT_EXAMS } from "../../mocks/exams";
+import { useAuth } from '../../auth/useAuth';
+import Icon from '../../components/common/Icon';
+import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
+import { MOCK_STUDENT_EXAMS } from '../../mocks/exams';
+import type { ExamStatus, StudentExam } from '../../types/exam';
 
-import type { ExamStatus, StudentExam } from "../../types/exam";
-import { useAuth } from "../../auth/useAuth";
+type ExamFilter = 'ALL' | 'ACTIVE' | 'UPCOMING' | 'COMPLETED';
 
-type ExamFilter = "ALL" | "ACTIVE" | "UPCOMING" | "COMPLETED";
-
-interface StatusAppearance {
-  label: string;
-  badgeClassName: string;
-  dotClassName: string;
-}
-
-const STATUS_APPEARANCE: Record<ExamStatus, StatusAppearance> = {
-  AVAILABLE: {
-    label: "Available now",
-    badgeClassName: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    dotClassName: "bg-emerald-500",
-  },
-
-  IN_PROGRESS: {
-    label: "In progress",
-    badgeClassName: "border-blue-200 bg-blue-50 text-blue-800",
-    dotClassName: "bg-blue-500",
-  },
-
-  UPCOMING: {
-    label: "Upcoming",
-    badgeClassName: "border-amber-200 bg-amber-50 text-amber-800",
-    dotClassName: "bg-amber-500",
-  },
-
-  SUBMITTED: {
-    label: "Submitted",
-    badgeClassName: "border-slate-200 bg-slate-50 text-slate-700",
-    dotClassName: "bg-slate-500",
-  },
-
-  RESULT_RELEASED: {
-    label: "Result released",
-    badgeClassName: "border-violet-200 bg-violet-50 text-violet-800",
-    dotClassName: "bg-violet-500",
-  },
+const statusStyles: Record<ExamStatus, string> = {
+  AVAILABLE: 'border-[#a8d7df] bg-[#eef9fa] text-[#00778b]',
+  IN_PROGRESS: 'border-[#a8d7df] bg-[#e8f7fa] text-[#00778b]',
+  UPCOMING: 'border-[#ead6b7] bg-[#fff8ed] text-[#9a6415]',
+  SUBMITTED: 'border-[#dce4e7] bg-[#f2f5f6] text-[#617077]',
+  RESULT_RELEASED: 'border-[#cfd9e7] bg-[#f3f6fb] text-[#405f84]',
 };
 
-const FILTERS: Array<{
-  value: ExamFilter;
-  label: string;
-}> = [
-  {
-    value: "ALL",
-    label: "All examinations",
-  },
-  {
-    value: "ACTIVE",
-    label: "Available",
-  },
-  {
-    value: "UPCOMING",
-    label: "Upcoming",
-  },
-  {
-    value: "COMPLETED",
-    label: "Completed",
-  },
-];
+const dateFormatter = new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit', hour12: false });
 
-const DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
-  weekday: "short",
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-});
-
-function formatExamDate(value: string): string {
-  return DATE_FORMATTER.format(new Date(value));
+function matchesFilter(exam: StudentExam, filter: ExamFilter) {
+  if (filter === 'ALL') return true;
+  if (filter === 'ACTIVE') return exam.status === 'AVAILABLE' || exam.status === 'IN_PROGRESS';
+  if (filter === 'UPCOMING') return exam.status === 'UPCOMING';
+  return exam.status === 'SUBMITTED' || exam.status === 'RESULT_RELEASED';
 }
 
-function matchesFilter(exam: StudentExam, filter: ExamFilter): boolean {
-  if (filter === "ALL") {
-    return true;
-  }
-
-  if (filter === "ACTIVE") {
-    return exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS";
-  }
-
-  if (filter === "UPCOMING") {
-    return exam.status === "UPCOMING";
-  }
-
-  return exam.status === "SUBMITTED" || exam.status === "RESULT_RELEASED";
-}
-
-interface ExamCardProps {
-  exam: StudentExam;
-}
-
-function ExamCard({ exam }: ExamCardProps) {
-  const statusAppearance = STATUS_APPEARANCE[exam.status];
-
-  const destination =
-    exam.status === "RESULT_RELEASED"
-      ? `/student/exams/${exam.id}/result`
-      : `/student/exams/${exam.id}`;
-
-  const actionLabel =
-    exam.status === "AVAILABLE"
-      ? "View and enter exam"
-      : exam.status === "IN_PROGRESS"
-        ? "Continue examination"
-        : exam.status === "RESULT_RELEASED"
-          ? "View result"
-          : exam.status === "SUBMITTED"
-            ? "View submission"
-            : "View details";
+function ExamCard({ exam }: { exam: StudentExam }) {
+  const destination = exam.status === 'RESULT_RELEASED' ? `/student/exams/${exam.id}/result` : `/student/exams/${exam.id}`;
+  const active = exam.status === 'AVAILABLE' || exam.status === 'IN_PROGRESS';
+  const action = exam.status === 'IN_PROGRESS' ? 'Continue exam' : exam.status === 'AVAILABLE' ? 'Enter exam' : exam.status === 'RESULT_RELEASED' ? 'View result' : 'View details';
 
   return (
-    <article
-      className="
-        rounded-xl border border-slate-200
-        bg-white p-5
-        transition-all duration-200
-        hover:-translate-y-0.5
-        hover:border-slate-300
-        hover:shadow-[0_12px_30px_rgb(15_23_42/0.08)]
-      "
-    >
-      <div
-        className="
-          flex items-start justify-between gap-4
-          max-sm:flex-col
-        "
-      >
-        <div className="min-w-0">
-          <div
-            className="
-              flex flex-wrap items-center gap-2
-              text-xs font-semibold
-            "
-          >
-            <span className="text-blue-700">{exam.courseCode}</span>
-
-            <span
-              className="
-                h-1 w-1 rounded-full bg-slate-300
-              "
-              aria-hidden="true"
-            />
-
-            <span className="text-slate-500">{exam.examCode}</span>
-          </div>
-
-          <h3
-            className="
-              mt-3 text-lg font-semibold
-              leading-7 tracking-[-0.02em]
-              text-slate-950
-            "
-          >
-            {exam.title}
-          </h3>
-
-          <p className="mt-1 text-sm text-slate-500">{exam.courseName}</p>
-        </div>
-
-        <span
-          className={`
-            inline-flex shrink-0 items-center
-            gap-2 rounded-full border
-            px-2.5 py-1.5
-            text-xs font-semibold
-            ${statusAppearance.badgeClassName}
-          `}
-        >
-          <span
-            className={`
-              h-1.5 w-1.5 rounded-full
-              ${statusAppearance.dotClassName}
-            `}
-            aria-hidden="true"
-          />
-
-          {statusAppearance.label}
-        </span>
+    <article className="group rounded-xl border border-[#dce7ea] bg-white p-5 transition hover:-translate-y-0.5 hover:border-[#a8cbd2] hover:shadow-[0_12px_30px_rgba(20,65,76,.07)]">
+      <div className="flex items-start justify-between gap-3">
+        <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#edf6f7] font-mono text-[12px] font-bold text-[#00778b]">{exam.courseCode.slice(0, 2)}</span>
+        <span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${statusStyles[exam.status]}`}>{exam.status.replaceAll('_', ' ')}</span>
       </div>
-
-      <div
-        className="
-          mt-5 grid grid-cols-3 gap-3
-          border-y border-slate-100 py-4
-          max-sm:grid-cols-1
-        "
-      >
-        <div>
-          <p
-            className="
-              text-[10px] font-bold uppercase
-              tracking-[0.12em] text-slate-400
-            "
-          >
-            Starts
-          </p>
-
-          <p className="mt-1.5 text-xs font-medium text-slate-700">
-            {formatExamDate(exam.startsAt)}
-          </p>
-        </div>
-
-        <div>
-          <p
-            className="
-              text-[10px] font-bold uppercase
-              tracking-[0.12em] text-slate-400
-            "
-          >
-            Duration
-          </p>
-
-          <p className="mt-1.5 text-xs font-medium text-slate-700">
-            {exam.durationMinutes} minutes
-          </p>
-        </div>
-
-        <div>
-          <p
-            className="
-              text-[10px] font-bold uppercase
-              tracking-[0.12em] text-slate-400
-            "
-          >
-            Questions
-          </p>
-
-          <p className="mt-1.5 text-xs font-medium text-slate-700">
-            {exam.questionCount} questions
-          </p>
-        </div>
+      <p className="mt-5 text-[11px] font-bold uppercase tracking-[.09em] text-[#71868d]">{exam.courseCode} · {exam.examCode}</p>
+      <h3 className="mt-2 min-h-14 text-[19px] font-bold leading-7 tracking-[-.025em] text-[#243238]">{exam.title}</h3>
+      <p className="mt-1 text-[13px] text-[#687b82]">{exam.courseName}</p>
+      <div className="mt-5 grid grid-cols-3 gap-2 border-y border-[#edf1f2] py-4 text-[12px] leading-5 text-[#64787f]">
+        <span><Icon className="mb-1 text-[#00778b]" name="calendar" size={14} />{dateFormatter.format(new Date(exam.startsAt))}</span>
+        <span><Icon className="mb-1 text-[#00778b]" name="clock" size={14} />{exam.durationMinutes} mins</span>
+        <span><Icon className="mb-1 text-[#00778b]" name="document" size={14} />{exam.questionCount} items</span>
       </div>
-
-      <div
-        className="
-          mt-4 flex items-center justify-between gap-4
-          max-sm:flex-col max-sm:items-stretch
-        "
-      >
-        <div className="text-xs text-slate-500">
-          {exam.status === "RESULT_RELEASED" &&
-          exam.score !== undefined &&
-          exam.totalScore !== undefined ? (
-            <p>
-              Score:{" "}
-              <strong className="text-slate-900">
-                {exam.score}/{exam.totalScore}
-              </strong>
-            </p>
-          ) : (
-            <p>End time: {formatExamDate(exam.endsAt)}</p>
-          )}
-        </div>
-
-        <Link
-          className={`
-            inline-flex min-h-10 items-center
-            justify-center rounded-md px-4
-            text-xs font-semibold
-            transition-colors
-            ${
-              exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS"
-                ? `
-                  bg-blue-700 text-white
-                  hover:bg-blue-800
-                `
-                : `
-                  border border-slate-300
-                  bg-white text-slate-800
-                  hover:border-blue-700
-                  hover:text-blue-700
-                `
-            }
-          `}
-          to={destination}
-        >
-          {actionLabel}
-          <span className="ml-2 text-base leading-none" aria-hidden="true">
-            →
-          </span>
-        </Link>
+      <div className="mt-4 flex items-center justify-between gap-3">
+        <p className="text-[11px] text-[#71868d]">Secure AI proctoring enabled</p>
+        <Link className={`inline-flex h-10 items-center gap-1.5 rounded-lg px-4 text-[12px] font-semibold ${active ? 'bg-[#00778b] text-white hover:bg-[#006273]' : 'border border-[#d7e2e5] text-[#53636a] hover:border-[#8cbcc5]'}`} to={destination}>{action}<Icon name="arrow-right" size={13} /></Link>
       </div>
     </article>
   );
@@ -300,253 +55,42 @@ function ExamCard({ exam }: ExamCardProps) {
 
 function StudentDashboardPage() {
   const { user } = useAuth();
-
-  const displayName = user?.fullName ?? "Student";
-  const [activeFilter, setActiveFilter] = useState<ExamFilter>("ALL");
-
-  const filteredExams = useMemo(
-    () =>
-      MOCK_STUDENT_EXAMS.filter((exam) => matchesFilter(exam, activeFilter)),
-    [activeFilter],
-  );
-
-  const availableCount = MOCK_STUDENT_EXAMS.filter(
-    (exam) => exam.status === "AVAILABLE" || exam.status === "IN_PROGRESS",
-  ).length;
-
-  const upcomingCount = MOCK_STUDENT_EXAMS.filter(
-    (exam) => exam.status === "UPCOMING",
-  ).length;
-
-  const completedCount = MOCK_STUDENT_EXAMS.filter(
-    (exam) => exam.status === "SUBMITTED" || exam.status === "RESULT_RELEASED",
-  ).length;
+  const [filter, setFilter] = useState<ExamFilter>('ALL');
+  const [query, setQuery] = useState('');
+  const filtered = useMemo(() => MOCK_STUDENT_EXAMS.filter((exam) => matchesFilter(exam, filter) && `${exam.title} ${exam.courseCode}`.toLowerCase().includes(query.toLowerCase())), [filter, query]);
+  const activeCount = MOCK_STUDENT_EXAMS.filter((exam) => exam.status === 'AVAILABLE' || exam.status === 'IN_PROGRESS').length;
+  const completedCount = MOCK_STUDENT_EXAMS.filter((exam) => exam.status === 'SUBMITTED' || exam.status === 'RESULT_RELEASED').length;
 
   return (
-    <main className="min-h-screen bg-[#f4f7fb] text-slate-950">
-      <StudentPortalHeader currentSection="Examinations" />
-
-      <div
-        className="
-          mx-auto w-full max-w-[1240px]
-          px-6 py-10
-          max-sm:px-4 max-sm:py-7
-        "
-      >
-        <section
-          className="
-            flex items-end justify-between gap-8
-            max-md:flex-col max-md:items-start
-          "
-        >
-          <div>
-            <p
-              className="
-                text-[11px] font-bold uppercase
-                tracking-[0.16em] text-blue-700
-              "
-            >
-              Examination overview
-            </p>
-
-            <h1
-              className="
-                mt-3 text-3xl font-semibold
-                tracking-[-0.035em] text-slate-950
-              "
-            >
-              Welcome back, {displayName}
-            </h1>
-
-            <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-              Review your assigned examinations and check their availability
-              before entering an examination room.
-            </p>
-          </div>
-
-          <div
-            className="
-              rounded-md border border-blue-100
-              bg-blue-50 px-4 py-3
-              text-xs leading-5 text-blue-900
-            "
-          >
-            <p className="font-semibold">Server connection required</p>
-
-            <p className="mt-1 text-blue-700">
-              Keep this browser open during an active examination.
-            </p>
+    <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
+      <StudentPortalHeader currentSection="Student Dashboard" />
+      <div className="mx-auto w-full max-w-[1360px] px-6 py-7 max-sm:px-4">
+        <section className="flex items-end justify-between gap-5 max-md:flex-col max-md:items-start">
+          <div><p className="text-[10px] font-bold uppercase tracking-[.12em] text-[#00778b]">Assessment workspace</p><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">Good morning, {user?.fullName ?? 'Student'}</h1><p className="mt-1 text-[11px] text-[#718087]">Review your schedule, enter active exams, and track recent submissions.</p></div>
+          <div className="flex gap-3">
+            <div className="rounded-xl border border-[#dce7ea] bg-white px-5 py-3"><p className="text-[9px] font-bold uppercase text-[#859399]">Active</p><p className="mt-1 text-xl font-bold text-[#00778b]">{activeCount}</p></div>
+            <div className="rounded-xl border border-[#dce7ea] bg-white px-5 py-3"><p className="text-[9px] font-bold uppercase text-[#859399]">Completed</p><p className="mt-1 text-xl font-bold">{completedCount}</p></div>
           </div>
         </section>
 
-        <section
-          className="
-            mt-8 grid grid-cols-3 gap-4
-            max-md:grid-cols-1
-          "
-          aria-label="Examination statistics"
-        >
-          <article
-            className="
-              rounded-lg border border-emerald-200
-              bg-emerald-50 p-5
-            "
-          >
-            <p
-              className="
-                text-[10px] font-bold uppercase
-                tracking-[0.14em] text-emerald-700
-              "
-            >
-              Available now
-            </p>
-
-            <p className="mt-3 text-3xl font-semibold text-emerald-950">
-              {availableCount}
-            </p>
-
-            <p className="mt-2 text-xs text-emerald-800">Ready to enter</p>
-          </article>
-
-          <article
-            className="
-              rounded-lg border border-amber-200
-              bg-amber-50 p-5
-            "
-          >
-            <p
-              className="
-                text-[10px] font-bold uppercase
-                tracking-[0.14em] text-amber-700
-              "
-            >
-              Upcoming
-            </p>
-
-            <p className="mt-3 text-3xl font-semibold text-amber-950">
-              {upcomingCount}
-            </p>
-
-            <p className="mt-2 text-xs text-amber-800">
-              Scheduled examinations
-            </p>
-          </article>
-
-          <article
-            className="
-              rounded-lg border border-slate-200
-              bg-white p-5
-            "
-          >
-            <p
-              className="
-                text-[10px] font-bold uppercase
-                tracking-[0.14em] text-slate-500
-              "
-            >
-              Completed
-            </p>
-
-            <p className="mt-3 text-3xl font-semibold text-slate-950">
-              {completedCount}
-            </p>
-
-            <p className="mt-2 text-xs text-slate-500">Submitted or graded</p>
-          </article>
+        <section className="mt-6 rounded-xl border border-[#cfe2e6] bg-gradient-to-r from-[#e8f6f8] to-white p-5">
+          <div className="flex items-center justify-between gap-5 max-md:flex-col max-md:items-start">
+            <div className="flex items-center gap-4"><span className="grid h-11 w-11 place-items-center rounded-full bg-white text-[#00778b] shadow-sm"><Icon name="shield" size={20} /></span><div><p className="text-[11px] font-bold text-[#224048]">Secure examination environment is ready</p><p className="mt-1 text-[10px] text-[#638087]">Run the device check before joining a proctored assessment.</p></div></div>
+            <Link className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#a7ccd3] bg-white px-4 text-[10px] font-semibold text-[#00778b]" to="/student/exams/exam-java-001"><Icon name="camera" size={14} />Run system check</Link>
+          </div>
         </section>
 
-        <section className="mt-10">
-          <div
-            className="
-              flex items-center justify-between gap-6
-              max-md:flex-col max-md:items-start
-            "
-          >
-            <div>
-              <h2
-                className="
-                  text-xl font-semibold
-                  tracking-[-0.02em] text-slate-950
-                "
-              >
-                Assigned examinations
-              </h2>
-
-              <p className="mt-1 text-sm text-slate-500">
-                {filteredExams.length}{" "}
-                {filteredExams.length === 1 ? "examination" : "examinations"}
-              </p>
+        <section className="mt-6">
+          <div className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-stretch">
+            <div className="flex flex-wrap gap-1 rounded-lg bg-[#eaf0f2] p-1">
+              {(['ALL', 'ACTIVE', 'UPCOMING', 'COMPLETED'] as ExamFilter[]).map((value) => <button className={`rounded-md px-4 py-2 text-[10px] font-semibold ${filter === value ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`} key={value} onClick={() => setFilter(value)} type="button">{value === 'ALL' ? 'All examinations' : value.charAt(0) + value.slice(1).toLowerCase()}</button>)}
             </div>
-
-            <div
-              className="
-                flex flex-wrap gap-1
-                rounded-lg border border-slate-200
-                bg-white p-1
-              "
-              aria-label="Filter examinations"
-            >
-              {FILTERS.map((filter) => {
-                const isActive = activeFilter === filter.value;
-
-                return (
-                  <button
-                    key={filter.value}
-                    className={`
-                      min-h-9 rounded-md px-3
-                      text-xs font-semibold
-                      transition-colors
-                      ${
-                        isActive
-                          ? `
-                            bg-slate-900
-                            text-white
-                          `
-                          : `
-                            text-slate-600
-                            hover:bg-slate-100
-                            hover:text-slate-950
-                          `
-                      }
-                    `}
-                    type="button"
-                    onClick={() => setActiveFilter(filter.value)}
-                  >
-                    {filter.label}
-                  </button>
-                );
-              })}
-            </div>
+            <label className="relative block w-full max-w-[280px]"><Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7b8a90]" name="search" size={15} /><input className="h-10 w-full rounded-lg border border-[#dbe5e8] bg-white pl-9 pr-3 text-[10px] outline-none focus:border-[#76b5c0]" onChange={(event) => setQuery(event.target.value)} placeholder="Search exams or courses..." value={query} /></label>
           </div>
-
-          {filteredExams.length > 0 ? (
-            <div
-              className="
-                mt-5 grid grid-cols-2 gap-5
-                max-lg:grid-cols-1
-              "
-            >
-              {filteredExams.map((exam) => (
-                <ExamCard key={exam.id} exam={exam} />
-              ))}
-            </div>
-          ) : (
-            <div
-              className="
-                mt-5 rounded-xl
-                border border-dashed border-slate-300
-                bg-white px-6 py-16 text-center
-              "
-            >
-              <p className="text-sm font-semibold text-slate-800">
-                No examinations in this category
-              </p>
-
-              <p className="mt-2 text-xs text-slate-500">
-                Try selecting a different filter.
-              </p>
-            </div>
-          )}
+          <div className="mt-4 grid grid-cols-3 gap-4 max-xl:grid-cols-2 max-md:grid-cols-1">
+            {filtered.map((exam) => <ExamCard exam={exam} key={exam.id} />)}
+          </div>
+          {filtered.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-[#cbd9dd] bg-white py-14 text-center text-xs text-[#77868b]">No examinations match this filter.</div>}
         </section>
       </div>
     </main>

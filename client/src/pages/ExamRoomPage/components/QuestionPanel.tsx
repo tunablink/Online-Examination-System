@@ -1,190 +1,24 @@
-import type {
-  ExamQuestion,
-} from '../../../types/attempt';
+import Icon from '../../../components/common/Icon';
+import type { ExamQuestion } from '../../../types/attempt';
 
 interface QuestionPanelProps {
-  question: ExamQuestion;
-  questionNumber: number;
-  totalQuestions: number;
-  selectedChoiceId?: string;
-  isFlagged: boolean;
-  disabled?: boolean;
-  onSelectChoice: (
-    questionId: string,
-    choiceId: string,
-  ) => void;
-  onToggleFlag: (questionId: string) => void;
+  question: ExamQuestion; questionNumber: number; totalQuestions: number; selectedChoiceId?: string; isFlagged: boolean; disabled?: boolean;
+  onSelectChoice: (questionId: string, choiceId: string) => void; onToggleFlag: (questionId: string) => void;
 }
 
-function QuestionPanel({
-  question,
-  questionNumber,
-  totalQuestions,
-  selectedChoiceId,
-  isFlagged,
-  disabled = false,
-  onSelectChoice,
-  onToggleFlag,
-}: QuestionPanelProps) {
+function QuestionPanel({ question, questionNumber, totalQuestions, selectedChoiceId, isFlagged, disabled = false, onSelectChoice, onToggleFlag }: QuestionPanelProps) {
   return (
-    <section
-      className="
-        rounded-xl border border-slate-200
-        bg-white p-8
-        shadow-[0_10px_25px_rgb(15_23_42/0.04)]
-        max-sm:p-5
-      "
-    >
-      <div
-        className="
-          flex items-start justify-between gap-5
-          max-sm:flex-col
-        "
-      >
-        <div>
-          <p
-            className="
-              text-[11px] font-bold uppercase
-              tracking-[0.14em] text-blue-700
-            "
-          >
-            Question {questionNumber} of {totalQuestions}
-          </p>
-
-          <p className="mt-2 text-xs text-slate-500">
-            {question.points}{' '}
-            {question.points === 1
-              ? 'point'
-              : 'points'}
-          </p>
-        </div>
-
-        <button
-          className={`
-            rounded-md border px-3 py-2
-            text-xs font-semibold
-            transition-colors
-            ${
-              isFlagged
-                ? `
-                  border-amber-300 bg-amber-50
-                  text-amber-800
-                `
-                : `
-                  border-slate-300 bg-white
-                  text-slate-700
-                  hover:border-amber-400
-                  hover:text-amber-800
-                `
-            }
-          `}
-          type="button"
-          aria-pressed={isFlagged}
-          disabled={disabled}
-          onClick={() =>
-            onToggleFlag(question.id)
-          }
-        >
-          {isFlagged
-            ? 'Flagged for review'
-            : 'Flag for review'}
-        </button>
+    <section className="rounded-xl border border-[#dce7ea] bg-white p-6 max-sm:p-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-2"><span className="rounded-lg bg-[#00778b] px-3 py-1.5 text-[12px] font-bold text-white">Question {questionNumber}</span><span className="font-mono text-[11px] font-semibold text-[#56676d]">/ {totalQuestions} Questions</span><span className="rounded-md bg-[#f0f4f5] px-2 py-1 text-[11px] text-[#5f6e74]">Single Choice</span><span className="rounded-md bg-[#eaf7f8] px-2 py-1 text-[11px] font-semibold text-[#00778b]">+{question.points.toFixed(2)} Marks</span></div>
+        <button className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-[11px] font-semibold ${isFlagged ? 'bg-[#fff4dd] text-[#93620e]' : 'bg-[#f2f5f6] text-[#53636a]'}`} disabled={disabled} onClick={() => onToggleFlag(question.id)} type="button"><Icon name="flag" size={14} />{isFlagged ? 'Flagged' : 'Flag for Review'}</button>
       </div>
-
-      <h2
-        className="
-          mt-7 text-xl font-semibold leading-8
-          tracking-[-0.02em] text-slate-950
-        "
-      >
-        {question.content}
-      </h2>
-
-      <div
-        className="mt-7 grid gap-3"
-        role="radiogroup"
-        aria-label={`Answers for question ${questionNumber}`}
-      >
-        {question.choices.map(
-          (choice, choiceIndex) => {
-            const isSelected =
-              selectedChoiceId === choice.id;
-
-            return (
-              <label
-                key={choice.id}
-                className={`
-                  grid cursor-pointer
-                  grid-cols-[38px_1fr]
-                  items-center gap-3
-                  rounded-lg border p-4
-                  transition-colors
-                  ${
-                    isSelected
-                      ? `
-                        border-blue-600 bg-blue-50
-                        text-blue-950
-                      `
-                      : `
-                        border-slate-200 bg-white
-                        text-slate-700
-                        hover:border-blue-300
-                        hover:bg-slate-50
-                      `
-                  }
-                  ${
-                    disabled
-                      ? 'cursor-not-allowed opacity-60'
-                      : ''
-                  }
-                `}
-              >
-                <input
-                  className="sr-only"
-                  type="radio"
-                  name={`question-${question.id}`}
-                  value={choice.id}
-                  checked={isSelected}
-                  disabled={disabled}
-                  onChange={() =>
-                    onSelectChoice(
-                      question.id,
-                      choice.id,
-                    )
-                  }
-                />
-
-                <span
-                  className={`
-                    grid h-8 w-8 place-items-center
-                    rounded-full border
-                    text-xs font-bold
-                    ${
-                      isSelected
-                        ? `
-                          border-blue-700
-                          bg-blue-700 text-white
-                        `
-                        : `
-                          border-slate-300
-                          bg-white text-slate-600
-                        `
-                    }
-                  `}
-                  aria-hidden="true"
-                >
-                  {String.fromCharCode(
-                    65 + choiceIndex,
-                  )}
-                </span>
-
-                <span className="text-sm leading-6">
-                  {choice.content}
-                </span>
-              </label>
-            );
-          },
-        )}
+      <h2 className="mt-7 max-w-4xl text-[23px] font-medium leading-10 tracking-[-.025em] text-[#202d32] max-sm:text-[20px] max-sm:leading-8">{question.content}</h2>
+      <div className="mt-6 grid gap-2" role="radiogroup" aria-label={`Answers for question ${questionNumber}`}>
+        {question.choices.map((choice, index) => {
+          const selected = choice.id === selectedChoiceId;
+          return <label className={`grid cursor-pointer grid-cols-[24px_30px_1fr_20px] items-center gap-3 rounded-xl border px-5 py-4 transition ${selected ? 'border-[#b7e1e7] bg-[#eaf8fa]' : 'border-[#e7ecee] bg-white hover:border-[#b9d6dc]'} ${disabled ? 'cursor-not-allowed opacity-60' : ''}`} key={choice.id}><input className="h-4 w-4 accent-[#00778b]" checked={selected} disabled={disabled} name={`question-${question.id}`} onChange={() => onSelectChoice(question.id, choice.id)} type="radio" value={choice.id} /><span className={`grid h-8 w-8 place-items-center rounded-full text-[12px] font-bold ${selected ? 'bg-[#00778b] text-white' : 'bg-[#eef2f3] text-[#56666c]'}`}>{String.fromCharCode(65 + index)}</span><span className={`text-[16px] leading-7 max-sm:text-[15px] ${selected ? 'font-semibold text-[#254049]' : 'text-[#47575d]'}`}>{choice.content}</span>{selected && <Icon className="text-[#00778b]" name="check" size={18} />}</label>;
+        })}
       </div>
     </section>
   );
