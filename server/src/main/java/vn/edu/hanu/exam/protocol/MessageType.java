@@ -90,6 +90,12 @@ public enum MessageType {
     GET_ATTEMPT_RESULT(true),
     ATTEMPT_RESULT(false),
 
+    REPORT_ACTIVITY(true),
+    ACTIVITY_RECORDED(false),
+
+    GET_EXAM_MONITORING(true),
+    EXAM_MONITORING(false),
+
     ERROR(false);
 
     private final boolean acceptedFromClient;
