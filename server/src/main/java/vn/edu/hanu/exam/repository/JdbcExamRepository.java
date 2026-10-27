@@ -20,8 +20,8 @@ import vn.edu.hanu.exam.domain.ExamStatus;
 @Repository
 public class JdbcExamRepository implements ExamRepository {
     private static final String SELECT_COLUMNS = """
-            SELECT id, title, description, duration_minutes, status,
-                   created_by, created_at, updated_at
+            SELECT id, title, description, duration_minutes, scheduled_at,
+                   status, created_by, created_at, updated_at
             FROM exams
             """;
     private static final RowMapper<Exam> EXAM_ROW_MAPPER = JdbcExamRepository::mapExam;
@@ -34,14 +34,29 @@ public class JdbcExamRepository implements ExamRepository {
 
     @Override
     public Exam create(String title, String description, int durationMinutes, long createdBy) {
+        return create(title, description, durationMinutes, null, createdBy);
+    }
+
+    @Override
+    public Exam create(
+            String title,
+            String description,
+            int durationMinutes,
+            OffsetDateTime scheduledAt,
+            long createdBy) {
         String sql = """
-                INSERT INTO exams (title, description, duration_minutes, status, created_by)
-                VALUES (:title, :description, :durationMinutes, :status, :createdBy)
+                INSERT INTO exams (
+                    title, description, duration_minutes, scheduled_at, status, created_by
+                )
+                VALUES (
+                    :title, :description, :durationMinutes, :scheduledAt, :status, :createdBy
+                )
                 """;
         MapSqlParameterSource parameters = new MapSqlParameterSource()
                 .addValue("title", title)
                 .addValue("description", description)
                 .addValue("durationMinutes", durationMinutes)
+                .addValue("scheduledAt", scheduledAt)
                 .addValue("status", ExamStatus.DRAFT.name())
                 .addValue("createdBy", createdBy);
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -94,6 +109,46 @@ public class JdbcExamRepository implements ExamRepository {
                     duration_minutes = :durationMinutes,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :examId
+                  AND created_by = :teacherId
+                  AND status = :status
+                """;
+
+        MapSqlParameterSource parameters = new MapSqlParameterSource()
+                .addValue("examId", examId)
+                .addValue("teacherId", teacherId)
+                .addValue("title", title)
+                .addValue("description", description)
+                .addValue("durationMinutes", durationMinutes)
+                .addValue("status", ExamStatus.DRAFT.name());
+
+        int affectedRows = jdbcTemplate.update(sql, parameters);
+        if (affectedRows == 0) {
+            return Optional.empty();
+        }
+        if (affectedRows != 1) {
+            throw new IllegalStateException(
+                    "Expected one updated exam, but affected " + affectedRows + " rows.");
+        }
+        return findByIdAndCreatedBy(examId, teacherId);
+    }
+
+    @Override
+    public Optional<Exam> updateDraft(
+            long examId,
+            long teacherId,
+            String title,
+            String description,
+            int durationMinutes,
+            OffsetDateTime scheduledAt
+    ) {
+        String sql = """
+                UPDATE exams
+                SET title = :title,
+                    description = :description,
+                    duration_minutes = :durationMinutes,
+                    scheduled_at = :scheduledAt,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :examId
                 AND created_by = :teacherId
                 AND status = :status
                 """;
@@ -104,6 +159,7 @@ public class JdbcExamRepository implements ExamRepository {
                 .addValue("title", title)
                 .addValue("description", description)
                 .addValue("durationMinutes", durationMinutes)
+                .addValue("scheduledAt", scheduledAt)
                 .addValue("status", ExamStatus.DRAFT.name());
 
         int affectedRows = jdbcTemplate.update(sql, parameters);
@@ -273,6 +329,7 @@ public class JdbcExamRepository implements ExamRepository {
                 resultSet.getString("title"),
                 resultSet.getString("description"),
                 resultSet.getInt("duration_minutes"),
+                resultSet.getObject("scheduled_at", OffsetDateTime.class),
                 ExamStatus.valueOf(resultSet.getString("status")),
                 resultSet.getLong("created_by"),
                 resultSet.getObject("created_at", OffsetDateTime.class),

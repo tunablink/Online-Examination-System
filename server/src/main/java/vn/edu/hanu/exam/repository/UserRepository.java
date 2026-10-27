@@ -10,6 +10,8 @@ public interface UserRepository {
     Optional<User> findById(long id);
     Optional<User> findByUsername(String username);
     Optional<User> findByEmail(String email);
+    User updateDepartment(long userId, String department);
+    User updatePasswordHash(long userId, String passwordHash);
     boolean existsByUsername(String username);
     boolean existsByEmail(String email);
     long count();

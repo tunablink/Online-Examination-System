@@ -15,6 +15,15 @@ public enum MessageType {
     LOGIN(true),
     LOGGED_IN(false),
 
+    GET_PROFILE(true),
+    PROFILE_DETAILS(false),
+
+    UPDATE_PROFILE(true),
+    PROFILE_UPDATED(false),
+
+    CHANGE_PASSWORD(true),
+    PASSWORD_CHANGED(false),
+
     GET_STUDENTS(true),
     STUDENTS(false),
 
@@ -62,6 +71,12 @@ public enum MessageType {
 
     GET_AVAILABLE_EXAM(true),
     AVAILABLE_EXAM_DETAILS(false),
+
+    START_EXAM(true),
+    EXAM_STARTED(false),
+
+    GET_EXAM_ATTEMPT(true),
+    EXAM_ATTEMPT_DETAILS(false),
 
     ERROR(false);
 

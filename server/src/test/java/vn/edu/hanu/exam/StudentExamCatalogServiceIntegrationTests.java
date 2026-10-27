@@ -74,6 +74,7 @@ class StudentExamCatalogServiceIntegrationTests {
         assertEquals("Published detail", details.title());
         assertEquals("Catalog description", details.description());
         assertEquals(75, details.durationMinutes());
+        assertEquals(createdAt.plusDays(1).toInstant(), details.scheduledAt().toInstant());
         assertEquals(1, details.questionCount());
         assertEquals(5, details.totalPoints());
         assertNotAvailable(draft);
@@ -101,15 +102,16 @@ class StudentExamCatalogServiceIntegrationTests {
     private long insertExam(long teacherId, String title, String status, OffsetDateTime createdAt) {
         String sql = """
                 INSERT INTO exams
-                    (title, description, duration_minutes, status, created_by, created_at, updated_at)
+                    (title, description, duration_minutes, scheduled_at, status, created_by, created_at, updated_at)
                 VALUES
-                    (:title, :description, :durationMinutes, :status, :createdBy, :createdAt, :createdAt)
+                    (:title, :description, :durationMinutes, :scheduledAt, :status, :createdBy, :createdAt, :createdAt)
                 RETURNING id
                 """;
         MapSqlParameterSource parameters = new MapSqlParameterSource()
                 .addValue("title", title)
                 .addValue("description", "Catalog description")
                 .addValue("durationMinutes", 75)
+                .addValue("scheduledAt", createdAt.plusDays(1))
                 .addValue("status", status)
                 .addValue("createdBy", teacherId)
                 .addValue("createdAt", createdAt);

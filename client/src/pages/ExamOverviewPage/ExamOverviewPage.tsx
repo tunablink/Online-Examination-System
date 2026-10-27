@@ -1,34 +1,153 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
+import { useAuth } from '../../auth/useAuth';
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
-import type { ServerExam, ServerMessageData } from '../../websocket/protocol';
+import type { ServerExam, ServerMessageData, TeacherQuestionData } from '../../websocket/protocol';
 import { useWebSocket } from '../../websocket/useWebSocket';
-
-const inputClass = 'h-10 w-full rounded-lg border border-[#d6e1e4] px-3 text-[11px] outline-none focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10';
 
 function mergeResponse(current: ServerExam, data: ServerMessageData | null): ServerExam {
   if (!data) return current;
-  return { ...current, title: data.title ?? current.title, description: data.description ?? current.description, durationMinutes: data.durationMinutes ?? current.durationMinutes, status: data.status ?? current.status, updatedAt: data.updatedAt ?? current.updatedAt };
+  return {
+    ...current,
+    title: data.title ?? current.title,
+    description: data.description ?? current.description,
+    durationMinutes: data.durationMinutes ?? current.durationMinutes,
+    scheduledAt: data.scheduledAt ?? current.scheduledAt,
+    status: data.status ?? current.status,
+    updatedAt: data.updatedAt ?? current.updatedAt,
+  };
 }
 
 function ExamOverviewPage() {
+  const { user } = useAuth();
   const { status: connectionStatus, sendMessage } = useWebSocket();
-  const { examId } = useParams(); const navigate = useNavigate(); const id = Number(examId);
-  const [exam, setExam] = useState<ServerExam | null>(null); const [form, setForm] = useState({ title: '', description: '', durationMinutes: '60' }); const [loading, setLoading] = useState(true); const [pending, setPending] = useState<string | null>(null); const [feedback, setFeedback] = useState<Feedback | null>(null); const [editing, setEditing] = useState(false);
-  useEffect(() => { if (connectionStatus !== 'connected' || !Number.isFinite(id)) return; const requestId = sendMessage('GET_EXAM', { examId: id }, (message) => { setLoading(false); if (message.type === 'EXAM_DETAILS' && message.data?.id !== undefined && message.data.title && message.data.durationMinutes && message.data.status && message.data.createdBy !== undefined && message.data.createdAt && message.data.updatedAt) { const loaded: ServerExam = { id: message.data.id, title: message.data.title, description: message.data.description ?? null, durationMinutes: message.data.durationMinutes, status: message.data.status, createdBy: message.data.createdBy, createdAt: message.data.createdAt, updatedAt: message.data.updatedAt }; setExam(loaded); setForm({ title: loaded.title, description: loaded.description ?? '', durationMinutes: String(loaded.durationMinutes) }); } else setFeedback({ type: 'error', message: `${message.error?.code ?? 'LOAD_FAILED'}: ${message.error?.message ?? 'Could not load this exam.'}` }); }); if (requestId === null) queueMicrotask(() => { setLoading(false); setFeedback({ type: 'error', message: 'The exam request could not be sent.' }); }); }, [connectionStatus, id, sendMessage]);
-  const action = (type: 'PUBLISH_EXAM' | 'CLOSE_EXAM', expected: 'EXAM_PUBLISHED' | 'EXAM_CLOSED', label: string) => { if (!exam) return; setPending(type); const requestId = sendMessage(type, { examId: exam.id }, (message) => { setPending(null); if (message.type === expected) { setExam((current) => current ? mergeResponse(current, message.data) : current); setFeedback({ type: 'success', message: `${label} was committed by the server.` }); } else setFeedback({ type: 'error', message: `${message.error?.code ?? 'REQUEST_FAILED'}: ${message.error?.message ?? `Could not ${label.toLowerCase()}.`}` }); }); if (requestId === null) { setPending(null); setFeedback({ type: 'error', message: 'The request could not be sent.' }); } };
-  const save = (event: FormEvent) => { event.preventDefault(); if (!exam) return; const duration = Number(form.durationMinutes); if (!form.title.trim() || !Number.isInteger(duration) || duration <= 0) return setFeedback({ type: 'error', message: 'Enter a title and a positive duration.' }); setPending('UPDATE_EXAM'); const requestId = sendMessage('UPDATE_EXAM', { examId: exam.id, title: form.title.trim(), description: form.description.trim(), durationMinutes: duration }, (message) => { setPending(null); if (message.type === 'EXAM_UPDATED') { setExam((current) => current ? mergeResponse(current, message.data) : current); setEditing(false); setFeedback({ type: 'success', message: 'Draft details were updated in the database.' }); } else setFeedback({ type: 'error', message: `${message.error?.code ?? 'UPDATE_FAILED'}: ${message.error?.message ?? 'Could not update the exam.'}` }); }); if (requestId === null) { setPending(null); setFeedback({ type: 'error', message: 'The update request could not be sent.' }); } };
-  const remove = () => { if (!exam || !window.confirm(`Delete draft “${exam.title}”?`)) return; setPending('DELETE_EXAM'); const requestId = sendMessage('DELETE_EXAM', { examId: exam.id }, (message) => { setPending(null); if (message.type === 'EXAM_DELETED') navigate('/teacher/exams', { replace: true }); else setFeedback({ type: 'error', message: `${message.error?.code ?? 'DELETE_FAILED'}: ${message.error?.message ?? 'Could not delete the exam.'}` }); }); if (requestId === null) setPending(null); };
+  const { examId } = useParams();
+  const navigate = useNavigate();
+  const id = Number(examId);
+  const [exam, setExam] = useState<ServerExam | null>(null);
+  const [questions, setQuestions] = useState<TeacherQuestionData[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  if (loading) return <div className="rounded-xl border border-[#dce7ea] bg-white py-20 text-center text-[11px] text-[#718087]">Loading examination through WebSocket…</div>;
-  if (!exam) return <div className="rounded-xl border border-[#edc9cc] bg-white p-10 text-center"><Icon className="mx-auto text-[#bd2f35]" name="alert" size={25} /><h1 className="mt-3 text-xl font-bold">Examination unavailable</h1><Link className="mt-5 inline-flex text-[10px] font-semibold text-[#00778b]" to="/teacher/exams">Back to examinations</Link></div>;
-  const statusClass = exam.status === 'PUBLISHED' ? 'border-[#b6dbe1] bg-[#eff9fa] text-[#00778b]' : exam.status === 'DRAFT' ? 'border-[#ead7b8] bg-[#fff8ed] text-[#986313]' : 'border-[#dce3e5] bg-[#f2f5f6] text-[#64747a]';
-  return <div><div className="flex items-center gap-2 text-[9px] font-semibold text-[#75848a]"><Link to="/teacher/exams">Examinations</Link><Icon name="arrow-right" size={10} /><span>EX-{String(exam.id).padStart(4,'0')}</span></div><section className="mt-4 flex items-start justify-between gap-5 max-lg:flex-col"><div><div className="flex items-center gap-2"><span className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold ${statusClass}`}>{exam.status}</span><span className="text-[9px] text-[#7a888d]">Updated {new Date(exam.updatedAt).toLocaleString('en-GB')}</span></div><h1 className="mt-3 text-[26px] font-bold tracking-[-.04em]">{exam.title}</h1><p className="mt-2 max-w-3xl text-[11px] leading-5 text-[#68777d]">{exam.description || 'No description has been provided.'}</p></div><div className="flex flex-wrap gap-2">{exam.status === 'DRAFT' && <><button className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d4e0e3] px-3 text-[9px] font-semibold text-[#526269]" onClick={() => setEditing((value) => !value)} type="button"><Icon name="settings" size={13} />Edit details</button><Link className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}/questions`}><Icon name="document" size={13} />Manage questions</Link><button className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-[9px] font-semibold text-white disabled:bg-[#a8bec3]" disabled={pending !== null} onClick={() => action('PUBLISH_EXAM','EXAM_PUBLISHED','Examination publication')} type="button"><Icon name="activity" size={13} />Publish exam</button></>}{exam.status === 'PUBLISHED' && <><Link className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]" to={`/teacher/monitoring/${exam.id}`}><Icon name="monitor" size={13} />Open monitoring</Link><button className="h-9 rounded-lg bg-[#25373d] px-4 text-[9px] font-semibold text-white" disabled={pending !== null} onClick={() => action('CLOSE_EXAM','EXAM_CLOSED','Examination closure')} type="button">Close exam</button></>}</div></section>
+  useEffect(() => {
+    if (connectionStatus !== 'connected' || !Number.isFinite(id)) return;
+    const requestId = sendMessage('GET_EXAM', { examId: id }, (message) => {
+      setLoading(false);
+      if (message.type === 'EXAM_DETAILS' && message.data?.id !== undefined && message.data.title && message.data.durationMinutes && message.data.status && message.data.createdBy !== undefined && message.data.createdAt && message.data.updatedAt) {
+        setExam({
+          id: message.data.id,
+          title: message.data.title,
+          description: message.data.description ?? null,
+          durationMinutes: message.data.durationMinutes,
+          scheduledAt: message.data.scheduledAt ?? null,
+          status: message.data.status,
+          createdBy: message.data.createdBy,
+          createdAt: message.data.createdAt,
+          updatedAt: message.data.updatedAt,
+        });
+      } else {
+        setFeedback({ type: 'error', message: `${message.error?.code ?? 'LOAD_FAILED'}: ${message.error?.message ?? 'Could not load this exam.'}` });
+      }
+    });
+    sendMessage('GET_EXAM_QUESTIONS', { examId: id }, (message) => {
+      if (message.type === 'EXAM_QUESTIONS' && Array.isArray(message.data?.questions)) {
+        setQuestions([...message.data.questions].sort((a, b) => a.displayOrder - b.displayOrder));
+      }
+    });
+    if (requestId === null) queueMicrotask(() => {
+      setLoading(false);
+      setFeedback({ type: 'error', message: 'The exam request could not be sent.' });
+    });
+  }, [connectionStatus, id, sendMessage]);
+
+  const action = (type: 'PUBLISH_EXAM' | 'CLOSE_EXAM', expected: 'EXAM_PUBLISHED' | 'EXAM_CLOSED', label: string) => {
+    if (!exam) return;
+    setPending(type);
+    const requestId = sendMessage(type, { examId: exam.id }, (message) => {
+      setPending(null);
+      if (message.type === expected) {
+        setExam((current) => current ? mergeResponse(current, message.data) : current);
+        setFeedback({ type: 'success', message: `${label} was committed by the server.` });
+      } else {
+        setFeedback({ type: 'error', message: `${message.error?.code ?? 'REQUEST_FAILED'}: ${message.error?.message ?? `Could not ${label.toLowerCase()}.`}` });
+      }
+    });
+    if (requestId === null) {
+      setPending(null);
+      setFeedback({ type: 'error', message: 'The request could not be sent.' });
+    }
+  };
+
+  const remove = () => {
+    if (!exam || !window.confirm(`Delete draft “${exam.title}”?`)) return;
+    setPending('DELETE_EXAM');
+    const requestId = sendMessage('DELETE_EXAM', { examId: exam.id }, (message) => {
+      setPending(null);
+      if (message.type === 'EXAM_DELETED') navigate('/teacher/exams', { replace: true });
+      else setFeedback({ type: 'error', message: `${message.error?.code ?? 'DELETE_FAILED'}: ${message.error?.message ?? 'Could not delete the exam.'}` });
+    });
+    if (requestId === null) setPending(null);
+  };
+
+  if (loading) return <div className="rounded-xl border border-[#dce7ea] bg-white py-20 text-center text-[13px] text-[#718087]">Loading examination through WebSocket…</div>;
+  if (!exam) return <div className="rounded-xl border border-[#edc9cc] bg-white p-10 text-center"><Icon className="mx-auto text-[#bd2f35]" name="alert" size={25} /><h1 className="mt-3 text-xl font-bold">Examination unavailable</h1><Link className="mt-5 inline-flex text-[11px] font-semibold text-[#00778b]" to="/teacher/exams">Back to examinations</Link></div>;
+
+  const statusClass = exam.status === 'PUBLISHED'
+    ? 'border-[#b6dbe1] bg-[#eff9fa] text-[#00778b]'
+    : exam.status === 'DRAFT'
+      ? 'border-[#ead7b8] bg-[#fff8ed] text-[#986313]'
+      : 'border-[#dce3e5] bg-[#f2f5f6] text-[#64747a]';
+  const ownerName = user?.fullName ?? user?.username ?? 'Teacher';
+
+  return <div>
+    <div className="flex items-center gap-2 text-[11px] font-semibold text-[#75848a]"><Link className="hover:text-[#00778b]" to="/teacher/exams">Examinations</Link><Icon name="arrow-right" size={11} /><span>EX-{String(exam.id).padStart(4, '0')}</span></div>
+
+    <div className="mt-4 flex items-center justify-between gap-4 max-sm:items-start">
+      <div className="flex items-center gap-2"><span className={`rounded-full border px-2.5 py-1 text-[10px] font-semibold ${statusClass}`}>{exam.status}</span><span className="text-[10px] text-[#7a888d]">Updated {new Date(exam.updatedAt).toLocaleString('en-GB')}</span></div>
+      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+        {exam.status === 'DRAFT' && <>
+          <button className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00778b] px-3 text-[10px] font-semibold text-white disabled:bg-[#a8bec3]" disabled={pending !== null} onClick={() => action('PUBLISH_EXAM', 'EXAM_PUBLISHED', 'Examination publication')} type="button"><Icon name="activity" size={13} />Publish exam</button>
+          <button className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#edc9cc] bg-white px-3 text-[10px] font-semibold text-[#b32c33] disabled:opacity-50" disabled={pending !== null} onClick={remove} type="button"><Icon name="alert" size={13} />{pending === 'DELETE_EXAM' ? 'Deleting…' : 'Delete draft'}</button>
+        </>}
+        {exam.status === 'PUBLISHED' && <>
+          <Link className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#b7d7dd] px-3 text-[10px] font-semibold text-[#00778b]" to={`/teacher/monitoring/${exam.id}`}><Icon name="monitor" size={13} />Open monitoring</Link>
+          <button className="h-9 rounded-lg bg-[#25373d] px-3 text-[10px] font-semibold text-white" disabled={pending !== null} onClick={() => action('CLOSE_EXAM', 'EXAM_CLOSED', 'Examination closure')} type="button">Close exam</button>
+        </>}
+      </div>
+    </div>
+
     {feedback && <div className="mt-5"><FeedbackMessage feedback={feedback} onClose={() => setFeedback(null)} /></div>}
-    {editing && <form className="mt-5 rounded-xl border border-[#dce7ea] bg-white p-5" onSubmit={save}><div className="flex items-center justify-between"><h2 className="text-[12px] font-bold">Edit draft details</h2><button className="text-[9px] text-[#718087]" onClick={() => setEditing(false)} type="button">Cancel</button></div><div className="mt-4 grid grid-cols-[minmax(0,1fr)_180px] gap-4 max-md:grid-cols-1"><label className="grid gap-2"><span className="text-[9px] font-semibold">Title</span><input className={inputClass} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} value={form.title} /></label><label className="grid gap-2"><span className="text-[9px] font-semibold">Duration</span><input className={inputClass} min="1" onChange={(event) => setForm((current) => ({ ...current, durationMinutes: event.target.value }))} type="number" value={form.durationMinutes} /></label><label className="col-span-2 grid gap-2 max-md:col-span-1"><span className="text-[9px] font-semibold">Description</span><textarea className="min-h-24 rounded-lg border border-[#d6e1e4] p-3 text-[11px] outline-none focus:border-[#70b2be]" onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} value={form.description} /></label></div><button className="mt-4 h-9 rounded-lg bg-[#00778b] px-4 text-[9px] font-semibold text-white" disabled={pending !== null} type="submit">{pending === 'UPDATE_EXAM' ? 'Saving…' : 'Save changes'}</button></form>}
-    <div className="mt-5 grid grid-cols-[minmax(0,2fr)_330px] gap-5 max-xl:grid-cols-1"><section className="rounded-xl border border-[#dce7ea] bg-white"><div className="border-b border-[#e7edef] px-5 py-4"><h2 className="text-[12px] font-bold">Assessment configuration</h2><p className="mt-1 text-[9px] text-[#819096]">Server-backed lifecycle and core delivery settings</p></div><div className="grid grid-cols-3 divide-x divide-[#e8edef] max-md:grid-cols-1 max-md:divide-x-0 max-md:divide-y">{[['Duration',`${exam.durationMinutes} minutes`,'clock'],['Owner',`Teacher #${exam.createdBy}`,'users'],['Created',new Date(exam.createdAt).toLocaleDateString('en-GB'),'calendar']].map(([label,value,icon]) => <div className="p-5" key={label}><Icon className="text-[#00778b]" name={icon as 'clock'} size={16} /><p className="mt-3 text-[9px] font-bold uppercase tracking-[.07em] text-[#879399]">{label}</p><p className="mt-1 text-[12px] font-semibold">{value}</p></div>)}</div><div className="border-t border-[#e7edef] p-5"><h3 className="text-[11px] font-bold">Lifecycle controls</h3><div className="mt-4 flex items-center gap-2 text-[9px] font-semibold"><span className="rounded-full bg-[#fff3dd] px-3 py-1.5 text-[#95610e]">Draft</span><Icon name="arrow-right" size={12} /><span className="rounded-full bg-[#eaf7f8] px-3 py-1.5 text-[#00778b]">Published</span><Icon name="arrow-right" size={12} /><span className="rounded-full bg-[#eff2f3] px-3 py-1.5 text-[#617177]">Closed</span></div></div></section><aside className="grid gap-4"><section className="rounded-xl border border-[#dce7ea] bg-white p-5"><h2 className="text-[12px] font-bold">Publish readiness</h2><div className="mt-4 grid gap-3 text-[10px] text-[#607178]">{['At least one persisted question','Each question has 2+ choices','Exactly one correct choice'].map((item) => <p className="flex items-center gap-2" key={item}><Icon className="text-[#00778b]" name="check" size={13} />{item}</p>)}</div><p className="mt-4 rounded-lg bg-[#fff8ed] p-3 text-[9px] leading-4 text-[#8b641f]">The backend validates these rules when publishing and returns a precise error code if the draft is incomplete.</p></section>{exam.status === 'DRAFT' && <button className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#edc9cc] bg-white text-[9px] font-semibold text-[#b32c33]" disabled={pending !== null} onClick={remove} type="button"><Icon name="alert" size={13} />Delete draft permanently</button>}</aside></div>
+
+    <section className="mt-5 w-full overflow-hidden rounded-xl border border-[#dce7ea] bg-white">
+      <div className="flex items-start justify-between gap-5 border-b border-[#e7edef] px-5 py-5 max-md:flex-col">
+        <div className="min-w-0"><h1 className="text-[15px] font-bold">{exam.title}</h1><p className="mt-1 max-w-3xl text-[11px] leading-5 text-[#819096]">{exam.description || 'No description has been provided.'}</p></div>
+        <Link className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#00778b] px-3.5 text-[10px] font-semibold text-white hover:bg-[#006273]" to={`/teacher/exams/${exam.id}/questions`}><Icon name="settings" size={13} />Manage exam</Link>
+      </div>
+
+      <div className="grid grid-cols-4 divide-x divide-[#e8edef] max-lg:grid-cols-2 max-lg:divide-y max-md:grid-cols-1 max-md:divide-x-0">
+        {[['Scheduled', exam.scheduledAt ? new Date(exam.scheduledAt).toLocaleString('en-GB') : 'Not scheduled', 'calendar'], ['Duration', `${exam.durationMinutes} minutes`, 'clock'], ['Owner', ownerName, 'users'], ['Created', new Date(exam.createdAt).toLocaleDateString('en-GB'), 'calendar']].map(([label, value, icon]) => <div className="p-5" key={label}>
+          <Icon className="text-[#00778b]" name={icon as 'clock'} size={18} />
+          <p className="mt-3 text-[10px] font-bold uppercase tracking-[.07em] text-[#879399]">{label}</p>
+          <p className="mt-1.5 text-[14px] font-semibold">{value}</p>
+        </div>)}
+      </div>
+
+      <div className="border-t border-[#e7edef] p-5">
+        <div><h2 className="text-[15px] font-bold">Questions</h2><p className="mt-1 text-[11px] text-[#819096]">{questions.length} multiple-choice {questions.length === 1 ? 'question' : 'questions'} configured for this examination</p></div>
+        <div className="mt-4 grid gap-3">
+          {questions.map((question, questionIndex) => <article className="rounded-lg border border-[#e1e9eb] bg-[#fafcfc] p-4" key={question.id}>
+            <div className="flex items-start justify-between gap-4"><h3 className="text-[13px] font-semibold leading-5 text-[#26353a]"><span className="mr-2 text-[#00778b]">{questionIndex + 1}.</span>{question.content}</h3><span className="shrink-0 rounded-full bg-[#edf3f4] px-2.5 py-1 text-[9px] font-semibold text-[#68777d]">{question.points} {question.points === 1 ? 'point' : 'points'}</span></div>
+            <div className="mt-3 grid grid-cols-2 gap-2 max-md:grid-cols-1">
+              {[...question.choices].sort((a, b) => a.displayOrder - b.displayOrder).map((choice, choiceIndex) => <div className={`flex items-center gap-2 rounded-lg border px-3 py-2.5 text-[11px] ${choice.correct ? 'border-[#a9d6dd] bg-[#eff9fa] font-semibold text-[#006f81]' : 'border-[#e1e8ea] bg-white text-[#53646a]'}`} key={choice.id}><span className={`grid h-5 w-5 shrink-0 place-items-center rounded-full text-[9px] font-bold ${choice.correct ? 'bg-[#00778b] text-white' : 'bg-[#edf2f3] text-[#66767c]'}`}>{String.fromCharCode(65 + choiceIndex)}</span><span>{choice.content}</span>{choice.correct && <Icon className="ml-auto shrink-0" name="check" size={13} />}</div>)}
+            </div>
+          </article>)}
+          {questions.length === 0 && <div className="rounded-lg border border-dashed border-[#cad9dd] bg-[#fafcfc] py-10 text-center text-[11px] text-[#7a888d]">No questions have been added to this examination.</div>}
+        </div>
+      </div>
+    </section>
   </div>;
 }
 

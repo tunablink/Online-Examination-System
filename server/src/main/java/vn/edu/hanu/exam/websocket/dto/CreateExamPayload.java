@@ -1,3 +1,9 @@
 package vn.edu.hanu.exam.websocket.dto;
 
-public record CreateExamPayload(String title, String description, int durationMinutes) {}
+import java.time.OffsetDateTime;
+
+public record CreateExamPayload(
+        String title,
+        String description,
+        int durationMinutes,
+        OffsetDateTime scheduledAt) {}

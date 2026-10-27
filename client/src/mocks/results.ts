@@ -91,6 +91,19 @@ export const MOCK_EXAM_RESULTS: ExamResult[] = [
 
 export const MOCK_ATTEMPT_HISTORY: AttemptHistoryItem[] = [
   {
+    attemptId: 'missed-database-001',
+    examId: 'exam-database-001',
+
+    examTitle: 'Database Systems Midterm',
+    examCode: 'DBS-MID-01',
+    courseCode: 'DBS201',
+    courseName: 'Database Systems',
+
+    scheduledAt: '2026-10-20T09:00:00+07:00',
+
+    status: 'MISSED',
+  },
+  {
     attemptId: 'attempt-security-001',
     examId: 'exam-security-001',
 

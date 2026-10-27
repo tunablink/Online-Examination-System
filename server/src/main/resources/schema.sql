@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL,
+    department VARCHAR(120),
 
     role VARCHAR(20) NOT NULL,
     active BOOLEAN NOT NULL DEFAULT TRUE,
@@ -40,6 +41,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower
 CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_lower
     ON users (LOWER(email));
 
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS department VARCHAR(120);
+
 -- ============================================================
 -- Bảng exams
 -- ============================================================
@@ -48,6 +52,7 @@ CREATE TABLE IF NOT EXISTS exams (
     title            VARCHAR(255) NOT NULL,
     description      TEXT,
     duration_minutes INT          NOT NULL,
+    scheduled_at     TIMESTAMP WITH TIME ZONE,
     status           VARCHAR(20)  NOT NULL DEFAULT 'DRAFT',
     created_by       BIGINT       NOT NULL,
 
@@ -74,6 +79,12 @@ CREATE TABLE IF NOT EXISTS exams (
 
 CREATE INDEX IF NOT EXISTS idx_exams_created_by
     ON exams (created_by);
+
+ALTER TABLE exams
+    ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP WITH TIME ZONE;
+
+CREATE INDEX IF NOT EXISTS idx_exams_status_scheduled_at
+    ON exams (status, scheduled_at);
 
 -- ============================================================
 -- Bảng questions
@@ -133,4 +144,92 @@ CREATE TABLE IF NOT EXISTS choices (
 );
 
 CREATE INDEX IF NOT EXISTS idx_choices_question_id
-    ON choices (question_id);
+    ON choices (question_id);
+
+-- ============================================================
+-- Exam attempts and their stable randomized question snapshots
+-- ============================================================
+CREATE TABLE IF NOT EXISTS exam_attempts (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY,
+    exam_id     BIGINT                   NOT NULL,
+    student_id  BIGINT                   NOT NULL,
+    status      VARCHAR(20)              NOT NULL DEFAULT 'IN_PROGRESS',
+    started_at  TIMESTAMP WITH TIME ZONE NOT NULL,
+    deadline    TIMESTAMP WITH TIME ZONE NOT NULL,
+
+    CONSTRAINT pk_exam_attempts
+        PRIMARY KEY (id),
+
+    CONSTRAINT fk_exam_attempts_exam_id
+        FOREIGN KEY (exam_id) REFERENCES exams(id),
+
+    CONSTRAINT fk_exam_attempts_student_id
+        FOREIGN KEY (student_id) REFERENCES users(id),
+
+    CONSTRAINT ck_exam_attempts_status
+        CHECK (status IN ('IN_PROGRESS', 'SUBMITTED', 'EXPIRED')),
+
+    CONSTRAINT ck_exam_attempts_deadline_after_start
+        CHECK (deadline > started_at)
+);
+
+CREATE INDEX IF NOT EXISTS idx_exam_attempts_exam_id
+    ON exam_attempts (exam_id);
+
+CREATE INDEX IF NOT EXISTS idx_exam_attempts_student_id
+    ON exam_attempts (student_id);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_attempts_active_student_exam
+    ON exam_attempts (exam_id, student_id)
+    WHERE status = 'IN_PROGRESS';
+
+CREATE TABLE IF NOT EXISTS attempt_questions (
+    attempt_id    BIGINT NOT NULL,
+    question_id   BIGINT NOT NULL,
+    display_order INT    NOT NULL,
+
+    CONSTRAINT pk_attempt_questions
+        PRIMARY KEY (attempt_id, question_id),
+
+    CONSTRAINT fk_attempt_questions_attempt_id
+        FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,
+
+    CONSTRAINT fk_attempt_questions_question_id
+        FOREIGN KEY (question_id) REFERENCES questions(id),
+
+    CONSTRAINT uq_attempt_questions_order
+        UNIQUE (attempt_id, display_order),
+
+    CONSTRAINT ck_attempt_questions_order_non_negative
+        CHECK (display_order >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attempt_questions_question_id
+    ON attempt_questions (question_id);
+
+CREATE TABLE IF NOT EXISTS attempt_choices (
+    attempt_id    BIGINT NOT NULL,
+    question_id   BIGINT NOT NULL,
+    choice_id     BIGINT NOT NULL,
+    display_order INT    NOT NULL,
+
+    CONSTRAINT pk_attempt_choices
+        PRIMARY KEY (attempt_id, choice_id),
+
+    CONSTRAINT fk_attempt_choices_attempt_question
+        FOREIGN KEY (attempt_id, question_id)
+        REFERENCES attempt_questions(attempt_id, question_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_attempt_choices_choice_id
+        FOREIGN KEY (choice_id) REFERENCES choices(id),
+
+    CONSTRAINT uq_attempt_choices_order
+        UNIQUE (attempt_id, question_id, display_order),
+
+    CONSTRAINT ck_attempt_choices_order_non_negative
+        CHECK (display_order >= 0)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attempt_choices_choice_id
+    ON attempt_choices (choice_id);
