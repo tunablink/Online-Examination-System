@@ -24,7 +24,9 @@ export type ClientMessageType =
   | 'START_EXAM'
   | 'GET_EXAM_ATTEMPT'
   | 'SAVE_ANSWER'
-  | 'SUBMIT_EXAM';
+  | 'SUBMIT_EXAM'
+  | 'REPORT_ACTIVITY'
+  | 'GET_EXAM_MONITORING';
 
 export type ServerMessageType =
   | 'CONNECTED'
@@ -54,6 +56,8 @@ export type ServerMessageType =
   | 'EXAM_ATTEMPT_DETAILS'
   | 'ANSWER_SAVED'
   | 'EXAM_SUBMITTED'
+  | 'ACTIVITY_RECORDED'
+  | 'EXAM_MONITORING'
   | 'ERROR';
 
 export type UserRole =
@@ -169,6 +173,52 @@ export interface SaveAnswerPayload {
 
 export interface SubmitExamPayload {
   attemptId: number;
+}
+
+export type MonitoringActivityType =
+  | 'TAB_HIDDEN'
+  | 'WINDOW_BLUR'
+  | 'DISCONNECTED'
+  | 'RECONNECTED';
+
+export type MonitoringRule =
+  | MonitoringActivityType
+  | 'MULTIPLE_WARNING_THRESHOLD';
+
+export type MonitoringSeverity = 'INFO' | 'WARNING';
+
+export interface SuspiciousActivityData {
+  id: number;
+  attemptId: number;
+  rule: MonitoringRule;
+  severity: MonitoringSeverity;
+  description: string;
+  occurredAt: string;
+  recordedAt: string;
+}
+
+export interface MonitoringAttemptData {
+  attemptId: number;
+  studentId: number;
+  studentUsername: string;
+  studentFullName: string;
+  attemptStatus: 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED';
+  deadline: string;
+  warningCount: number;
+  latestSuspiciousActivity: SuspiciousActivityData | null;
+}
+
+export interface ExamMonitoringData {
+  examId: number;
+  attempts: MonitoringAttemptData[];
+  interpretation: string;
+}
+
+export interface ActivityRecordedData {
+  activity: SuspiciousActivityData;
+  thresholdActivity: SuspiciousActivityData | null;
+  warningCount: number;
+  interpretation: string;
 }
 
 export interface ExamDetailsData {
@@ -291,6 +341,12 @@ export interface ServerMessageData {
   publishedExamCount?: number;
   closedExamCount?: number;
   recentExams?: TeacherDashboardExamData[];
+
+  activity?: SuspiciousActivityData;
+  thresholdActivity?: SuspiciousActivityData | null;
+  warningCount?: number;
+  interpretation?: string;
+  attempts?: MonitoringAttemptData[];
 }
 
 export interface ServerMessage {
