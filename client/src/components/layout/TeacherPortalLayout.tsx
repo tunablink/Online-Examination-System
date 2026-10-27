@@ -1,7 +1,7 @@
-import { NavLink, Outlet, useNavigate } from 'react-router';
+import { NavLink, Outlet } from 'react-router';
 
-import { useAuth } from '../../auth/useAuth';
 import { useWebSocket } from '../../websocket/useWebSocket';
+import AccountMenu from '../common/AccountMenu';
 import Icon, { type IconName } from '../common/Icon';
 
 interface NavigationItem {
@@ -29,27 +29,8 @@ const NAVIGATION_GROUPS: Array<{ label: string; items: NavigationItem[] }> = [
   },
 ];
 
-function getInitials(fullName: string): string {
-  return fullName
-    .trim()
-    .split(/\s+/)
-    .slice(-2)
-    .map((part) => part.charAt(0))
-    .join('')
-    .toUpperCase();
-}
-
 function TeacherPortalLayout() {
-  const navigate = useNavigate();
-  const { user, logout } = useAuth();
   const { status: connectionStatus } = useWebSocket();
-  const displayName = user?.fullName ?? 'Lecturer';
-  const accountLabel = user?.username ?? 'Teacher account';
-
-  const signOut = () => {
-    logout();
-    navigate('/login', { replace: true });
-  };
 
   return (
     <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
@@ -116,14 +97,7 @@ function TeacherPortalLayout() {
                   <Icon name="globe" size={16} /> En <Icon name="chevron-down" size={13} />
                 </button>
                 <span className="h-7 w-px bg-[#dfe7ea]" />
-                <div className="grid h-9 w-9 place-items-center rounded-full bg-[#00778b] text-[11px] font-bold text-white">{getInitials(displayName)}</div>
-                <div className="max-sm:hidden">
-                  <p className="max-w-[150px] truncate text-[11px] font-semibold text-[#263238]">{displayName}</p>
-                  <p className="mt-0.5 text-[9px] text-[#78868b]">Lead Proctor · {accountLabel}</p>
-                </div>
-                <button className="grid h-8 w-8 place-items-center rounded-lg text-[#77868b] hover:bg-red-50 hover:text-red-700" onClick={signOut} type="button" aria-label="Sign out">
-                  <Icon name="logout" size={16} />
-                </button>
+                <AccountMenu fallbackAccountLabel="Teacher account" fallbackName="Lecturer" profilePath="/teacher/profile" />
               </div>
             </div>
           </header>

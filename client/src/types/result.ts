@@ -27,7 +27,8 @@ export interface ExamResult {
 
 export type AttemptHistoryStatus =
   | 'AWAITING_RESULT'
-  | 'RESULT_RELEASED';
+  | 'RESULT_RELEASED'
+  | 'MISSED';
 
 export interface AttemptHistoryItem {
   attemptId: string;
@@ -38,7 +39,8 @@ export interface AttemptHistoryItem {
   courseCode: string;
   courseName: string;
 
-  submittedAt: string;
+  submittedAt?: string;
+  scheduledAt?: string;
 
   status: AttemptHistoryStatus;
 

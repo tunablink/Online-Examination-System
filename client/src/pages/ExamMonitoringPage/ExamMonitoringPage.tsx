@@ -44,7 +44,7 @@ function ExamMonitoringPage() {
     if (connectionStatus !== 'connected') return;
     const requestId = sendMessage('GET_EXAM', { examId: numericExamId }, (message) => {
       if (message.type === 'EXAM_DETAILS' && message.data?.id !== undefined && message.data.title && message.data.durationMinutes && message.data.status && message.data.createdBy !== undefined && message.data.createdAt && message.data.updatedAt) {
-        setRemoteResult({ examId: numericExamId, exam: { id: message.data.id, title: message.data.title, description: message.data.description ?? null, durationMinutes: message.data.durationMinutes, status: message.data.status, createdBy: message.data.createdBy, createdAt: message.data.createdAt, updatedAt: message.data.updatedAt } });
+        setRemoteResult({ examId: numericExamId, exam: { id: message.data.id, title: message.data.title, description: message.data.description ?? null, durationMinutes: message.data.durationMinutes, scheduledAt: message.data.scheduledAt ?? null, status: message.data.status, createdBy: message.data.createdBy, createdAt: message.data.createdAt, updatedAt: message.data.updatedAt } });
       } else {
         setRemoteResult({ examId: numericExamId, error: message.error?.message ?? 'Could not load this examination.' });
       }

@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,15 +35,17 @@ class ExamManagementServiceIntegrationTests {
         @Test
         void createPersistsDraftWithAuthenticatedTeacherAsCreator() {
                 long teacherId = insertUser("TEACHER");
+                OffsetDateTime scheduledAt = OffsetDateTime.now().plusDays(30).withSecond(0).withNano(0);
 
                 ExamDetails created = examService.createExam(
                                 teacherId,
-                                new CreateExamCommand(" Java Midterm ", "Core Java", 60));
+                                new CreateExamCommand(" Java Midterm ", "Core Java", 60, scheduledAt));
 
                 assertTrue(created.id() > 0);
                 assertEquals("Java Midterm", created.title());
                 assertEquals(ExamStatus.DRAFT, created.status());
                 assertEquals(teacherId, created.createdBy());
+                assertEquals(scheduledAt.toInstant(), created.scheduledAt().toInstant());
                 assertEquals(created, examService.findByIdAndCreatedBy(created.id(), teacherId));
         }
 
@@ -56,6 +59,15 @@ class ExamManagementServiceIntegrationTests {
                                 teacherId, new CreateExamCommand("Exam", null, 0)));
                 assertCode("INVALID_EXAM_DURATION", () -> examService.createExam(
                                 teacherId, new CreateExamCommand("Exam", null, -1)));
+                assertCode("INVALID_EXAM_SCHEDULE", () -> examService.createExam(
+                                teacherId, new CreateExamCommand("Exam", null, 30, null)));
+                assertCode("INVALID_EXAM_SCHEDULE", () -> examService.createExam(
+                                teacherId,
+                                new CreateExamCommand(
+                                                "Exam",
+                                                null,
+                                                30,
+                                                OffsetDateTime.now().minusMinutes(1))));
         }
 
         @Test

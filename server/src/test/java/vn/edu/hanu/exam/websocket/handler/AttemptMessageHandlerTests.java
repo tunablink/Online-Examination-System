@@ -1,0 +1,171 @@
+package vn.edu.hanu.exam.websocket.handler;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Map;
+
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import tools.jackson.databind.json.JsonMapper;
+import vn.edu.hanu.exam.domain.UserRole;
+import vn.edu.hanu.exam.domain.attempt.AttemptStatus;
+import vn.edu.hanu.exam.exception.AttemptException;
+import vn.edu.hanu.exam.protocol.ServerMessage;
+import vn.edu.hanu.exam.service.LoggedInUser;
+import vn.edu.hanu.exam.service.attempt.AttemptChoiceDetails;
+import vn.edu.hanu.exam.service.attempt.AttemptQuestionDetails;
+import vn.edu.hanu.exam.service.attempt.ExamAttemptDetails;
+import vn.edu.hanu.exam.service.attempt.ExamAttemptService;
+import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
+
+class AttemptMessageHandlerTests {
+    private static final String SESSION_ID = "student-session";
+    private static final String REQUEST_ID = "attempt-request";
+
+    private ExamAttemptService attemptService;
+    private AuthenticatedSessionRegistry sessionRegistry;
+    private JsonMapper jsonMapper;
+    private AttemptMessageHandler handler;
+
+    @BeforeEach
+    void setUp() {
+        attemptService = mock(ExamAttemptService.class);
+        sessionRegistry = new AuthenticatedSessionRegistry();
+        jsonMapper = JsonMapper.builder().build();
+        handler = new AttemptMessageHandler(attemptService, sessionRegistry, jsonMapper);
+    }
+
+    @Test
+    void authenticatedStudentCanStartExamAndRequestIdIsPreserved() throws Exception {
+        authenticate(UserRole.STUDENT, 20L);
+        ExamAttemptDetails details = sampleAttempt();
+        when(attemptService.startExam(12L, 20L)).thenReturn(details);
+
+        ServerMessage response = handler.handleStart(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 12L));
+
+        assertSuccess(response, "EXAM_STARTED", details);
+        verify(attemptService).startExam(12L, 20L);
+        assertFalse(jsonMapper.writeValueAsString(response).contains("\"correct\""));
+    }
+
+    @Test
+    void authenticatedStudentCanRecoverOwnAttempt() {
+        authenticate(UserRole.STUDENT, 20L);
+        ExamAttemptDetails details = sampleAttempt();
+        when(attemptService.getAttempt(31L, 20L)).thenReturn(details);
+
+        ServerMessage response = handler.handleGet(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("attemptId", 31L));
+
+        assertSuccess(response, "EXAM_ATTEMPT_DETAILS", details);
+        verify(attemptService).getAttempt(31L, 20L);
+    }
+
+    @Test
+    void unauthenticatedSessionIsRejectedBeforeCallingService() {
+        ServerMessage response = handler.handleStart(
+                "missing-session",
+                REQUEST_ID,
+                Map.of("examId", 12L));
+
+        assertError(response, "AUTHENTICATION_REQUIRED");
+        verify(attemptService, never()).startExam(12L, 20L);
+    }
+
+    @Test
+    void teacherIsForbiddenBeforeCallingService() {
+        authenticate(UserRole.TEACHER, 20L);
+
+        ServerMessage response = handler.handleStart(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("examId", 12L));
+
+        assertError(response, "FORBIDDEN");
+        verify(attemptService, never()).startExam(12L, 20L);
+    }
+
+    @Test
+    void invalidPayloadTypesAreRejected() {
+        authenticate(UserRole.STUDENT, 20L);
+
+        assertError(handler.handleStart(SESSION_ID, REQUEST_ID, null), "INVALID_PAYLOAD");
+        assertError(handler.handleStart(SESSION_ID, REQUEST_ID, Map.of()), "INVALID_PAYLOAD");
+        assertError(
+                handler.handleStart(SESSION_ID, REQUEST_ID, Map.of("examId", "12")),
+                "INVALID_PAYLOAD");
+        assertError(
+                handler.handleGet(SESSION_ID, REQUEST_ID, Map.of("attemptId", 31.5)),
+                "INVALID_PAYLOAD");
+    }
+
+    @Test
+    void ownershipBusinessErrorIsReturnedWithoutLeakingInternals() {
+        authenticate(UserRole.STUDENT, 20L);
+        when(attemptService.getAttempt(31L, 20L)).thenThrow(
+                new AttemptException("ATTEMPT_NOT_FOUND", "Attempt was not found."));
+
+        ServerMessage response = handler.handleGet(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("attemptId", 31L));
+
+        assertError(response, "ATTEMPT_NOT_FOUND");
+        assertEquals("Attempt was not found.", response.error().message());
+    }
+
+    private void authenticate(UserRole role, long userId) {
+        sessionRegistry.authenticate(
+                SESSION_ID,
+                new LoggedInUser(userId, "attempt-user", "Attempt User", "attempt@example.com", role));
+    }
+
+    private static ExamAttemptDetails sampleAttempt() {
+        OffsetDateTime startedAt = OffsetDateTime.parse("2026-10-27T01:00:00Z");
+        return new ExamAttemptDetails(
+                31L,
+                12L,
+                "Java Final",
+                AttemptStatus.IN_PROGRESS,
+                startedAt,
+                startedAt.plusMinutes(60),
+                List.of(new AttemptQuestionDetails(
+                        41L,
+                        "Which collection rejects duplicates?",
+                        2,
+                        0,
+                        List.of(
+                                new AttemptChoiceDetails(51L, "Set", 0),
+                                new AttemptChoiceDetails(52L, "List", 1)))));
+    }
+
+    private static void assertSuccess(ServerMessage response, String type, Object data) {
+        assertEquals(REQUEST_ID, response.requestId());
+        assertEquals(type, response.type());
+        assertEquals(data, response.data());
+        assertNull(response.error());
+    }
+
+    private static void assertError(ServerMessage response, String code) {
+        assertEquals(REQUEST_ID, response.requestId());
+        assertEquals("ERROR", response.type());
+        assertNull(response.data());
+        assertNotNull(response.error());
+        assertEquals(code, response.error().code());
+    }
+}

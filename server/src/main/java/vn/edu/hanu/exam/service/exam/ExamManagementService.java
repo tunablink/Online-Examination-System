@@ -1,5 +1,7 @@
 package vn.edu.hanu.exam.service.exam;
 
+import java.time.OffsetDateTime;
+
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -14,6 +16,7 @@ import vn.edu.hanu.exam.repository.ExamRepository;
 public class ExamManagementService {
     public static final String INVALID_EXAM_TITLE = "INVALID_EXAM_TITLE";
     public static final String INVALID_EXAM_DURATION = "INVALID_EXAM_DURATION";
+    public static final String INVALID_EXAM_SCHEDULE = "INVALID_EXAM_SCHEDULE";
     public static final String EXAM_NOT_FOUND = "EXAM_NOT_FOUND";
     public static final String DATABASE_ERROR = "DATABASE_ERROR";
     public static final String EXAM_NOT_EDITABLE = "EXAM_NOT_EDITABLE";
@@ -39,9 +42,22 @@ public class ExamManagementService {
         if (command.durationMinutes() <= 0) {
             throw new ExamManagementException(INVALID_EXAM_DURATION, "Exam duration must be greater than zero.");
         }
+        if (command.scheduledAt() == null || !command.scheduledAt().isAfter(OffsetDateTime.now())) {
+            throw new ExamManagementException(
+                    INVALID_EXAM_SCHEDULE,
+                    "Exam date and time must be in the future.");
+        }
         try {
-            return ExamDetails.from(examRepository.create(
-                    title, command.description(), command.durationMinutes(), teacherId));
+            Exam created = command.scheduledAt() == null
+                    ? examRepository.create(
+                            title, command.description(), command.durationMinutes(), teacherId)
+                    : examRepository.create(
+                            title,
+                            command.description(),
+                            command.durationMinutes(),
+                            command.scheduledAt(),
+                            teacherId);
+            return ExamDetails.from(created);
         } catch (DataAccessException | IllegalStateException exception) {
             throw databaseError(exception);
         }
@@ -70,6 +86,12 @@ public class ExamManagementService {
                     INVALID_EXAM_DURATION,
                     "Exam duration must be greater than zero.");
         }
+        if (command.scheduledAt() != null
+                && !command.scheduledAt().isAfter(OffsetDateTime.now())) {
+            throw new ExamManagementException(
+                    INVALID_EXAM_SCHEDULE,
+                    "Exam date and time must be in the future.");
+        }
 
         try {
             Exam currentExam = examRepository
@@ -84,12 +106,22 @@ public class ExamManagementService {
                         "Only a draft exam can be updated.");
             }
 
-            return examRepository.updateDraft(
-                    examId,
-                    teacherId,
-                    title,
-                    command.description(),
-                    command.durationMinutes())
+            var updated = command.scheduledAt() == null
+                    ? examRepository.updateDraft(
+                            examId,
+                            teacherId,
+                            title,
+                            command.description(),
+                            command.durationMinutes())
+                    : examRepository.updateDraft(
+                            examId,
+                            teacherId,
+                            title,
+                            command.description(),
+                            command.durationMinutes(),
+                            command.scheduledAt());
+
+            return updated
                     .map(ExamDetails::from)
                     .orElseThrow(() -> new ExamManagementException(
                             EXAM_NOT_EDITABLE,

@@ -8,12 +8,24 @@ interface FormState {
   title: string;
   description: string;
   durationMinutes: string;
+  scheduledAt: string;
   courseCode: string;
   examType: string;
 }
 
+function toLocalDateTimeInput(value: Date) {
+  const offset = value.getTimezoneOffset() * 60_000;
+  return new Date(value.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function defaultScheduledAt() {
+  const value = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  value.setMinutes(0, 0, 0);
+  return toLocalDateTimeInput(value);
+}
+
 const initialForm: FormState = {
-  title: '', description: '', durationMinutes: '90', courseCode: '', examType: 'Midterm examination',
+  title: '', description: '', durationMinutes: '90', scheduledAt: defaultScheduledAt(), courseCode: '', examType: 'Midterm examination',
 };
 
 const inputClass = 'h-11 w-full rounded-lg border border-[#d6e1e4] bg-white px-3.5 text-[12px] text-[#27343a] outline-none transition placeholder:text-[#9aa5a9] focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10';
@@ -33,9 +45,12 @@ function CreateExamPage() {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const duration = Number(form.durationMinutes);
+    const scheduledAt = new Date(form.scheduledAt);
     if (!form.title.trim()) return setError('Exam title is required.');
     if (form.title.trim().length > 255) return setError('Exam title must not exceed 255 characters.');
     if (!Number.isInteger(duration) || duration <= 0) return setError('Duration must be a positive number of minutes.');
+    if (!form.scheduledAt || Number.isNaN(scheduledAt.getTime())) return setError('A valid examination date and time is required.');
+    if (scheduledAt.getTime() <= Date.now()) return setError('The examination date and time must be in the future.');
     if (connectionStatus !== 'connected') return setError('The examination server is not connected. Please wait and try again.');
 
     setPending(true);
@@ -43,6 +58,7 @@ function CreateExamPage() {
       title: form.title.trim(),
       description: form.description.trim(),
       durationMinutes: duration,
+      scheduledAt: scheduledAt.toISOString(),
     }, (message) => {
       setPending(false);
       if (message.type === 'EXAM_CREATED' && message.data?.id !== undefined) {
@@ -86,7 +102,8 @@ function CreateExamPage() {
             <div className="flex items-center gap-3 border-b border-[#e7edef] px-5 py-4"><span className="grid h-8 w-8 place-items-center rounded-full bg-[#fff7ea] text-[#a76a12]"><Icon name="clock" size={15} /></span><div><h2 className="text-[13px] font-bold text-[#29373c]">Timing & delivery</h2><p className="mt-0.5 text-[9px] text-[#809096]">Server-authoritative duration for every attempt.</p></div></div>
             <div className="grid grid-cols-2 gap-5 p-5 max-md:grid-cols-1">
               <label className="grid gap-2"><span className="text-[10px] font-semibold text-[#46565c]">Duration (minutes) <strong className="text-[#bd2f35]">*</strong></span><input className={inputClass} min="1" onChange={(event) => setField('durationMinutes', event.target.value)} type="number" value={form.durationMinutes} /></label>
-              <div className="rounded-lg border border-[#d8e5e8] bg-[#f4f9fa] p-4"><p className="flex items-center gap-2 text-[10px] font-semibold text-[#315159]"><Icon className="text-[#00778b]" name="shield" size={15} />Secure AI proctoring</p><p className="mt-2 text-[9px] leading-4 text-[#718087]">Monitoring rules become available when questions are ready and the draft is published.</p></div>
+              <label className="grid gap-2"><span className="text-[10px] font-semibold text-[#46565c]">Examination date & time <strong className="text-[#bd2f35]">*</strong></span><input className={inputClass} min={toLocalDateTimeInput(new Date())} onChange={(event) => setField('scheduledAt', event.target.value)} type="datetime-local" value={form.scheduledAt} /></label>
+              <div className="col-span-2 rounded-lg border border-[#d8e5e8] bg-[#f4f9fa] p-4 max-md:col-span-1"><p className="flex items-center gap-2 text-[10px] font-semibold text-[#315159]"><Icon className="text-[#00778b]" name="shield" size={15} />Secure AI proctoring</p><p className="mt-2 text-[9px] leading-4 text-[#718087]">Monitoring rules become available when questions are ready and the draft is published.</p></div>
             </div>
           </section>
 

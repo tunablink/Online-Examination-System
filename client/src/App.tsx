@@ -19,6 +19,8 @@ import QuestionManagementPage from "./pages/QuestionManagementPage/QuestionManag
 import ExamOverviewPage from "./pages/ExamOverviewPage/ExamOverviewPage";
 import ProtectedRoute from "./components/routing/ProtectedRoute";
 import HomeRedirect from "./components/routing/HomeRedirect";
+import StudentProfilePage from "./pages/ProfilePage/StudentProfilePage";
+import TeacherProfilePage from "./pages/ProfilePage/TeacherProfilePage";
 
 function App() {
   return (
@@ -32,10 +34,12 @@ function App() {
 
         <Route path="/student/history" element={<ExamHistoryPage />} />
 
+        <Route path="/student/profile" element={<StudentProfilePage />} />
+
         <Route path="/student/exams/:examId" element={<ExamDetailPage />} />
 
         <Route
-          path="/student/exams/:examId/room"
+          path="/student/exams/:examId/room/:attemptId"
           element={<ExamRoomPage />}
         />
 
@@ -70,6 +74,8 @@ function App() {
           <Route path="monitoring/:examId" element={<ExamMonitoringPage />} />
 
           <Route path="activities" element={<SuspiciousActivityPage />} />
+
+          <Route path="profile" element={<TeacherProfilePage />} />
         </Route>
 
       </Route>
