@@ -43,6 +43,12 @@ public class MonitoringService {
                     .lockAttemptOwnedByStudent(command.attemptId(), studentId)
                     .orElseThrow(MonitoringService::attemptNotAccessible);
             OffsetDateTime serverTime = OffsetDateTime.now(ZoneOffset.UTC);
+            if (!"IN_PROGRESS".equals(attempt.status())
+                    || !attempt.deadline().isAfter(serverTime)) {
+                throw new MonitoringException(
+                        "ATTEMPT_NOT_ACTIVE",
+                        "Monitoring activity can only be reported for an active attempt.");
+            }
             ActivityType activityType = command.activityType();
             ActivitySeverity severity = activityType.contributesWarning()
                     ? ActivitySeverity.WARNING

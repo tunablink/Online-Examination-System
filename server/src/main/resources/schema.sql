@@ -285,3 +285,44 @@ CREATE TABLE IF NOT EXISTS attempt_answers (
 
 CREATE INDEX IF NOT EXISTS idx_attempt_answers_choice_id
     ON attempt_answers (choice_id);
+
+-- ============================================================
+-- Explainable monitoring signals for teacher review
+-- ============================================================
+CREATE TABLE IF NOT EXISTS suspicious_activities (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY,
+    attempt_id  BIGINT                   NOT NULL,
+    rule_code   VARCHAR(50)              NOT NULL,
+    severity    VARCHAR(20)              NOT NULL,
+    description VARCHAR(500)             NOT NULL,
+    occurred_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    created_at  TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT pk_suspicious_activities
+        PRIMARY KEY (id),
+
+    CONSTRAINT fk_suspicious_activities_attempt
+        FOREIGN KEY (attempt_id) REFERENCES exam_attempts(id) ON DELETE CASCADE,
+
+    CONSTRAINT ck_suspicious_activities_rule
+        CHECK (rule_code IN (
+            'TAB_HIDDEN',
+            'WINDOW_BLUR',
+            'DISCONNECTED',
+            'RECONNECTED',
+            'MULTIPLE_WARNING_THRESHOLD'
+        )),
+
+    CONSTRAINT ck_suspicious_activities_severity
+        CHECK (severity IN ('INFO', 'WARNING')),
+
+    CONSTRAINT ck_suspicious_activities_description_not_blank
+        CHECK (BTRIM(description) <> '')
+);
+
+CREATE INDEX IF NOT EXISTS idx_suspicious_activities_attempt_time
+    ON suspicious_activities (attempt_id, occurred_at DESC, id DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_suspicious_activities_threshold
+    ON suspicious_activities (attempt_id, rule_code)
+    WHERE rule_code = 'MULTIPLE_WARNING_THRESHOLD';
