@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import Icon from '../../components/common/Icon';
 import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
 import { isExamAttempt, isExamSubmissionResult, type AnswerMap, type ExamAttempt, type ExamSubmissionResult } from '../../types/attempt';
 import { useWebSocket } from '../../websocket/useWebSocket';
+import type { MonitoringActivityType } from '../../websocket/protocol';
 import QuestionNavigator from './components/QuestionNavigator';
 import QuestionPanel from './components/QuestionPanel';
 
@@ -18,6 +19,8 @@ function secondsUntil(deadline: string) {
   if (Number.isNaN(deadlineTime)) return 0;
   return Math.max(0, Math.ceil((deadlineTime - Date.now()) / 1000));
 }
+
+const ACTIVITY_THROTTLE_MS = 3_000;
 
 function ExamRoomPage() {
   const navigate = useNavigate();
@@ -45,6 +48,9 @@ function ExamRoomPage() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [saveError, setSaveError] = useState<string | null>(null);
   const latestSaveRequestIds = useRef<Map<number, string>>(new Map());
+  const lastActivityTimes = useRef<Map<MonitoringActivityType, number>>(new Map());
+  const pendingDisconnect = useRef(false);
+  const previousConnectionStatus = useRef(connectionStatus);
 
   useEffect(() => {
     if (numericAttemptId === null || numericExamId === null || connectionStatus !== 'connected') return;
@@ -85,6 +91,81 @@ function ExamRoomPage() {
     const timer = window.setInterval(updateTimer, 1000);
     return () => window.clearInterval(timer);
   }, [deadline]);
+
+  const monitoringActive = attempt !== null
+    && attempt.status === 'IN_PROGRESS'
+    && submissionResult === null
+    && remainingSeconds > 0;
+
+  const reportActivity = useCallback((activityType: MonitoringActivityType) => {
+    if (!monitoringActive || attempt === null || connectionStatus !== 'connected') return;
+
+    const now = Date.now();
+    const previousTime = lastActivityTimes.current.get(activityType) ?? 0;
+    if (now - previousTime < ACTIVITY_THROTTLE_MS) return;
+    lastActivityTimes.current.set(activityType, now);
+
+    const requestId = sendMessage(
+      'REPORT_ACTIVITY',
+      { attemptId: attempt.attemptId, activityType },
+      (message) => {
+        if (message.type !== 'ACTIVITY_RECORDED') {
+          console.warn('Monitoring activity was not recorded:', message.error?.code);
+        }
+      },
+    );
+    if (requestId === null) {
+      console.warn('Monitoring activity could not be sent.');
+    }
+  }, [attempt, connectionStatus, monitoringActive, sendMessage]);
+
+  useEffect(() => {
+    if (!monitoringActive) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') reportActivity('TAB_HIDDEN');
+    };
+    const handleWindowBlur = () => reportActivity('WINDOW_BLUR');
+    const handleOffline = () => {
+      pendingDisconnect.current = true;
+    };
+    const handleOnline = () => {
+      if (!pendingDisconnect.current || connectionStatus !== 'connected') return;
+      pendingDisconnect.current = false;
+      reportActivity('DISCONNECTED');
+      reportActivity('RECONNECTED');
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('blur', handleWindowBlur);
+    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', handleOnline);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('blur', handleWindowBlur);
+      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', handleOnline);
+    };
+  }, [connectionStatus, monitoringActive, reportActivity]);
+
+  useEffect(() => {
+    const previous = previousConnectionStatus.current;
+    previousConnectionStatus.current = connectionStatus;
+
+    if (!monitoringActive) {
+      pendingDisconnect.current = false;
+      return;
+    }
+    if (previous === 'connected' && connectionStatus !== 'connected') {
+      pendingDisconnect.current = true;
+      return;
+    }
+    if (connectionStatus === 'connected' && pendingDisconnect.current) {
+      pendingDisconnect.current = false;
+      reportActivity('DISCONNECTED');
+      reportActivity('RECONNECTED');
+    }
+  }, [connectionStatus, monitoringActive, reportActivity]);
 
   if (numericExamId === null || numericAttemptId === null) {
     return <main className="grid min-h-screen place-items-center bg-[#f5f9fb] p-6"><section className="w-full max-w-lg rounded-xl border border-[#dce7ea] bg-white p-8 text-center"><Icon className="mx-auto text-[#bd2f35]" name="alert" size={28} /><h1 className="mt-4 text-xl font-bold">Invalid examination attempt</h1><Link className="mt-5 inline-flex text-sm font-semibold text-[#00778b]" to="/student/exams">Return to examinations</Link></section></main>;

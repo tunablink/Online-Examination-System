@@ -23,477 +23,608 @@ import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.LoginCommand;
 import vn.edu.hanu.exam.service.LoginService;
+import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.websocket.handler.AttemptMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.ExamManagementMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.MonitoringMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.ProfileManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.QuestionManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
-import vn.edu.hanu.exam.websocket.handler.ProfileManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.StudentExamCatalogMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.StudentManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.TeacherDashboardMessageHandler;
-import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 @Component
 public final class ExamWebSocketHandler extends TextWebSocketHandler {
 
-        private static final Logger LOGGER = LoggerFactory.getLogger(ExamWebSocketHandler.class);
+    private static final Logger LOGGER =
+            LoggerFactory.getLogger(ExamWebSocketHandler.class);
 
-        private final JsonMapper jsonMapper;
+    private final JsonMapper jsonMapper;
 
-        private final RegistrationMessageHandler registrationMessageHandler;
+    private final RegistrationMessageHandler registrationMessageHandler;
 
-        private final ExamManagementMessageHandler examManagementMessageHandler;
+    private final ExamManagementMessageHandler examManagementMessageHandler;
 
-        private final QuestionManagementMessageHandler questionManagementMessageHandler;
+    private final QuestionManagementMessageHandler questionManagementMessageHandler;
 
-        private final StudentExamCatalogMessageHandler studentExamCatalogMessageHandler;
+    private final StudentExamCatalogMessageHandler studentExamCatalogMessageHandler;
 
-        private final AttemptMessageHandler attemptMessageHandler;
+    private final AttemptMessageHandler attemptMessageHandler;
 
-        private final StudentManagementMessageHandler studentManagementMessageHandler;
+    private final StudentManagementMessageHandler studentManagementMessageHandler;
 
-        private final TeacherDashboardMessageHandler teacherDashboardMessageHandler;
+    private final TeacherDashboardMessageHandler teacherDashboardMessageHandler;
 
-        private final ProfileManagementMessageHandler profileManagementMessageHandler;
+    private final ProfileManagementMessageHandler profileManagementMessageHandler;
 
-        private final LoginService loginService;
-        private final AuthenticatedSessionRegistry authenticatedSessionRegistry;
+    private final MonitoringMessageHandler monitoringMessageHandler;
 
-        @Autowired
-        public ExamWebSocketHandler(
-                        JsonMapper jsonMapper,
-                        RegistrationMessageHandler registrationMessageHandler,
-                        ExamManagementMessageHandler examManagementMessageHandler,
-                        QuestionManagementMessageHandler questionManagementMessageHandler,
-                        StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
-                        AttemptMessageHandler attemptMessageHandler,
-                        StudentManagementMessageHandler studentManagementMessageHandler,
-                        TeacherDashboardMessageHandler teacherDashboardMessageHandler,
-                        ProfileManagementMessageHandler profileManagementMessageHandler,
-                        LoginService loginService,
-                        AuthenticatedSessionRegistry authenticatedSessionRegistry) {
-                this.jsonMapper = jsonMapper;
-                this.registrationMessageHandler = registrationMessageHandler;
-                this.examManagementMessageHandler = examManagementMessageHandler;
-                this.questionManagementMessageHandler = questionManagementMessageHandler;
-                this.studentExamCatalogMessageHandler = studentExamCatalogMessageHandler;
-                this.attemptMessageHandler = attemptMessageHandler;
-                this.studentManagementMessageHandler = studentManagementMessageHandler;
-                this.teacherDashboardMessageHandler = teacherDashboardMessageHandler;
-                this.profileManagementMessageHandler = profileManagementMessageHandler;
-                this.loginService = loginService;
-                this.authenticatedSessionRegistry = authenticatedSessionRegistry;
-        }
+    private final LoginService loginService;
 
-        public ExamWebSocketHandler(
-                        JsonMapper jsonMapper,
-                        RegistrationMessageHandler registrationMessageHandler,
-                        ExamManagementMessageHandler examManagementMessageHandler,
-                        QuestionManagementMessageHandler questionManagementMessageHandler,
-                        StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
-                        LoginService loginService,
-                        AuthenticatedSessionRegistry authenticatedSessionRegistry) {
-                this(
-                                jsonMapper,
-                                registrationMessageHandler,
-                                examManagementMessageHandler,
-                                questionManagementMessageHandler,
-                                studentExamCatalogMessageHandler,
-                                null,
-                                null,
-                                null,
-                                null,
-                                loginService,
-                                authenticatedSessionRegistry);
-        }
+    private final AuthenticatedSessionRegistry authenticatedSessionRegistry;
 
-        @Override
-        public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-                LOGGER.info("WebSocket connected: sessionId={}", session.getId());
+    @Autowired
+    public ExamWebSocketHandler(
+            JsonMapper jsonMapper,
+            RegistrationMessageHandler registrationMessageHandler,
+            ExamManagementMessageHandler examManagementMessageHandler,
+            QuestionManagementMessageHandler questionManagementMessageHandler,
+            StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
+            AttemptMessageHandler attemptMessageHandler,
+            StudentManagementMessageHandler studentManagementMessageHandler,
+            TeacherDashboardMessageHandler teacherDashboardMessageHandler,
+            ProfileManagementMessageHandler profileManagementMessageHandler,
+            MonitoringMessageHandler monitoringMessageHandler,
+            LoginService loginService,
+            AuthenticatedSessionRegistry authenticatedSessionRegistry) {
 
-                ServerMessage connectedMessage = ServerMessage.event(MessageType.CONNECTED.name(), Map.of(
-                                "message", "Connected to Online Examination Server",
-                                "sessionId", session.getId(),
-                                "serverTime", Instant.now().toString()));
+        this.jsonMapper = jsonMapper;
+        this.registrationMessageHandler = registrationMessageHandler;
+        this.examManagementMessageHandler = examManagementMessageHandler;
+        this.questionManagementMessageHandler = questionManagementMessageHandler;
+        this.studentExamCatalogMessageHandler = studentExamCatalogMessageHandler;
+        this.attemptMessageHandler = attemptMessageHandler;
+        this.studentManagementMessageHandler = studentManagementMessageHandler;
+        this.teacherDashboardMessageHandler = teacherDashboardMessageHandler;
+        this.profileManagementMessageHandler = profileManagementMessageHandler;
+        this.monitoringMessageHandler = monitoringMessageHandler;
+        this.loginService = loginService;
+        this.authenticatedSessionRegistry = authenticatedSessionRegistry;
+    }
 
-                sendMessage(session, connectedMessage);
-        }
+    /*
+     * Constructor rút gọn được giữ lại cho các test cũ.
+     *
+     * Các handler không cần thiết cho nhóm test đó được truyền null.
+     * MonitoringMessageHandler cũng phải có một vị trí null riêng để
+     * khớp với constructor chính.
+     */
+    public ExamWebSocketHandler(
+            JsonMapper jsonMapper,
+            RegistrationMessageHandler registrationMessageHandler,
+            ExamManagementMessageHandler examManagementMessageHandler,
+            QuestionManagementMessageHandler questionManagementMessageHandler,
+            StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
+            LoginService loginService,
+            AuthenticatedSessionRegistry authenticatedSessionRegistry) {
 
-        @Override
-        protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-                ClientMessage clientMessage;
+        this(
+                jsonMapper,
+                registrationMessageHandler,
+                examManagementMessageHandler,
+                questionManagementMessageHandler,
+                studentExamCatalogMessageHandler,
+                null,
+                null,
+                null,
+                null,
+                null,
+                loginService,
+                authenticatedSessionRegistry);
+    }
 
-                try {
-                        clientMessage = jsonMapper.readValue(message.getPayload(), ClientMessage.class);
-                } catch (JacksonException exception) {
-                        LOGGER.warn("Invalid JSON received: sessionId={}", session.getId());
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session)
+            throws Exception {
 
-                        sendMessage(session,
-                                        ServerMessage.error(null, "INVALID_JSON", "The message is not valid JSON."));
-                        return;
-                }
+        LOGGER.info(
+                "WebSocket connected: sessionId={}",
+                session.getId());
 
-                if (clientMessage.type() == null || clientMessage.type().isBlank()) {
-                        LOGGER.warn("Missing message type: sessionId={}, requestId={}",
-                                        session.getId(), clientMessage.requestId());
-
-                        sendMessage(session, ServerMessage.error(clientMessage.requestId(), "MISSING_MESSAGE_TYPE",
-                                        "The message type is required."));
-
-                        return;
-                }
-
-                Optional<MessageType> parsedMessageType = MessageType.fromWireValue(clientMessage.type());
-
-                if (parsedMessageType.isEmpty()) {
-                        sendUnsupportedMessageType(session, clientMessage);
-                        return;
-                }
-
-                MessageType messageType = parsedMessageType.orElseThrow();
-
-                if (!messageType.isAcceptedFromClient()) {
-                        sendUnsupportedMessageType(session, clientMessage);
-                        return;
-                }
-
-                try {
-                        dispatchMessage(session, clientMessage, messageType);
-                } catch (RuntimeException exception) {
-                        LOGGER.error(
-                                        "Unexpected error processing WebSocket message: "
-                                                        + "sessionId={}, requestId={}, type={}",
-                                        session.getId(),
-                                        clientMessage.requestId(),
-                                        messageType,
-                                        exception);
-
-                        sendMessage(session, ServerMessage.error(clientMessage.requestId(), "INTERNAL_SERVER_ERROR",
-                                        "The server could not process the request."));
-                }
-        }
-
-        private void dispatchMessage(WebSocketSession session, ClientMessage clientMessage, MessageType messageType)
-                        throws Exception {
-                switch (messageType) {
-                        case PING ->
-                                handlePing(
-                                                session,
-                                                clientMessage);
-
-                        case REGISTER ->
-                                handleRegister(
-                                                session,
-                                                clientMessage);
-
-                        case LOGIN ->
-                                handleLogin(
-                                                session,
-                                                clientMessage);
-
-                        case GET_PROFILE ->
-                                sendMessage(
-                                                session,
-                                                profileManagementMessageHandler.handleGet(
-                                                                session,
-                                                                clientMessage));
-
-                        case UPDATE_PROFILE ->
-                                sendMessage(
-                                                session,
-                                                profileManagementMessageHandler.handleUpdate(
-                                                                session,
-                                                                clientMessage));
-
-                        case CHANGE_PASSWORD ->
-                                sendMessage(
-                                                session,
-                                                profileManagementMessageHandler.handleChangePassword(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_STUDENTS ->
-                                sendMessage(
-                                                session,
-                                                studentManagementMessageHandler.handleList(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_STUDENT ->
-                                sendMessage(
-                                                session,
-                                                studentManagementMessageHandler.handleGet(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_TEACHER_DASHBOARD ->
-                                sendMessage(
-                                                session,
-                                                teacherDashboardMessageHandler.handle(
-                                                                session,
-                                                                clientMessage));
-
-                        case CREATE_EXAM ->
-                                sendMessage(
-                                                session,
-                                                examManagementMessageHandler.handleCreate(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_TEACHER_EXAMS ->
-                                sendMessage(
-                                                session,
-                                                examManagementMessageHandler.handleList(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_EXAM ->
-                                sendMessage(
-                                                session,
-                                                examManagementMessageHandler.handleGet(
-                                                                session,
-                                                                clientMessage));
-
-                        case UPDATE_EXAM ->
-                                sendMessage(
-                                                session,
-                                                examManagementMessageHandler.handleUpdate(
-                                                                session,
-                                                                clientMessage));
-
-                        case PUBLISH_EXAM ->
-                                sendMessage(
-                                                session,
-                                                examManagementMessageHandler.handlePublish(
-                                                                session,
-                                                                clientMessage));
-
-                        case CLOSE_EXAM ->
-                                sendMessage(
-                                                session,
-                                                examManagementMessageHandler.handleClose(
-                                                                session,
-                                                                clientMessage));
-
-                        case DELETE_EXAM ->
-                                sendMessage(
-                                                session,
-                                                examManagementMessageHandler.handleDelete(
-                                                                session,
-                                                                clientMessage));
-
-                        case CREATE_QUESTION ->
-                                sendMessage(
-                                                session,
-                                                questionManagementMessageHandler.handleCreate(
-                                                                session,
-                                                                clientMessage));
-
-                        case UPDATE_QUESTION ->
-                                sendMessage(
-                                                session,
-                                                questionManagementMessageHandler.handleUpdate(
-                                                                session,
-                                                                clientMessage));
-
-                        case DELETE_QUESTION ->
-                                sendMessage(
-                                                session,
-                                                questionManagementMessageHandler.handleDelete(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_EXAM_QUESTIONS ->
-                                sendMessage(
-                                                session,
-                                                questionManagementMessageHandler.handleList(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_AVAILABLE_EXAMS ->
-                                sendMessage(
-                                                session,
-                                                studentExamCatalogMessageHandler.handleList(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_AVAILABLE_EXAM ->
-                                sendMessage(
-                                                session,
-                                                studentExamCatalogMessageHandler.handleGet(
-                                                                session,
-                                                                clientMessage));
-
-                        case START_EXAM ->
-                                sendMessage(
-                                                session,
-                                                attemptMessageHandler.handleStart(
-                                                                session,
-                                                                clientMessage));
-
-                        case GET_EXAM_ATTEMPT ->
-                                sendMessage(
-                                        session,
-                                        attemptMessageHandler.handleGet(
-                                                session,
-                                                clientMessage));
-
-                        case SAVE_ANSWER ->
-                                sendMessage(
-                                        session,
-                                        attemptMessageHandler.handleSaveAnswer(
-                                                session,
-                                                clientMessage));
-
-                        case SUBMIT_EXAM ->
-                                sendMessage(
-                                        session,
-                                        attemptMessageHandler.handleSubmit(
-                                                session,
-                                                clientMessage));
-
-                        case GET_ATTEMPT_HISTORY ->
-                                sendMessage(
-                                        session,
-                                        attemptMessageHandler.handleHistory(
-                                                session,
-                                                clientMessage));
-
-                        case GET_ATTEMPT_RESULT ->
-                                sendMessage(
-                                        session,
-                                        attemptMessageHandler.handleResult(
-                                                session,
-                                                clientMessage));
-
-                        default ->
-                                sendUnsupportedMessageType(
-                                                session,
-                                                clientMessage);
-                }
-        }
-
-        private void handlePing(WebSocketSession session, ClientMessage clientMessage) throws Exception {
-                LOGGER.info("PING received: sessionId={}, requestId={}", session.getId(), clientMessage.requestId());
-
-                ServerMessage pongMessage = ServerMessage.success(clientMessage.requestId(), MessageType.PONG.name(),
-                                Map.of("serverTime", Instant.now().toString()));
-
-                sendMessage(session, pongMessage);
-        }
-
-        private void handleRegister(WebSocketSession session, ClientMessage clientMessage) throws Exception {
-                ServerMessage response = registrationMessageHandler.handle(clientMessage.requestId(),
-                                clientMessage.payload());
-
-                LOGGER.info(
-                                "REGISTER processed: sessionId={}, requestId={}",
+        ServerMessage connectedMessage =
+                ServerMessage.event(
+                        MessageType.CONNECTED.name(),
+                        Map.of(
+                                "message",
+                                "Connected to Online Examination Server",
+                                "sessionId",
                                 session.getId(),
-                                clientMessage.requestId());
+                                "serverTime",
+                                Instant.now().toString()));
 
-                sendMessage(session, response);
+        sendMessage(session, connectedMessage);
+    }
+
+    @Override
+    protected void handleTextMessage(
+            WebSocketSession session,
+            TextMessage message)
+            throws Exception {
+
+        ClientMessage clientMessage;
+
+        try {
+            clientMessage =
+                    jsonMapper.readValue(
+                            message.getPayload(),
+                            ClientMessage.class);
+        } catch (JacksonException exception) {
+            LOGGER.warn(
+                    "Invalid JSON received: sessionId={}",
+                    session.getId());
+
+            sendMessage(
+                    session,
+                    ServerMessage.error(
+                            null,
+                            "INVALID_JSON",
+                            "The message is not valid JSON."));
+
+            return;
         }
 
-        private void handleLogin(WebSocketSession session, ClientMessage clientMessage) throws Exception {
-                String username = readString(clientMessage.payload(), "username");
+        if (clientMessage.type() == null
+                || clientMessage.type().isBlank()) {
 
-                String password = readString(clientMessage.payload(), "password");
+            LOGGER.warn(
+                    "Missing message type: sessionId={}, requestId={}",
+                    session.getId(),
+                    clientMessage.requestId());
 
-                try {
-                        LoginCommand command = new LoginCommand(username, password);
+            sendMessage(
+                    session,
+                    ServerMessage.error(
+                            clientMessage.requestId(),
+                            "MISSING_MESSAGE_TYPE",
+                            "The message type is required."));
 
-                        LoggedInUser loggedInUser = loginService.login(command);
-
-                        authenticatedSessionRegistry.authenticate(session.getId(), loggedInUser);
-
-                        LOGGER.info(
-                                        "User logged in: "
-                                                        + "sessionId={}, requestId={}, userId={}",
-                                        session.getId(),
-                                        clientMessage.requestId(),
-                                        loggedInUser.id());
-
-                        sendMessage(
-                                        session,
-                                        ServerMessage.success(
-                                                        clientMessage.requestId(),
-                                                        MessageType.LOGGED_IN.name(),
-                                                        loggedInUser));
-                } catch (IllegalArgumentException exception) {
-                        LOGGER.info(
-                                        "Login rejected because payload is invalid: "
-                                                        + "sessionId={}, requestId={}",
-                                        session.getId(),
-                                        clientMessage.requestId());
-
-                        sendMessage(
-                                        session,
-                                        ServerMessage.error(
-                                                        clientMessage.requestId(),
-                                                        "INVALID_CREDENTIALS",
-                                                        "Invalid username or password."));
-                } catch (AuthenticationException exception) {
-                        LOGGER.info(
-                                        "Login rejected: "
-                                                        + "sessionId={}, requestId={}, code={}",
-                                        session.getId(),
-                                        clientMessage.requestId(),
-                                        exception.code());
-
-                        sendMessage(
-                                        session,
-                                        ServerMessage.error(
-                                                        clientMessage.requestId(),
-                                                        exception.code(),
-                                                        exception.getMessage()));
-                }
+            return;
         }
 
-        private static String readString(Map<String, Object> payload, String fieldName) {
-                if (payload == null) {
-                        return null;
-                }
+        Optional<MessageType> parsedMessageType =
+                MessageType.fromWireValue(clientMessage.type());
 
-                Object value = payload.get(fieldName);
-
-                if (value instanceof String stringValue) {
-                        return stringValue;
-                }
-
-                return null;
+        if (parsedMessageType.isEmpty()) {
+            sendUnsupportedMessageType(session, clientMessage);
+            return;
         }
 
-        private void sendUnsupportedMessageType(WebSocketSession session, ClientMessage clientMessage)
-                        throws Exception {
-                LOGGER.warn(
-                                "Unsupported message type: "
-                                                + "sessionId={}, requestId={}, type={}",
-                                session.getId(),
-                                clientMessage.requestId(),
-                                clientMessage.type());
+        MessageType messageType = parsedMessageType.orElseThrow();
 
-                sendMessage(
-                                session,
-                                ServerMessage.error(
-                                                clientMessage.requestId(),
-                                                "UNSUPPORTED_MESSAGE_TYPE",
-                                                "The message type is not supported."));
+        if (!messageType.isAcceptedFromClient()) {
+            sendUnsupportedMessageType(session, clientMessage);
+            return;
         }
 
-        private void sendMessage(WebSocketSession session, ServerMessage serverMessage) throws Exception {
-                String json = jsonMapper.writeValueAsString(serverMessage);
+        try {
+            dispatchMessage(
+                    session,
+                    clientMessage,
+                    messageType);
+        } catch (RuntimeException exception) {
+            LOGGER.error(
+                    "Unexpected error processing WebSocket message: "
+                            + "sessionId={}, requestId={}, type={}",
+                    session.getId(),
+                    clientMessage.requestId(),
+                    messageType,
+                    exception);
 
-                session.sendMessage(new TextMessage(json));
+            sendMessage(
+                    session,
+                    ServerMessage.error(
+                            clientMessage.requestId(),
+                            "INTERNAL_SERVER_ERROR",
+                            "The server could not process the request."));
+        }
+    }
+
+    private void dispatchMessage(
+            WebSocketSession session,
+            ClientMessage clientMessage,
+            MessageType messageType)
+            throws Exception {
+
+        switch (messageType) {
+            case PING ->
+                    handlePing(
+                            session,
+                            clientMessage);
+
+            case REGISTER ->
+                    handleRegister(
+                            session,
+                            clientMessage);
+
+            case LOGIN ->
+                    handleLogin(
+                            session,
+                            clientMessage);
+
+            case GET_PROFILE ->
+                    sendMessage(
+                            session,
+                            profileManagementMessageHandler.handleGet(
+                                    session,
+                                    clientMessage));
+
+            case UPDATE_PROFILE ->
+                    sendMessage(
+                            session,
+                            profileManagementMessageHandler.handleUpdate(
+                                    session,
+                                    clientMessage));
+
+            case CHANGE_PASSWORD ->
+                    sendMessage(
+                            session,
+                            profileManagementMessageHandler.handleChangePassword(
+                                    session,
+                                    clientMessage));
+
+            case GET_STUDENTS ->
+                    sendMessage(
+                            session,
+                            studentManagementMessageHandler.handleList(
+                                    session,
+                                    clientMessage));
+
+            case GET_STUDENT ->
+                    sendMessage(
+                            session,
+                            studentManagementMessageHandler.handleGet(
+                                    session,
+                                    clientMessage));
+
+            case GET_TEACHER_DASHBOARD ->
+                    sendMessage(
+                            session,
+                            teacherDashboardMessageHandler.handle(
+                                    session,
+                                    clientMessage));
+
+            case CREATE_EXAM ->
+                    sendMessage(
+                            session,
+                            examManagementMessageHandler.handleCreate(
+                                    session,
+                                    clientMessage));
+
+            case GET_TEACHER_EXAMS ->
+                    sendMessage(
+                            session,
+                            examManagementMessageHandler.handleList(
+                                    session,
+                                    clientMessage));
+
+            case GET_EXAM ->
+                    sendMessage(
+                            session,
+                            examManagementMessageHandler.handleGet(
+                                    session,
+                                    clientMessage));
+
+            case UPDATE_EXAM ->
+                    sendMessage(
+                            session,
+                            examManagementMessageHandler.handleUpdate(
+                                    session,
+                                    clientMessage));
+
+            case PUBLISH_EXAM ->
+                    sendMessage(
+                            session,
+                            examManagementMessageHandler.handlePublish(
+                                    session,
+                                    clientMessage));
+
+            case CLOSE_EXAM ->
+                    sendMessage(
+                            session,
+                            examManagementMessageHandler.handleClose(
+                                    session,
+                                    clientMessage));
+
+            case DELETE_EXAM ->
+                    sendMessage(
+                            session,
+                            examManagementMessageHandler.handleDelete(
+                                    session,
+                                    clientMessage));
+
+            case CREATE_QUESTION ->
+                    sendMessage(
+                            session,
+                            questionManagementMessageHandler.handleCreate(
+                                    session,
+                                    clientMessage));
+
+            case UPDATE_QUESTION ->
+                    sendMessage(
+                            session,
+                            questionManagementMessageHandler.handleUpdate(
+                                    session,
+                                    clientMessage));
+
+            case DELETE_QUESTION ->
+                    sendMessage(
+                            session,
+                            questionManagementMessageHandler.handleDelete(
+                                    session,
+                                    clientMessage));
+
+            case GET_EXAM_QUESTIONS ->
+                    sendMessage(
+                            session,
+                            questionManagementMessageHandler.handleList(
+                                    session,
+                                    clientMessage));
+
+            case GET_AVAILABLE_EXAMS ->
+                    sendMessage(
+                            session,
+                            studentExamCatalogMessageHandler.handleList(
+                                    session,
+                                    clientMessage));
+
+            case GET_AVAILABLE_EXAM ->
+                    sendMessage(
+                            session,
+                            studentExamCatalogMessageHandler.handleGet(
+                                    session,
+                                    clientMessage));
+
+            case START_EXAM ->
+                    sendMessage(
+                            session,
+                            attemptMessageHandler.handleStart(
+                                    session,
+                                    clientMessage));
+
+            case GET_EXAM_ATTEMPT ->
+                    sendMessage(
+                            session,
+                            attemptMessageHandler.handleGet(
+                                    session,
+                                    clientMessage));
+
+            case SAVE_ANSWER ->
+                    sendMessage(
+                            session,
+                            attemptMessageHandler.handleSaveAnswer(
+                                    session,
+                                    clientMessage));
+
+            case SUBMIT_EXAM ->
+                    sendMessage(
+                            session,
+                            attemptMessageHandler.handleSubmit(
+                                    session,
+                                    clientMessage));
+
+            /*
+             * Các message History/Result của main phải được giữ lại.
+             */
+            case GET_ATTEMPT_HISTORY ->
+                    sendMessage(
+                            session,
+                            attemptMessageHandler.handleHistory(
+                                    session,
+                                    clientMessage));
+
+            case GET_ATTEMPT_RESULT ->
+                    sendMessage(
+                            session,
+                            attemptMessageHandler.handleResult(
+                                    session,
+                                    clientMessage));
+
+            /*
+             * Các message Monitoring của Hoàng Yến được thêm vào,
+             * không thay thế History/Result.
+             */
+            case REPORT_ACTIVITY ->
+                    sendMessage(
+                            session,
+                            monitoringMessageHandler.handleReportActivity(
+                                    session,
+                                    clientMessage));
+
+            case GET_EXAM_MONITORING ->
+                    sendMessage(
+                            session,
+                            monitoringMessageHandler.handleGetExamMonitoring(
+                                    session,
+                                    clientMessage));
+
+            default ->
+                    sendUnsupportedMessageType(
+                            session,
+                            clientMessage);
+        }
+    }
+
+    private void handlePing(
+            WebSocketSession session,
+            ClientMessage clientMessage)
+            throws Exception {
+
+        LOGGER.info(
+                "PING received: sessionId={}, requestId={}",
+                session.getId(),
+                clientMessage.requestId());
+
+        ServerMessage pongMessage =
+                ServerMessage.success(
+                        clientMessage.requestId(),
+                        MessageType.PONG.name(),
+                        Map.of(
+                                "serverTime",
+                                Instant.now().toString()));
+
+        sendMessage(session, pongMessage);
+    }
+
+    private void handleRegister(
+            WebSocketSession session,
+            ClientMessage clientMessage)
+            throws Exception {
+
+        ServerMessage response =
+                registrationMessageHandler.handle(
+                        clientMessage.requestId(),
+                        clientMessage.payload());
+
+        LOGGER.info(
+                "REGISTER processed: sessionId={}, requestId={}",
+                session.getId(),
+                clientMessage.requestId());
+
+        sendMessage(session, response);
+    }
+
+    private void handleLogin(
+            WebSocketSession session,
+            ClientMessage clientMessage)
+            throws Exception {
+
+        String username =
+                readString(
+                        clientMessage.payload(),
+                        "username");
+
+        String password =
+                readString(
+                        clientMessage.payload(),
+                        "password");
+
+        try {
+            LoginCommand command =
+                    new LoginCommand(
+                            username,
+                            password);
+
+            LoggedInUser loggedInUser =
+                    loginService.login(command);
+
+            authenticatedSessionRegistry.authenticate(
+                    session.getId(),
+                    loggedInUser);
+
+            LOGGER.info(
+                    "User logged in: "
+                            + "sessionId={}, requestId={}, userId={}",
+                    session.getId(),
+                    clientMessage.requestId(),
+                    loggedInUser.id());
+
+            sendMessage(
+                    session,
+                    ServerMessage.success(
+                            clientMessage.requestId(),
+                            MessageType.LOGGED_IN.name(),
+                            loggedInUser));
+        } catch (IllegalArgumentException exception) {
+            LOGGER.info(
+                    "Login rejected because payload is invalid: "
+                            + "sessionId={}, requestId={}",
+                    session.getId(),
+                    clientMessage.requestId());
+
+            sendMessage(
+                    session,
+                    ServerMessage.error(
+                            clientMessage.requestId(),
+                            "INVALID_CREDENTIALS",
+                            "Invalid username or password."));
+        } catch (AuthenticationException exception) {
+            LOGGER.info(
+                    "Login rejected: "
+                            + "sessionId={}, requestId={}, code={}",
+                    session.getId(),
+                    clientMessage.requestId(),
+                    exception.code());
+
+            sendMessage(
+                    session,
+                    ServerMessage.error(
+                            clientMessage.requestId(),
+                            exception.code(),
+                            exception.getMessage()));
+        }
+    }
+
+    private static String readString(
+            Map<String, Object> payload,
+            String fieldName) {
+
+        if (payload == null) {
+            return null;
         }
 
-        @Override
-        public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
-                authenticatedSessionRegistry.remove(session.getId());
-                LOGGER.info(
-                                "WebSocket disconnected: "
-                                                + "sessionId={}, code={}, reason={}",
-                                session.getId(),
-                                status.getCode(),
-                                status.getReason());
+        Object value = payload.get(fieldName);
+
+        if (value instanceof String stringValue) {
+            return stringValue;
         }
+
+        return null;
+    }
+
+    private void sendUnsupportedMessageType(
+            WebSocketSession session,
+            ClientMessage clientMessage)
+            throws Exception {
+
+        LOGGER.warn(
+                "Unsupported message type: "
+                        + "sessionId={}, requestId={}, type={}",
+                session.getId(),
+                clientMessage.requestId(),
+                clientMessage.type());
+
+        sendMessage(
+                session,
+                ServerMessage.error(
+                        clientMessage.requestId(),
+                        "UNSUPPORTED_MESSAGE_TYPE",
+                        "The message type is not supported."));
+    }
+
+    private void sendMessage(
+            WebSocketSession session,
+            ServerMessage serverMessage)
+            throws Exception {
+
+        String json =
+                jsonMapper.writeValueAsString(serverMessage);
+
+        session.sendMessage(new TextMessage(json));
+    }
+
+    @Override
+    public void afterConnectionClosed(
+            WebSocketSession session,
+            CloseStatus status) {
+
+        authenticatedSessionRegistry.remove(session.getId());
+
+        LOGGER.info(
+                "WebSocket disconnected: "
+                        + "sessionId={}, code={}, reason={}",
+                session.getId(),
+                status.getCode(),
+                status.getReason());
+    }
 }

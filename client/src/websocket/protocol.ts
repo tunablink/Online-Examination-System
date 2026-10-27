@@ -26,7 +26,9 @@ export type ClientMessageType =
   | 'SAVE_ANSWER'
   | 'SUBMIT_EXAM'
   | 'GET_ATTEMPT_HISTORY'
-  | 'GET_ATTEMPT_RESULT';
+  | 'GET_ATTEMPT_RESULT'
+  | 'REPORT_ACTIVITY'
+  | 'GET_EXAM_MONITORING';
 
 export type ServerMessageType =
   | 'CONNECTED'
@@ -58,6 +60,8 @@ export type ServerMessageType =
   | 'EXAM_SUBMITTED'
   | 'ATTEMPT_HISTORY'
   | 'ATTEMPT_RESULT'
+  | 'ACTIVITY_RECORDED'
+  | 'EXAM_MONITORING'
   | 'ERROR';
 
 export type UserRole =
@@ -177,6 +181,53 @@ export interface SubmitExamPayload {
 
 export interface GetAttemptResultPayload {
   attemptId: number;
+}
+
+export type MonitoringActivityType =
+  | 'TAB_HIDDEN'
+  | 'WINDOW_BLUR'
+  | 'DISCONNECTED'
+  | 'RECONNECTED';
+
+export type MonitoringRule =
+  | MonitoringActivityType
+  | 'MULTIPLE_WARNING_THRESHOLD';
+
+export type MonitoringSeverity = 'INFO' | 'WARNING';
+
+export interface SuspiciousActivityData {
+  id: number;
+  attemptId: number;
+  rule: MonitoringRule;
+  severity: MonitoringSeverity;
+  description: string;
+  occurredAt: string;
+  recordedAt: string;
+}
+
+export interface MonitoringAttemptData {
+  attemptId: number;
+  studentId: number;
+  studentUsername: string;
+  studentFullName: string;
+  attemptStatus: 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED';
+  deadline: string;
+  warningCount: number;
+  latestSuspiciousActivity: SuspiciousActivityData | null;
+}
+
+export interface ExamMonitoringData {
+  examId: number;
+  attempts: MonitoringAttemptData[];
+  interpretation: string;
+}
+
+export interface ActivityRecordedData {
+  activity: SuspiciousActivityData;
+  thresholdActivity: SuspiciousActivityData | null;
+  warningCount: number;
+  interpretation: string;
+
 }
 
 export interface ExamDetailsData {
@@ -302,6 +353,11 @@ export interface ServerMessageData {
   publishedExamCount?: number;
   closedExamCount?: number;
   recentExams?: TeacherDashboardExamData[];
+
+  activity?: SuspiciousActivityData;
+  thresholdActivity?: SuspiciousActivityData | null;
+  warningCount?: number;
+  interpretation?: string;
 }
 
 export interface ServerMessage {

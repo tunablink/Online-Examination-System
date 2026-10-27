@@ -14,9 +14,10 @@ class MessageTypeContractTests {
 
     @Test
     void containsTheRequiredProtocolMessageTypes() {
-        Set<String> actualMessageTypes = Stream.of(MessageType.values())
-                .map(Enum::name)
-                .collect(Collectors.toSet());
+        Set<String> actualMessageTypes =
+                Stream.of(MessageType.values())
+                        .map(Enum::name)
+                        .collect(Collectors.toSet());
 
         Set<String> expectedMessageTypes = Set.of(
                 "CONNECTED",
@@ -104,6 +105,12 @@ class MessageTypeContractTests {
 
                 "GET_ATTEMPT_RESULT",
                 "ATTEMPT_RESULT",
+
+                "REPORT_ACTIVITY",
+                "ACTIVITY_RECORDED",
+
+                "GET_EXAM_MONITORING",
+                "EXAM_MONITORING",
 
                 "ERROR");
 
@@ -215,6 +222,18 @@ class MessageTypeContractTests {
                         MessageType.GET_ATTEMPT_RESULT,
                         MessageType.fromWireValue(
                                 "get_attempt_result")
+                                .orElseThrow()),
+
+                () -> assertEquals(
+                        MessageType.REPORT_ACTIVITY,
+                        MessageType.fromWireValue(
+                                " report_activity ")
+                                .orElseThrow()),
+
+                () -> assertEquals(
+                        MessageType.GET_EXAM_MONITORING,
+                        MessageType.fromWireValue(
+                                "get_exam_monitoring")
                                 .orElseThrow()));
     }
 
@@ -279,7 +298,10 @@ class MessageTypeContractTests {
                 MessageType.SUBMIT_EXAM,
 
                 MessageType.GET_ATTEMPT_HISTORY,
-                MessageType.GET_ATTEMPT_RESULT);
+                MessageType.GET_ATTEMPT_RESULT,
+
+                MessageType.REPORT_ACTIVITY,
+                MessageType.GET_EXAM_MONITORING);
 
         assertEquals(
                 expectedClientCommandTypes,
@@ -335,6 +357,9 @@ class MessageTypeContractTests {
 
                 MessageType.ATTEMPT_HISTORY,
                 MessageType.ATTEMPT_RESULT,
+
+                MessageType.ACTIVITY_RECORDED,
+                MessageType.EXAM_MONITORING,
 
                 MessageType.ERROR);
 
