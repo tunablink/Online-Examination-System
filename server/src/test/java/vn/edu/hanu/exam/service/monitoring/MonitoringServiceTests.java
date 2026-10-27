@@ -77,6 +77,31 @@ class MonitoringServiceTests {
     }
 
     @Test
+    void submittedOrExpiredAttemptCannotReportActivity() {
+        when(repository.lockAttemptOwnedByStudent(ATTEMPT_ID, STUDENT_ID)).thenReturn(Optional.of(
+                new MonitoredAttempt(
+                        ATTEMPT_ID, EXAM_ID, STUDENT_ID, "SUBMITTED",
+                        OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(30))));
+
+        MonitoringException submitted = assertThrows(
+                MonitoringException.class,
+                () -> service.reportActivity(
+                        STUDENT_ID, new ReportActivityCommand(ATTEMPT_ID, ActivityType.TAB_HIDDEN)));
+        assertEquals("ATTEMPT_NOT_ACTIVE", submitted.code());
+
+        when(repository.lockAttemptOwnedByStudent(ATTEMPT_ID, STUDENT_ID)).thenReturn(Optional.of(
+                new MonitoredAttempt(
+                        ATTEMPT_ID, EXAM_ID, STUDENT_ID, "IN_PROGRESS",
+                        OffsetDateTime.now(ZoneOffset.UTC).minusSeconds(1))));
+        MonitoringException expired = assertThrows(
+                MonitoringException.class,
+                () -> service.reportActivity(
+                        STUDENT_ID, new ReportActivityCommand(ATTEMPT_ID, ActivityType.TAB_HIDDEN)));
+        assertEquals("ATTEMPT_NOT_ACTIVE", expired.code());
+        verify(repository, never()).saveActivity(any());
+    }
+
+    @Test
     void thirdWarningCreatesThresholdSignalExactlyOnce() {
         stubOwnedAttempt();
         when(repository.countWarnings(ATTEMPT_ID)).thenReturn(3L);
