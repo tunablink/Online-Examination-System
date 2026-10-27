@@ -1,5 +1,6 @@
 package vn.edu.hanu.exam.repository;
 
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -10,6 +11,13 @@ public interface ExamRepository {
             String title,
             String description,
             int durationMinutes,
+            long createdBy);
+
+    Exam create(
+            String title,
+            String description,
+            int durationMinutes,
+            OffsetDateTime scheduledAt,
             long createdBy);
 
     List<Exam> findAllByCreatedBy(long createdBy);
@@ -24,6 +32,14 @@ public interface ExamRepository {
             String title,
             String description,
             int durationMinutes);
+
+    Optional<Exam> updateDraft(
+            long examId,
+            long teacherId,
+            String title,
+            String description,
+            int durationMinutes,
+            OffsetDateTime scheduledAt);
 
     ExamPublishReadiness getPublishReadiness(long examId);
 

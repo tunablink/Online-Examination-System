@@ -1,5 +1,5 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 
 import { useAuth } from '../../auth/useAuth';
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
@@ -14,7 +14,7 @@ const inputClass = 'h-11 w-full rounded-lg border border-[#d6e1e4] bg-white px-3
 
 function LoginPage() {
   const { status: connectionStatus, sendMessage } = useWebSocket();
-  const navigate = useNavigate(); const { login } = useAuth();
+  const navigate = useNavigate(); const location = useLocation(); const { login } = useAuth();
   const [form, setForm] = useState({ username: '', password: '' });
   const [showPassword, setShowPassword] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
@@ -25,7 +25,16 @@ function LoginPage() {
     setPending(false);
     if (message.type === 'LOGGED_IN' && message.data?.id !== undefined && message.data.username && message.data.fullName && message.data.email && message.data.role) {
       login({ id: message.data.id, username: message.data.username, fullName: message.data.fullName, email: message.data.email, role: message.data.role });
-      navigate(message.data.role === 'TEACHER' ? '/teacher' : '/student/exams', { replace: true }); return;
+      const defaultDestination = message.data.role === 'TEACHER' ? '/teacher' : '/student/exams';
+      if (message.data.role === 'STUDENT') {
+        navigate(defaultDestination, { replace: true });
+        return;
+      }
+      const requestedDestination = typeof location.state === 'object' && location.state !== null && 'from' in location.state && typeof location.state.from === 'string'
+        ? location.state.from
+        : null;
+      const allowedPrefix = '/teacher';
+      navigate(requestedDestination?.startsWith(allowedPrefix) ? requestedDestination : defaultDestination, { replace: true }); return;
     }
     setFeedback({ type: 'error', title: 'Login failed', message: `${message.error?.code ?? 'LOGIN_FAILED'}: ${message.error?.message ?? 'The server could not authenticate this account.'}` });
   };

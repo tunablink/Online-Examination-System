@@ -1,6 +1,4 @@
-import type { ExamAttempt } from '../types/attempt';
-
-export const MOCK_EXAM_ATTEMPT: ExamAttempt = {
+export const MOCK_EXAM_ATTEMPT = {
   id: 'attempt-java-001',
   examId: 'exam-java-001',
 

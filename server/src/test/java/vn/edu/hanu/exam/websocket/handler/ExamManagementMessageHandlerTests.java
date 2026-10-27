@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -51,17 +52,26 @@ class ExamManagementMessageHandlerTests {
     void validCreateReturnsExamCreatedAndPreservesRequestId() {
         authenticate(UserRole.TEACHER);
         ExamDetails exam = sampleExam();
+        OffsetDateTime scheduledAt = OffsetDateTime.parse("2026-12-26T17:30:00+07:00");
         when(examService.createExam(eq(10L), any(CreateExamCommand.class))).thenReturn(exam);
 
         ServerMessage response = handler.handleCreate(SESSION_ID, REQUEST_ID, Map.of(
                 "title", "Java Midterm",
                 "description", "Core Java",
-                "durationMinutes", 60));
+                "durationMinutes", 60,
+                "scheduledAt", scheduledAt.toString()));
 
         assertEquals(REQUEST_ID, response.requestId());
         assertEquals("EXAM_CREATED", response.type());
         assertEquals(exam, response.data());
         assertNull(response.error());
+        verify(examService).createExam(
+                10L,
+                new CreateExamCommand(
+                        "Java Midterm",
+                        "Core Java",
+                        60,
+                        scheduledAt.withOffsetSameInstant(ZoneOffset.UTC)));
     }
 
     @Test

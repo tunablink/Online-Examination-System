@@ -2,6 +2,7 @@ package vn.edu.hanu.exam.repository;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -21,6 +22,7 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                    e.title,
                    e.description,
                    e.duration_minutes,
+                   e.scheduled_at,
                    COUNT(q.id) AS question_count,
                    COALESCE(SUM(q.points), 0) AS total_points
             FROM exams e
@@ -31,6 +33,7 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                      e.title,
                      e.description,
                      e.duration_minutes,
+                     e.scheduled_at,
                      e.created_at
             """;
     private static final RowMapper<AvailableExamDetails> AVAILABLE_EXAM_ROW_MAPPER =
@@ -78,6 +81,7 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                 resultSet.getString("description"),
                 resultSet.getInt("duration_minutes"),
                 resultSet.getLong("question_count"),
-                resultSet.getLong("total_points"));
+                resultSet.getLong("total_points"),
+                resultSet.getObject("scheduled_at", OffsetDateTime.class));
     }
 }

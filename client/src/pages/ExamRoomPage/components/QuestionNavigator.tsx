@@ -1,6 +1,6 @@
 import type { AnswerMap, ExamQuestion } from '../../../types/attempt';
 
-interface QuestionNavigatorProps { questions: ExamQuestion[]; currentQuestionIndex: number; answers: AnswerMap; flaggedQuestionIds: Set<string>; onSelectQuestion: (index: number) => void; }
+interface QuestionNavigatorProps { questions: ExamQuestion[]; currentQuestionIndex: number; answers: AnswerMap; flaggedQuestionIds: Set<number>; onSelectQuestion: (index: number) => void; }
 
 function QuestionNavigator({ questions, currentQuestionIndex, answers, flaggedQuestionIds, onSelectQuestion }: QuestionNavigatorProps) {
   const answered = Object.keys(answers).length;

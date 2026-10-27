@@ -20,6 +20,9 @@ function QuestionEditorForm({ initialQuestion, isSaving = false, onCancel, onSav
   );
   const [errors, setErrors] = useState<string[]>([]);
   const editing = initialQuestion !== null;
+  const contentError = errors.find((error) => error.startsWith('Question content'));
+  const pointsError = errors.find((error) => error.startsWith('Points'));
+  const choiceErrors = errors.filter((error) => error.includes('choice') || error.includes('correct answer'));
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -53,17 +56,16 @@ function QuestionEditorForm({ initialQuestion, isSaving = false, onCancel, onSav
         {editing && <button className="h-8 rounded-lg border border-[#d5e0e3] px-3 text-[9px] font-semibold" disabled={isSaving} onClick={onCancel} type="button">Cancel editing</button>}
       </div>
 
-      {errors.length > 0 && <div className="mt-4 rounded-lg border border-[#edc9cc] bg-[#fff4f4] p-3"><ul className="list-disc space-y-1 pl-4 text-[9px] leading-4 text-[#a32a30]">{errors.map((error) => <li key={error}>{error}</li>)}</ul></div>}
-
       <div className="mt-5 grid gap-2">
         <label className="text-[10px] font-semibold text-[#46565c]" htmlFor="question-content">Question content</label>
-        <textarea className="min-h-28 resize-y rounded-lg border border-[#d6e1e4] p-3 text-[13px] leading-6 outline-none focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10" disabled={isSaving} id="question-content" maxLength={2000} onChange={(event) => { setContent(event.target.value); setErrors([]); }} placeholder="Enter the question shown to students." value={content} />
-        <p className="text-right text-[8px] text-[#8c999e]">{content.length}/2000</p>
+        <textarea aria-invalid={Boolean(contentError)} className={`min-h-28 resize-y rounded-lg border p-3 text-[13px] leading-6 outline-none focus:ring-4 focus:ring-[#00849a]/10 ${contentError ? 'border-[#d84a50] focus:border-[#d84a50]' : 'border-[#d6e1e4] focus:border-[#70b2be]'}`} disabled={isSaving} id="question-content" maxLength={2000} onChange={(event) => { setContent(event.target.value); setErrors([]); }} placeholder="Enter the question shown to students." value={content} />
+        <div className="flex items-start justify-between gap-3">{contentError ? <p className="text-[9px] font-medium text-[#bd2f35]">{contentError}</p> : <span />}<p className="shrink-0 text-right text-[8px] text-[#8c999e]">{content.length}/2000</p></div>
       </div>
 
       <label className="mt-3 grid max-w-[160px] gap-2">
         <span className="text-[10px] font-semibold text-[#46565c]">Points</span>
-        <input className="h-10 rounded-lg border border-[#d6e1e4] px-3 text-[11px] outline-none focus:border-[#70b2be]" disabled={isSaving} max="100" min="0.1" onChange={(event) => setPoints(event.target.value)} step="0.1" type="number" value={points} />
+        <input aria-invalid={Boolean(pointsError)} className={`h-10 rounded-lg border px-3 text-[11px] outline-none ${pointsError ? 'border-[#d84a50]' : 'border-[#d6e1e4] focus:border-[#70b2be]'}`} disabled={isSaving} max="100" min="0.1" onChange={(event) => { setPoints(event.target.value); setErrors([]); }} step="0.1" type="number" value={points} />
+        {pointsError && <span className="text-[9px] font-medium leading-4 text-[#bd2f35]">{pointsError}</span>}
       </label>
 
       <div className="mt-5 flex items-end justify-between">
@@ -78,10 +80,11 @@ function QuestionEditorForm({ initialQuestion, isSaving = false, onCancel, onSav
               <input className="sr-only" checked={choice.correct} disabled={isSaving} name="correct-choice" onChange={() => setChoices((current) => current.map((item) => ({ ...item, correct: item.id === choice.id })))} type="radio" />
               {String.fromCharCode(65 + index)}
             </label>
-            <input className="h-10 rounded-lg border border-[#d6e1e4] bg-white px-3 text-[11px] outline-none focus:border-[#70b2be]" disabled={isSaving} onChange={(event) => setChoices((current) => current.map((item) => item.id === choice.id ? { ...item, content: event.target.value } : item))} placeholder={`Choice ${String.fromCharCode(65 + index)}`} value={choice.content} />
+            <input className={`h-10 rounded-lg border bg-white px-3 text-[11px] outline-none focus:border-[#70b2be] ${errors.includes('Every choice must have content.') && !choice.content.trim() ? 'border-[#d84a50]' : 'border-[#d6e1e4]'}`} disabled={isSaving} onChange={(event) => { setChoices((current) => current.map((item) => item.id === choice.id ? { ...item, content: event.target.value } : item)); setErrors([]); }} placeholder={`Choice ${String.fromCharCode(65 + index)}`} value={choice.content} />
             <button className="text-[9px] font-semibold text-[#b32c33] disabled:opacity-30" disabled={isSaving || choices.length <= 2} onClick={() => setChoices((current) => { const next = current.filter((item) => item.id !== choice.id); return choice.correct ? next.map((item, nextIndex) => ({ ...item, correct: nextIndex === 0 })) : next; })} type="button">Remove</button>
           </div>
         ))}
+        {choiceErrors.map((error) => <p className="text-[9px] font-medium text-[#bd2f35]" key={error}>{error}</p>)}
       </div>
 
       <div className="mt-5 flex justify-end gap-2 border-t border-[#e7edef] pt-4">

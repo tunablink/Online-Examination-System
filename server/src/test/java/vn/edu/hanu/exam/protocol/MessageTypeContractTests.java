@@ -30,6 +30,13 @@ class MessageTypeContractTests {
                                 "LOGIN",
                                 "LOGGED_IN",
 
+                                "GET_PROFILE",
+                                "PROFILE_DETAILS",
+                                "UPDATE_PROFILE",
+                                "PROFILE_UPDATED",
+                                "CHANGE_PASSWORD",
+                                "PASSWORD_CHANGED",
+
                                 "GET_STUDENTS",
                                 "STUDENTS",
 
@@ -78,6 +85,12 @@ class MessageTypeContractTests {
                                 "GET_AVAILABLE_EXAM",
                                 "AVAILABLE_EXAM_DETAILS",
 
+                                "START_EXAM",
+                                "EXAM_STARTED",
+
+                                "GET_EXAM_ATTEMPT",
+                                "EXAM_ATTEMPT_DETAILS",
+
                                 "ERROR");
 
                 assertEquals(
@@ -123,7 +136,13 @@ class MessageTypeContractTests {
                                                 MessageType.fromWireValue(" close_exam ").orElseThrow()),
                                 () -> assertEquals(
                                                 MessageType.DELETE_EXAM,
-                                                MessageType.fromWireValue(" delete_exam ").orElseThrow()));
+                                                MessageType.fromWireValue(" delete_exam ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.START_EXAM,
+                                                MessageType.fromWireValue(" start_exam ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.GET_EXAM_ATTEMPT,
+                                                MessageType.fromWireValue("get_exam_attempt").orElseThrow()));
         }
 
         @Test
@@ -150,6 +169,10 @@ class MessageTypeContractTests {
                                 MessageType.REGISTER,
                                 MessageType.LOGIN,
 
+                                MessageType.GET_PROFILE,
+                                MessageType.UPDATE_PROFILE,
+                                MessageType.CHANGE_PASSWORD,
+
                                 MessageType.GET_STUDENTS,
                                 MessageType.GET_STUDENT,
 
@@ -168,7 +191,10 @@ class MessageTypeContractTests {
                                 MessageType.GET_EXAM_QUESTIONS,
 
                                 MessageType.GET_AVAILABLE_EXAMS,
-                                MessageType.GET_AVAILABLE_EXAM);
+                                MessageType.GET_AVAILABLE_EXAM,
+
+                                MessageType.START_EXAM,
+                                MessageType.GET_EXAM_ATTEMPT);
 
                 assertEquals(
                                 expectedClientCommandTypes,
@@ -190,6 +216,10 @@ class MessageTypeContractTests {
 
                                 MessageType.LOGGED_IN,
 
+                                MessageType.PROFILE_DETAILS,
+                                MessageType.PROFILE_UPDATED,
+                                MessageType.PASSWORD_CHANGED,
+
                                 MessageType.STUDENTS,
                                 MessageType.STUDENT_DETAILS,
 
@@ -209,6 +239,9 @@ class MessageTypeContractTests {
 
                                 MessageType.AVAILABLE_EXAMS,
                                 MessageType.AVAILABLE_EXAM_DETAILS,
+
+                                MessageType.EXAM_STARTED,
+                                MessageType.EXAM_ATTEMPT_DETAILS,
 
                                 MessageType.ERROR);
 

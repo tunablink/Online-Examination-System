@@ -27,6 +27,7 @@ public class JdbcUserRepository implements UserRepository {
                 password_hash,
                 full_name,
                 email,
+                department,
                 role,
                 active,
                 created_at,
@@ -110,6 +111,46 @@ public class JdbcUserRepository implements UserRepository {
         return findOne(sql, Map.of("email", email));
     }
 
+    @Override
+    public User updateDepartment(long userId, String department) {
+        int affectedRows = jdbcTemplate.update(
+                """
+                UPDATE users
+                SET department = :department,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :userId
+                """,
+                new MapSqlParameterSource()
+                        .addValue("department", department)
+                        .addValue("userId", userId));
+
+        if (affectedRows != 1) {
+            throw new IllegalStateException("Expected one updated user, but affected " + affectedRows + " rows.");
+        }
+
+        return findById(userId)
+                .orElseThrow(() -> new IllegalStateException("The updated user could not be read back."));
+    }
+
+    @Override
+    public User updatePasswordHash(long userId, String passwordHash) {
+        int affectedRows = jdbcTemplate.update(
+                """
+                UPDATE users
+                SET password_hash = :passwordHash,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :userId
+                """,
+                Map.of("passwordHash", passwordHash, "userId", userId));
+
+        if (affectedRows != 1) {
+            throw new IllegalStateException("Expected one updated user, but affected " + affectedRows + " rows.");
+        }
+
+        return findById(userId)
+                .orElseThrow(() -> new IllegalStateException("The updated user could not be read back."));
+    }
+
     @Override 
     public boolean existsByUsername(String username){
         String sql = """
@@ -158,6 +199,7 @@ public class JdbcUserRepository implements UserRepository {
             resultSet.getString("password_hash"),
             resultSet.getString("full_name"),
             resultSet.getString("email"),
+            resultSet.getString("department"),
             UserRole.valueOf(resultSet.getString("role")),
             resultSet.getBoolean("active"),
             resultSet.getObject("created_at", OffsetDateTime.class),

@@ -8,6 +8,7 @@ public record User (
     String passwordHash,
     String fullName,
     String email,
+    String department,
     UserRole role,
     boolean active,
     OffsetDateTime createdAt,

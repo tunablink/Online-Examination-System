@@ -604,7 +604,23 @@ EXAM_TIMEOUT
 SUSPICIOUS_ACTIVITY
 ```
 
-The exact detection rules will be determined after feasibility analysis.
+## 13.1. Recommended Detection Rules
+
+For the basic version, the client may report the following observable events while an attempt is active:
+
+- `TAB_HIDDEN`: the examination tab stays hidden longer than a configured threshold or is hidden repeatedly.
+- `WINDOW_BLUR`: the examination window repeatedly loses focus.
+- `FULLSCREEN_EXIT`: the student exits required fullscreen mode and does not return within the grace period.
+- `HEARTBEAT_TIMEOUT`: the server stops receiving heartbeats for the configured interval.
+- `DISCONNECTED` / `RECONNECTED`: the active attempt loses its WebSocket connection, especially repeatedly or for a long duration.
+- `MULTIPLE_SESSION`: the same student account has more than one active examination session.
+- `DEVICE_CHANGED`: the active attempt resumes from a materially different client fingerprint or network context.
+- `PROCTOR_DEVICE_DISABLED`: a required camera or microphone is denied, disabled, or stops producing a signal.
+- `FORBIDDEN_ACTION`: the client detects blocked copy, paste, screen-capture, context-menu, or restricted shortcut attempts when lockdown rules are enabled.
+- `ABNORMAL_ANSWER_ACTIVITY`: an unusually high number of answer changes in a short interval or completion far faster than a configured minimum duration.
+- `LATE_OR_DUPLICATE_SUBMISSION`: a submission is received after the deadline or more than once.
+
+Each event should include the attempt ID, student ID, event type, server timestamp, severity, and a short technical description. A single focus loss, short disconnection, or device error must not automatically be treated as cheating. Events are evidence for teacher review; only repeated or high-confidence signals should produce a high-severity warning. Thresholds must be documented, server timestamps should be authoritative, and camera/microphone collection requires clear consent and a retention policy.
 
 ---
 
@@ -661,6 +677,41 @@ Results
 Suspicious Activity
 Profile
 ```
+
+## 14.3. Optional Demonstration-Only UI Features
+
+The current UI contains several controls that are primarily visual or demonstrative. They do not yet have complete frontend behavior or corresponding Java Server functionality:
+
+- Report ambiguity.
+- Calculator.
+- Formula reference.
+- Digital scratchpad.
+- Examination section overview.
+- Global search in the teacher header.
+- Notifications.
+- Language switching.
+
+These features are **optional**. The team may implement them if they provide useful project value and sufficient development time is available, or leave/remove them without affecting the core examination requirements. Core functions such as examination attempts, answer saving, submission, server-authoritative timing, results, monitoring, and anti-cheating should be prioritized first.
+
+## 14.4. Minimum Page Gap Analysis
+
+Compared with common examination systems, the current UI should add or complete the following pages for a basic usable release:
+
+- Student Profile and Teacher Profile: view institution-managed identity data and change permitted account fields.
+- Teacher Submissions / Results: list attempts for an examination with status, submission time, score, and integrity flags.
+- Attempt Detail / Review: allow a teacher to review one student's answers and allow a student to review released answers according to the exam's review policy.
+- Student Directory / Student Detail: separate account creation from browsing an individual student's basic account status and examination history.
+
+A separate calendar page is not required for the basic version if start time, end time, and availability are clearly shown on the student dashboard. Advanced analytics, course management, messaging, notification center, and administrative settings remain outside the minimum scope.
+
+## 14.5. Profile Field Policy
+
+Two role-specific profile routes are required:
+
+- Student Profile: full name, student ID/username, institutional email, role, account status, and creation date are read-only. The student may change the password after confirming the current password.
+- Teacher Profile: full name, staff username, institutional email, role, account status, and creation date are read-only. The teacher may edit the department and may change the password after confirming the current password.
+
+Identity fields must not be editable by the user because they are institution-managed. Passwords are never returned to the client. Password changes must be validated and stored only as secure password hashes.
 
 The final page list will be refined after the functional requirements and novelty are finalized.
 

@@ -23,9 +23,11 @@ import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.LoginCommand;
 import vn.edu.hanu.exam.service.LoginService;
+import vn.edu.hanu.exam.websocket.handler.AttemptMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.ExamManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.QuestionManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.ProfileManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.StudentExamCatalogMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.StudentManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.TeacherDashboardMessageHandler;
@@ -46,9 +48,13 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
 
         private final StudentExamCatalogMessageHandler studentExamCatalogMessageHandler;
 
+        private final AttemptMessageHandler attemptMessageHandler;
+
         private final StudentManagementMessageHandler studentManagementMessageHandler;
 
         private final TeacherDashboardMessageHandler teacherDashboardMessageHandler;
+
+        private final ProfileManagementMessageHandler profileManagementMessageHandler;
 
         private final LoginService loginService;
         private final AuthenticatedSessionRegistry authenticatedSessionRegistry;
@@ -60,8 +66,10 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                         ExamManagementMessageHandler examManagementMessageHandler,
                         QuestionManagementMessageHandler questionManagementMessageHandler,
                         StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
+                        AttemptMessageHandler attemptMessageHandler,
                         StudentManagementMessageHandler studentManagementMessageHandler,
                         TeacherDashboardMessageHandler teacherDashboardMessageHandler,
+                        ProfileManagementMessageHandler profileManagementMessageHandler,
                         LoginService loginService,
                         AuthenticatedSessionRegistry authenticatedSessionRegistry) {
                 this.jsonMapper = jsonMapper;
@@ -69,8 +77,10 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                 this.examManagementMessageHandler = examManagementMessageHandler;
                 this.questionManagementMessageHandler = questionManagementMessageHandler;
                 this.studentExamCatalogMessageHandler = studentExamCatalogMessageHandler;
+                this.attemptMessageHandler = attemptMessageHandler;
                 this.studentManagementMessageHandler = studentManagementMessageHandler;
                 this.teacherDashboardMessageHandler = teacherDashboardMessageHandler;
+                this.profileManagementMessageHandler = profileManagementMessageHandler;
                 this.loginService = loginService;
                 this.authenticatedSessionRegistry = authenticatedSessionRegistry;
         }
@@ -89,6 +99,8 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                 examManagementMessageHandler,
                                 questionManagementMessageHandler,
                                 studentExamCatalogMessageHandler,
+                                null,
+                                null,
                                 null,
                                 null,
                                 loginService,
@@ -178,6 +190,27 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                 handleLogin(
                                                 session,
                                                 clientMessage);
+
+                        case GET_PROFILE ->
+                                sendMessage(
+                                                session,
+                                                profileManagementMessageHandler.handleGet(
+                                                                session,
+                                                                clientMessage));
+
+                        case UPDATE_PROFILE ->
+                                sendMessage(
+                                                session,
+                                                profileManagementMessageHandler.handleUpdate(
+                                                                session,
+                                                                clientMessage));
+
+                        case CHANGE_PASSWORD ->
+                                sendMessage(
+                                                session,
+                                                profileManagementMessageHandler.handleChangePassword(
+                                                                session,
+                                                                clientMessage));
 
                         case GET_STUDENTS ->
                                 sendMessage(
@@ -288,6 +321,20 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                 sendMessage(
                                                 session,
                                                 studentExamCatalogMessageHandler.handleGet(
+                                                                session,
+                                                                clientMessage));
+
+                        case START_EXAM ->
+                                sendMessage(
+                                                session,
+                                                attemptMessageHandler.handleStart(
+                                                                session,
+                                                                clientMessage));
+
+                        case GET_EXAM_ATTEMPT ->
+                                sendMessage(
+                                                session,
+                                                attemptMessageHandler.handleGet(
                                                                 session,
                                                                 clientMessage));
 

@@ -72,7 +72,11 @@ public class ExamManagementMessageHandler {
             CreateExamPayload input = convertPayload(payload, CreateExamPayload.class);
             return ServerMessage.success(requestId, TYPE_EXAM_CREATED, examService.createExam(
                     teacher.id(),
-                    new CreateExamCommand(input.title(), input.description(), input.durationMinutes())));
+                    new CreateExamCommand(
+                            input.title(),
+                            input.description(),
+                            input.durationMinutes(),
+                            input.scheduledAt())));
         });
     }
 
@@ -121,7 +125,8 @@ public class ExamManagementMessageHandler {
                                     new UpdateExamCommand(
                                             input.title(),
                                             input.description(),
-                                            input.durationMinutes())));
+                                            input.durationMinutes(),
+                                            input.scheduledAt())));
                 });
     }
 

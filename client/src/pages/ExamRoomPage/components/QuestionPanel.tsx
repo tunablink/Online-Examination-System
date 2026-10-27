@@ -2,8 +2,8 @@ import Icon from '../../../components/common/Icon';
 import type { ExamQuestion } from '../../../types/attempt';
 
 interface QuestionPanelProps {
-  question: ExamQuestion; questionNumber: number; totalQuestions: number; selectedChoiceId?: string; isFlagged: boolean; disabled?: boolean;
-  onSelectChoice: (questionId: string, choiceId: string) => void; onToggleFlag: (questionId: string) => void;
+  question: ExamQuestion; questionNumber: number; totalQuestions: number; selectedChoiceId?: number; isFlagged: boolean; disabled?: boolean;
+  onSelectChoice: (questionId: number, choiceId: number) => void; onToggleFlag: (questionId: number) => void;
 }
 
 function QuestionPanel({ question, questionNumber, totalQuestions, selectedChoiceId, isFlagged, disabled = false, onSelectChoice, onToggleFlag }: QuestionPanelProps) {

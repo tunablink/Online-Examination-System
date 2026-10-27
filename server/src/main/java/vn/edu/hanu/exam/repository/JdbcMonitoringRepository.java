@@ -28,7 +28,8 @@ public class JdbcMonitoringRepository implements MonitoringRepository {
     @Override
     public Optional<MonitoredAttempt> lockAttemptOwnedByStudent(long attemptId, long studentId) {
         String sql = """
-                SELECT id, exam_id, student_id, status, deadline
+                SELECT id, exam_id, student_id, status,
+                       deadline_at AS deadline
                 FROM exam_attempts
                 WHERE id = :attemptId
                   AND student_id = :studentId
@@ -107,7 +108,7 @@ public class JdbcMonitoringRepository implements MonitoringRepository {
                        u.username AS student_username,
                        u.full_name AS student_full_name,
                        a.status AS attempt_status,
-                       a.deadline,
+                       a.deadline_at AS deadline,
                        COUNT(sa.id) FILTER (
                            WHERE sa.severity = 'WARNING'
                              AND sa.rule_code <> 'MULTIPLE_WARNING_THRESHOLD'
@@ -129,7 +130,7 @@ public class JdbcMonitoringRepository implements MonitoringRepository {
                     LIMIT 1
                 ) latest ON TRUE
                 WHERE a.exam_id = :examId
-                GROUP BY a.id, u.id, u.username, u.full_name, a.status, a.deadline,
+                GROUP BY a.id, u.id, u.username, u.full_name, a.status, a.deadline_at,
                          latest.id, latest.rule_code, latest.severity, latest.description,
                          latest.occurred_at, latest.created_at
                 ORDER BY a.id DESC

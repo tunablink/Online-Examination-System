@@ -2,6 +2,9 @@ export type ClientMessageType =
   | 'PING'
   | 'REGISTER'
   | 'LOGIN'
+  | 'GET_PROFILE'
+  | 'UPDATE_PROFILE'
+  | 'CHANGE_PASSWORD'
   | 'GET_STUDENTS'
   | 'GET_STUDENT'
   | 'GET_TEACHER_DASHBOARD'
@@ -17,13 +20,18 @@ export type ClientMessageType =
   | 'DELETE_QUESTION'
   | 'GET_EXAM_QUESTIONS'
   | 'GET_AVAILABLE_EXAMS'
-  | 'GET_AVAILABLE_EXAM';
+  | 'GET_AVAILABLE_EXAM'
+  | 'START_EXAM'
+  | 'GET_EXAM_ATTEMPT';
 
 export type ServerMessageType =
   | 'CONNECTED'
   | 'PONG'
   | 'REGISTERED'
   | 'LOGGED_IN'
+  | 'PROFILE_DETAILS'
+  | 'PROFILE_UPDATED'
+  | 'PASSWORD_CHANGED'
   | 'STUDENTS'
   | 'STUDENT_DETAILS'
   | 'TEACHER_DASHBOARD'
@@ -40,6 +48,8 @@ export type ServerMessageType =
   | 'EXAM_QUESTIONS'
   | 'AVAILABLE_EXAMS'
   | 'AVAILABLE_EXAM_DETAILS'
+  | 'EXAM_STARTED'
+  | 'EXAM_ATTEMPT_DETAILS'
   | 'ERROR';
 
 export type UserRole =
@@ -67,6 +77,7 @@ export interface CreateExamPayload {
   title: string;
   description: string;
   durationMinutes: number;
+  scheduledAt: string;
 }
 
 export interface GetExamPayload {
@@ -78,6 +89,7 @@ export interface UpdateExamPayload {
   title: string;
   description: string;
   durationMinutes: number;
+  scheduledAt: string;
 }
 
 export interface ExamIdPayload {
@@ -137,13 +149,34 @@ export interface GetAvailableExamPayload {
   examId: number;
 }
 
+export interface StartExamPayload {
+  examId: number;
+}
+
+export interface GetExamAttemptPayload {
+  attemptId: number;
+}
+
 export interface ExamDetailsData {
   id: number;
   title: string;
   description: string | null;
   durationMinutes: number;
+  scheduledAt: string | null;
   status: ExamStatus;
   createdBy: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProfileData {
+  id: number;
+  username: string;
+  fullName: string;
+  email: string;
+  department: string | null;
+  role: UserRole;
+  active: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -185,6 +218,7 @@ export interface AvailableExamDetailsData {
   durationMinutes: number;
   questionCount: number;
   totalPoints: number;
+  scheduledAt: string | null;
 }
 
 export interface ClientMessage {
@@ -207,6 +241,7 @@ export interface ServerMessageData {
   username?: string;
   fullName?: string;
   email?: string;
+  department?: string | null;
   role?: UserRole;
   active?: boolean;
   students?: StudentDirectoryData[];
@@ -214,6 +249,7 @@ export interface ServerMessageData {
   title?: string;
   description?: string | null;
   durationMinutes?: number;
+  scheduledAt?: string | null;
   status?: ExamStatus;
   createdBy?: number;
   createdAt?: string;
