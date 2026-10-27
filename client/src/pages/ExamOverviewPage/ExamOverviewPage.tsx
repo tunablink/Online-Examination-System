@@ -1,35 +1,366 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router';
 
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
-import type { ServerExam, ServerMessageData } from '../../websocket/protocol';
+import LifecycleConfirmationDialog from '../../components/exam/LifecycleConfirmationDialog';
+import type { ExamStatus, ServerExam, ServerMessage } from '../../websocket/protocol';
 import { useWebSocket } from '../../websocket/useWebSocket';
 
-const inputClass = 'h-10 w-full rounded-lg border border-[#d6e1e4] px-3 text-[11px] outline-none focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10';
+type PendingAction = 'UPDATE_EXAM' | 'PUBLISH_EXAM' | 'CLOSE_EXAM' | 'DELETE_EXAM';
+type ConfirmationAction = 'CLOSE_EXAM' | 'DELETE_EXAM';
 
-function mergeResponse(current: ServerExam, data: ServerMessageData | null): ServerExam {
-  if (!data) return current;
-  return { ...current, title: data.title ?? current.title, description: data.description ?? current.description, durationMinutes: data.durationMinutes ?? current.durationMinutes, status: data.status ?? current.status, updatedAt: data.updatedAt ?? current.updatedAt };
+interface ExamFormState {
+  title: string;
+  description: string;
+  durationMinutes: string;
+}
+
+const inputClass = 'h-10 w-full rounded-lg border border-[#d6e1e4] px-3 text-[11px] outline-none focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10 disabled:bg-[#f1f4f5] disabled:text-[#8a979c]';
+
+function isExamStatus(value: unknown): value is ExamStatus {
+  return value === 'DRAFT' || value === 'PUBLISHED' || value === 'CLOSED';
+}
+
+function isServerExam(value: unknown): value is ServerExam {
+  if (typeof value !== 'object' || value === null) return false;
+  const exam = value as Record<string, unknown>;
+  return typeof exam.id === 'number'
+    && typeof exam.title === 'string'
+    && (typeof exam.description === 'string' || exam.description === null)
+    && typeof exam.durationMinutes === 'number'
+    && isExamStatus(exam.status)
+    && typeof exam.createdBy === 'number'
+    && typeof exam.createdAt === 'string'
+    && typeof exam.updatedAt === 'string';
+}
+
+function toForm(exam: ServerExam): ExamFormState {
+  return {
+    title: exam.title,
+    description: exam.description ?? '',
+    durationMinutes: String(exam.durationMinutes),
+  };
+}
+
+function serverError(message: ServerMessage, fallback: string): string {
+  const detail = message.error?.message ?? fallback;
+  return message.error?.code ? `${message.error.code}: ${detail}` : detail;
 }
 
 function ExamOverviewPage() {
   const { status: connectionStatus, sendMessage } = useWebSocket();
-  const { examId } = useParams(); const navigate = useNavigate(); const id = Number(examId);
-  const [exam, setExam] = useState<ServerExam | null>(null); const [form, setForm] = useState({ title: '', description: '', durationMinutes: '60' }); const [loading, setLoading] = useState(true); const [pending, setPending] = useState<string | null>(null); const [feedback, setFeedback] = useState<Feedback | null>(null); const [editing, setEditing] = useState(false);
-  useEffect(() => { if (connectionStatus !== 'connected' || !Number.isFinite(id)) return; const requestId = sendMessage('GET_EXAM', { examId: id }, (message) => { setLoading(false); if (message.type === 'EXAM_DETAILS' && message.data?.id !== undefined && message.data.title && message.data.durationMinutes && message.data.status && message.data.createdBy !== undefined && message.data.createdAt && message.data.updatedAt) { const loaded: ServerExam = { id: message.data.id, title: message.data.title, description: message.data.description ?? null, durationMinutes: message.data.durationMinutes, status: message.data.status, createdBy: message.data.createdBy, createdAt: message.data.createdAt, updatedAt: message.data.updatedAt }; setExam(loaded); setForm({ title: loaded.title, description: loaded.description ?? '', durationMinutes: String(loaded.durationMinutes) }); } else setFeedback({ type: 'error', message: `${message.error?.code ?? 'LOAD_FAILED'}: ${message.error?.message ?? 'Could not load this exam.'}` }); }); if (requestId === null) queueMicrotask(() => { setLoading(false); setFeedback({ type: 'error', message: 'The exam request could not be sent.' }); }); }, [connectionStatus, id, sendMessage]);
-  const action = (type: 'PUBLISH_EXAM' | 'CLOSE_EXAM', expected: 'EXAM_PUBLISHED' | 'EXAM_CLOSED', label: string) => { if (!exam) return; setPending(type); const requestId = sendMessage(type, { examId: exam.id }, (message) => { setPending(null); if (message.type === expected) { setExam((current) => current ? mergeResponse(current, message.data) : current); setFeedback({ type: 'success', message: `${label} was committed by the server.` }); } else setFeedback({ type: 'error', message: `${message.error?.code ?? 'REQUEST_FAILED'}: ${message.error?.message ?? `Could not ${label.toLowerCase()}.`}` }); }); if (requestId === null) { setPending(null); setFeedback({ type: 'error', message: 'The request could not be sent.' }); } };
-  const save = (event: FormEvent) => { event.preventDefault(); if (!exam) return; const duration = Number(form.durationMinutes); if (!form.title.trim() || !Number.isInteger(duration) || duration <= 0) return setFeedback({ type: 'error', message: 'Enter a title and a positive duration.' }); setPending('UPDATE_EXAM'); const requestId = sendMessage('UPDATE_EXAM', { examId: exam.id, title: form.title.trim(), description: form.description.trim(), durationMinutes: duration }, (message) => { setPending(null); if (message.type === 'EXAM_UPDATED') { setExam((current) => current ? mergeResponse(current, message.data) : current); setEditing(false); setFeedback({ type: 'success', message: 'Draft details were updated in the database.' }); } else setFeedback({ type: 'error', message: `${message.error?.code ?? 'UPDATE_FAILED'}: ${message.error?.message ?? 'Could not update the exam.'}` }); }); if (requestId === null) { setPending(null); setFeedback({ type: 'error', message: 'The update request could not be sent.' }); } };
-  const remove = () => { if (!exam || !window.confirm(`Delete draft “${exam.title}”?`)) return; setPending('DELETE_EXAM'); const requestId = sendMessage('DELETE_EXAM', { examId: exam.id }, (message) => { setPending(null); if (message.type === 'EXAM_DELETED') navigate('/teacher/exams', { replace: true }); else setFeedback({ type: 'error', message: `${message.error?.code ?? 'DELETE_FAILED'}: ${message.error?.message ?? 'Could not delete the exam.'}` }); }); if (requestId === null) setPending(null); };
+  const { examId } = useParams();
+  const navigate = useNavigate();
+  const parsedId = Number(examId);
+  const id = Number.isSafeInteger(parsedId) && parsedId > 0 ? parsedId : null;
 
-  if (loading) return <div className="rounded-xl border border-[#dce7ea] bg-white py-20 text-center text-[11px] text-[#718087]">Loading examination through WebSocket…</div>;
-  if (!exam) return <div className="rounded-xl border border-[#edc9cc] bg-white p-10 text-center"><Icon className="mx-auto text-[#bd2f35]" name="alert" size={25} /><h1 className="mt-3 text-xl font-bold">Examination unavailable</h1><Link className="mt-5 inline-flex text-[10px] font-semibold text-[#00778b]" to="/teacher/exams">Back to examinations</Link></div>;
-  const statusClass = exam.status === 'PUBLISHED' ? 'border-[#b6dbe1] bg-[#eff9fa] text-[#00778b]' : exam.status === 'DRAFT' ? 'border-[#ead7b8] bg-[#fff8ed] text-[#986313]' : 'border-[#dce3e5] bg-[#f2f5f6] text-[#64747a]';
-  return <div><div className="flex items-center gap-2 text-[9px] font-semibold text-[#75848a]"><Link to="/teacher/exams">Examinations</Link><Icon name="arrow-right" size={10} /><span>EX-{String(exam.id).padStart(4,'0')}</span></div><section className="mt-4 flex items-start justify-between gap-5 max-lg:flex-col"><div><div className="flex items-center gap-2"><span className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold ${statusClass}`}>{exam.status}</span><span className="text-[9px] text-[#7a888d]">Updated {new Date(exam.updatedAt).toLocaleString('en-GB')}</span></div><h1 className="mt-3 text-[26px] font-bold tracking-[-.04em]">{exam.title}</h1><p className="mt-2 max-w-3xl text-[11px] leading-5 text-[#68777d]">{exam.description || 'No description has been provided.'}</p></div><div className="flex flex-wrap gap-2">{exam.status === 'DRAFT' && <><button className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d4e0e3] px-3 text-[9px] font-semibold text-[#526269]" onClick={() => setEditing((value) => !value)} type="button"><Icon name="settings" size={13} />Edit details</button><Link className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}/questions`}><Icon name="document" size={13} />Manage questions</Link><button className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-[9px] font-semibold text-white disabled:bg-[#a8bec3]" disabled={pending !== null} onClick={() => action('PUBLISH_EXAM','EXAM_PUBLISHED','Examination publication')} type="button"><Icon name="activity" size={13} />Publish exam</button></>}{exam.status === 'PUBLISHED' && <><Link className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]" to={`/teacher/monitoring/${exam.id}`}><Icon name="monitor" size={13} />Open monitoring</Link><button className="h-9 rounded-lg bg-[#25373d] px-4 text-[9px] font-semibold text-white" disabled={pending !== null} onClick={() => action('CLOSE_EXAM','EXAM_CLOSED','Examination closure')} type="button">Close exam</button></>}</div></section>
-    {feedback && <div className="mt-5"><FeedbackMessage feedback={feedback} onClose={() => setFeedback(null)} /></div>}
-    {editing && <form className="mt-5 rounded-xl border border-[#dce7ea] bg-white p-5" onSubmit={save}><div className="flex items-center justify-between"><h2 className="text-[12px] font-bold">Edit draft details</h2><button className="text-[9px] text-[#718087]" onClick={() => setEditing(false)} type="button">Cancel</button></div><div className="mt-4 grid grid-cols-[minmax(0,1fr)_180px] gap-4 max-md:grid-cols-1"><label className="grid gap-2"><span className="text-[9px] font-semibold">Title</span><input className={inputClass} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} value={form.title} /></label><label className="grid gap-2"><span className="text-[9px] font-semibold">Duration</span><input className={inputClass} min="1" onChange={(event) => setForm((current) => ({ ...current, durationMinutes: event.target.value }))} type="number" value={form.durationMinutes} /></label><label className="col-span-2 grid gap-2 max-md:col-span-1"><span className="text-[9px] font-semibold">Description</span><textarea className="min-h-24 rounded-lg border border-[#d6e1e4] p-3 text-[11px] outline-none focus:border-[#70b2be]" onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} value={form.description} /></label></div><button className="mt-4 h-9 rounded-lg bg-[#00778b] px-4 text-[9px] font-semibold text-white" disabled={pending !== null} type="submit">{pending === 'UPDATE_EXAM' ? 'Saving…' : 'Save changes'}</button></form>}
-    <div className="mt-5 grid grid-cols-[minmax(0,2fr)_330px] gap-5 max-xl:grid-cols-1"><section className="rounded-xl border border-[#dce7ea] bg-white"><div className="border-b border-[#e7edef] px-5 py-4"><h2 className="text-[12px] font-bold">Assessment configuration</h2><p className="mt-1 text-[9px] text-[#819096]">Server-backed lifecycle and core delivery settings</p></div><div className="grid grid-cols-3 divide-x divide-[#e8edef] max-md:grid-cols-1 max-md:divide-x-0 max-md:divide-y">{[['Duration',`${exam.durationMinutes} minutes`,'clock'],['Owner',`Teacher #${exam.createdBy}`,'users'],['Created',new Date(exam.createdAt).toLocaleDateString('en-GB'),'calendar']].map(([label,value,icon]) => <div className="p-5" key={label}><Icon className="text-[#00778b]" name={icon as 'clock'} size={16} /><p className="mt-3 text-[9px] font-bold uppercase tracking-[.07em] text-[#879399]">{label}</p><p className="mt-1 text-[12px] font-semibold">{value}</p></div>)}</div><div className="border-t border-[#e7edef] p-5"><h3 className="text-[11px] font-bold">Lifecycle controls</h3><div className="mt-4 flex items-center gap-2 text-[9px] font-semibold"><span className="rounded-full bg-[#fff3dd] px-3 py-1.5 text-[#95610e]">Draft</span><Icon name="arrow-right" size={12} /><span className="rounded-full bg-[#eaf7f8] px-3 py-1.5 text-[#00778b]">Published</span><Icon name="arrow-right" size={12} /><span className="rounded-full bg-[#eff2f3] px-3 py-1.5 text-[#617177]">Closed</span></div></div></section><aside className="grid gap-4"><section className="rounded-xl border border-[#dce7ea] bg-white p-5"><h2 className="text-[12px] font-bold">Publish readiness</h2><div className="mt-4 grid gap-3 text-[10px] text-[#607178]">{['At least one persisted question','Each question has 2+ choices','Exactly one correct choice'].map((item) => <p className="flex items-center gap-2" key={item}><Icon className="text-[#00778b]" name="check" size={13} />{item}</p>)}</div><p className="mt-4 rounded-lg bg-[#fff8ed] p-3 text-[9px] leading-4 text-[#8b641f]">The backend validates these rules when publishing and returns a precise error code if the draft is incomplete.</p></section>{exam.status === 'DRAFT' && <button className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#edc9cc] bg-white text-[9px] font-semibold text-[#b32c33]" disabled={pending !== null} onClick={remove} type="button"><Icon name="alert" size={13} />Delete draft permanently</button>}</aside></div>
-  </div>;
+  const [exam, setExam] = useState<ServerExam | null>(null);
+  const [form, setForm] = useState<ExamFormState>({ title: '', description: '', durationMinutes: '60' });
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState<PendingAction | null>(null);
+  const [confirmation, setConfirmation] = useState<ConfirmationAction | null>(null);
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [editing, setEditing] = useState(false);
+
+  const loadExam = useCallback(() => {
+    if (id === null) {
+      setLoading(false);
+      setExam(null);
+      setFeedback({ type: 'error', title: 'Invalid examination', message: 'The examination ID in this address is invalid.' });
+      return;
+    }
+    if (connectionStatus !== 'connected') return;
+
+    setLoading(true);
+    setFeedback(null);
+    const requestId = sendMessage('GET_EXAM', { examId: id }, (message) => {
+      setLoading(false);
+      if (message.type === 'EXAM_DETAILS' && isServerExam(message.data) && message.data.id === id) {
+        setExam(message.data);
+        setForm(toForm(message.data));
+        return;
+      }
+      setExam(null);
+      setFeedback({
+        type: 'error',
+        title: 'Unable to load examination',
+        message: serverError(message, 'The server returned invalid examination details.'),
+      });
+    });
+
+    if (requestId === null) {
+      setLoading(false);
+      setFeedback({ type: 'error', message: 'The examination request could not be sent.' });
+    }
+  }, [connectionStatus, id, sendMessage]);
+
+  useEffect(() => {
+    if (id === null) {
+      const timer = window.setTimeout(loadExam, 0);
+      return () => window.clearTimeout(timer);
+    }
+    if (connectionStatus !== 'connected') return;
+    const timer = window.setTimeout(loadExam, 0);
+    return () => window.clearTimeout(timer);
+  }, [connectionStatus, id, loadExam]);
+
+  const acceptExamResponse = (
+    message: ServerMessage,
+    expectedType: 'EXAM_UPDATED' | 'EXAM_PUBLISHED' | 'EXAM_CLOSED',
+    successFeedback: Feedback,
+  ) => {
+    if (message.type === expectedType && isServerExam(message.data) && message.data.id === id) {
+      setExam(message.data);
+      setForm(toForm(message.data));
+      setEditing(false);
+      setFeedback(successFeedback);
+      return true;
+    }
+    return false;
+  };
+
+  const save = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (exam === null || exam.status !== 'DRAFT' || pending !== null) return;
+    if (connectionStatus !== 'connected') {
+      setFeedback({ type: 'error', message: 'The server is not connected. No changes were sent.' });
+      return;
+    }
+
+    const title = form.title.trim();
+    const duration = Number(form.durationMinutes);
+    if (title.length === 0) {
+      setFeedback({ type: 'error', title: 'Invalid title', message: 'Exam title is required.' });
+      return;
+    }
+    if (title.length > 255) {
+      setFeedback({ type: 'error', title: 'Invalid title', message: 'Exam title must not exceed 255 characters.' });
+      return;
+    }
+    if (!Number.isInteger(duration) || duration <= 0) {
+      setFeedback({ type: 'error', title: 'Invalid duration', message: 'Duration must be a positive whole number of minutes.' });
+      return;
+    }
+
+    setPending('UPDATE_EXAM');
+    setFeedback(null);
+    const requestId = sendMessage('UPDATE_EXAM', {
+      examId: exam.id,
+      title,
+      description: form.description.trim(),
+      durationMinutes: duration,
+    }, (message) => {
+      setPending(null);
+      if (acceptExamResponse(message, 'EXAM_UPDATED', {
+        type: 'success',
+        title: 'Draft updated',
+        message: 'The server confirmed that the draft details were saved to PostgreSQL.',
+      })) return;
+      setFeedback({ type: 'error', title: 'Unable to update draft', message: serverError(message, 'The server did not confirm the update.') });
+    });
+
+    if (requestId === null) {
+      setPending(null);
+      setFeedback({ type: 'error', message: 'The update request could not be sent.' });
+    }
+  };
+
+  const publishExam = () => {
+    if (exam === null || exam.status !== 'DRAFT' || pending !== null) return;
+    if (connectionStatus !== 'connected') {
+      setFeedback({ type: 'error', message: 'The server is not connected. The exam was not published.' });
+      return;
+    }
+
+    setPending('PUBLISH_EXAM');
+    setFeedback(null);
+    const requestId = sendMessage('PUBLISH_EXAM', { examId: exam.id }, (message) => {
+      setPending(null);
+      if (acceptExamResponse(message, 'EXAM_PUBLISHED', {
+        type: 'success',
+        title: 'Examination published',
+        message: 'The server validated the questions and made this examination available to students.',
+      })) return;
+      setFeedback({
+        type: 'error',
+        title: 'Examination is not ready to publish',
+        message: serverError(message, 'Check that the exam has questions and that every question has valid choices.'),
+      });
+    });
+
+    if (requestId === null) {
+      setPending(null);
+      setFeedback({ type: 'error', message: 'The publish request could not be sent.' });
+    }
+  };
+
+  const closeExam = () => {
+    if (exam === null || exam.status !== 'PUBLISHED' || pending !== null) return;
+    if (connectionStatus !== 'connected') {
+      setConfirmation(null);
+      setFeedback({ type: 'error', message: 'The server is not connected. The exam was not closed.' });
+      return;
+    }
+
+    setPending('CLOSE_EXAM');
+    setFeedback(null);
+    const requestId = sendMessage('CLOSE_EXAM', { examId: exam.id }, (message) => {
+      setPending(null);
+      if (acceptExamResponse(message, 'EXAM_CLOSED', {
+        type: 'success',
+        title: 'Examination closed',
+        message: 'The server confirmed that this examination is now closed.',
+      })) {
+        setConfirmation(null);
+        return;
+      }
+      setConfirmation(null);
+      setFeedback({ type: 'error', title: 'Unable to close examination', message: serverError(message, 'The server did not confirm closure.') });
+    });
+
+    if (requestId === null) {
+      setPending(null);
+      setConfirmation(null);
+      setFeedback({ type: 'error', message: 'The close request could not be sent.' });
+    }
+  };
+
+  const deleteExam = () => {
+    if (exam === null || exam.status !== 'DRAFT' || pending !== null) return;
+    if (connectionStatus !== 'connected') {
+      setConfirmation(null);
+      setFeedback({ type: 'error', message: 'The server is not connected. The draft was not deleted.' });
+      return;
+    }
+
+    setPending('DELETE_EXAM');
+    setFeedback(null);
+    const requestId = sendMessage('DELETE_EXAM', { examId: exam.id }, (message) => {
+      setPending(null);
+      if (message.type === 'EXAM_DELETED' && message.data?.examId === exam.id) {
+        navigate('/teacher/exams', { replace: true });
+        return;
+      }
+      setConfirmation(null);
+      setFeedback({ type: 'error', title: 'Unable to delete draft', message: serverError(message, 'The server did not confirm deletion.') });
+    });
+
+    if (requestId === null) {
+      setPending(null);
+      setConfirmation(null);
+      setFeedback({ type: 'error', message: 'The delete request could not be sent.' });
+    }
+  };
+
+  if (loading) {
+    return <div className="rounded-xl border border-[#dce7ea] bg-white py-20 text-center text-[11px] text-[#718087]">Loading examination through WebSocket…</div>;
+  }
+
+  if (exam === null) {
+    return (
+      <div className="rounded-xl border border-[#edc9cc] bg-white p-10 text-center">
+        <Icon className="mx-auto text-[#bd2f35]" name="alert" size={25} />
+        <h1 className="mt-3 text-xl font-bold">Examination unavailable</h1>
+        <p className="mx-auto mt-2 max-w-lg text-[10px] leading-5 text-[#718087]">{feedback?.message ?? 'This examination could not be loaded.'}</p>
+        <div className="mt-5 flex justify-center gap-3">
+          <Link className="inline-flex h-9 items-center rounded-lg border border-[#d4e0e3] px-4 text-[10px] font-semibold text-[#526269]" to="/teacher/exams">Back to examinations</Link>
+          {id !== null && <button className="h-9 rounded-lg bg-[#00778b] px-4 text-[10px] font-semibold text-white disabled:opacity-50" disabled={connectionStatus !== 'connected'} onClick={loadExam} type="button">Try again</button>}
+        </div>
+      </div>
+    );
+  }
+
+  const actionDisabled = pending !== null || connectionStatus !== 'connected';
+  const statusClass = exam.status === 'PUBLISHED'
+    ? 'border-[#b6dbe1] bg-[#eff9fa] text-[#00778b]'
+    : exam.status === 'DRAFT'
+      ? 'border-[#ead7b8] bg-[#fff8ed] text-[#986313]'
+      : 'border-[#dce3e5] bg-[#f2f5f6] text-[#64747a]';
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 text-[9px] font-semibold text-[#75848a]"><Link to="/teacher/exams">Examinations</Link><Icon name="arrow-right" size={10} /><span>EX-{String(exam.id).padStart(4, '0')}</span></div>
+
+      <section className="mt-4 flex items-start justify-between gap-5 max-lg:flex-col">
+        <div>
+          <div className="flex items-center gap-2"><span className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold ${statusClass}`}>{exam.status}</span><span className="text-[9px] text-[#7a888d]">Updated {new Date(exam.updatedAt).toLocaleString('en-GB')}</span></div>
+          <h1 className="mt-3 text-[26px] font-bold tracking-[-.04em]">{exam.title}</h1>
+          <p className="mt-2 max-w-3xl text-[11px] leading-5 text-[#68777d]">{exam.description || 'No description has been provided.'}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {exam.status === 'DRAFT' && (
+            <>
+              <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d4e0e3] px-3 text-[9px] font-semibold text-[#526269] disabled:cursor-not-allowed disabled:opacity-50" disabled={actionDisabled} onClick={() => { setForm(toForm(exam)); setEditing((value) => !value); }} type="button"><Icon name="settings" size={13} />Edit details</button>
+              <Link className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}/questions`}><Icon name="document" size={13} />Manage questions</Link>
+              <button className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#a8bec3]" disabled={actionDisabled} onClick={publishExam} type="button"><Icon name="activity" size={13} />{pending === 'PUBLISH_EXAM' ? 'Publishing…' : 'Publish exam'}</button>
+            </>
+          )}
+          {exam.status === 'PUBLISHED' && (
+            <>
+              <Link className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]" to={`/teacher/monitoring/${exam.id}`}><Icon name="monitor" size={13} />Open monitoring</Link>
+              <button className="h-9 rounded-lg bg-[#25373d] px-4 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50" disabled={actionDisabled} onClick={() => setConfirmation('CLOSE_EXAM')} type="button">Close exam</button>
+            </>
+          )}
+        </div>
+      </section>
+
+      {feedback && <div className="mt-5"><FeedbackMessage feedback={feedback} onClose={() => setFeedback(null)} /></div>}
+
+      {editing && exam.status === 'DRAFT' && (
+        <form className="mt-5 rounded-xl border border-[#dce7ea] bg-white p-5" onSubmit={save}>
+          <div className="flex items-center justify-between"><h2 className="text-[12px] font-bold">Edit draft details</h2><button className="text-[9px] text-[#718087] disabled:opacity-50" disabled={pending !== null} onClick={() => { setForm(toForm(exam)); setEditing(false); }} type="button">Cancel</button></div>
+          <div className="mt-4 grid grid-cols-[minmax(0,1fr)_180px] gap-4 max-md:grid-cols-1">
+            <label className="grid gap-2"><span className="text-[9px] font-semibold">Title</span><input className={inputClass} disabled={pending !== null} maxLength={255} onChange={(event) => setForm((current) => ({ ...current, title: event.target.value }))} value={form.title} /></label>
+            <label className="grid gap-2"><span className="text-[9px] font-semibold">Duration</span><input className={inputClass} disabled={pending !== null} min="1" onChange={(event) => setForm((current) => ({ ...current, durationMinutes: event.target.value }))} type="number" value={form.durationMinutes} /></label>
+            <label className="col-span-2 grid gap-2 max-md:col-span-1"><span className="text-[9px] font-semibold">Description</span><textarea className="min-h-24 rounded-lg border border-[#d6e1e4] p-3 text-[11px] outline-none focus:border-[#70b2be] disabled:bg-[#f1f4f5]" disabled={pending !== null} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} value={form.description} /></label>
+          </div>
+          <button className="mt-4 h-9 rounded-lg bg-[#00778b] px-4 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#a8bec3]" disabled={actionDisabled} type="submit">{pending === 'UPDATE_EXAM' ? 'Saving…' : 'Save changes'}</button>
+        </form>
+      )}
+
+      <div className="mt-5 grid grid-cols-[minmax(0,2fr)_330px] gap-5 max-xl:grid-cols-1">
+        <section className="rounded-xl border border-[#dce7ea] bg-white">
+          <div className="border-b border-[#e7edef] px-5 py-4"><h2 className="text-[12px] font-bold">Assessment configuration</h2><p className="mt-1 text-[9px] text-[#819096]">Server-backed lifecycle and core delivery settings</p></div>
+          <div className="grid grid-cols-3 divide-x divide-[#e8edef] max-md:grid-cols-1 max-md:divide-x-0 max-md:divide-y">
+            {[
+              ['Duration', `${exam.durationMinutes} minutes`, 'clock'],
+              ['Owner', `Teacher #${exam.createdBy}`, 'users'],
+              ['Created', new Date(exam.createdAt).toLocaleDateString('en-GB'), 'calendar'],
+            ].map(([label, value, icon]) => <div className="p-5" key={label}><Icon className="text-[#00778b]" name={icon as 'clock'} size={16} /><p className="mt-3 text-[9px] font-bold uppercase tracking-[.07em] text-[#879399]">{label}</p><p className="mt-1 text-[12px] font-semibold">{value}</p></div>)}
+          </div>
+          <div className="border-t border-[#e7edef] p-5"><h3 className="text-[11px] font-bold">Lifecycle controls</h3><div className="mt-4 flex items-center gap-2 text-[9px] font-semibold"><span className="rounded-full bg-[#fff3dd] px-3 py-1.5 text-[#95610e]">Draft</span><Icon name="arrow-right" size={12} /><span className="rounded-full bg-[#eaf7f8] px-3 py-1.5 text-[#00778b]">Published</span><Icon name="arrow-right" size={12} /><span className="rounded-full bg-[#eff2f3] px-3 py-1.5 text-[#617177]">Closed</span></div></div>
+        </section>
+
+        <aside className="grid gap-4">
+          <section className="rounded-xl border border-[#dce7ea] bg-white p-5"><h2 className="text-[12px] font-bold">Publish readiness</h2><div className="mt-4 grid gap-3 text-[10px] text-[#607178]">{['At least one persisted question', 'Each question has 2+ choices', 'Exactly one correct choice'].map((item) => <p className="flex items-center gap-2" key={item}><Icon className="text-[#00778b]" name="check" size={13} />{item}</p>)}</div><p className="mt-4 rounded-lg bg-[#fff8ed] p-3 text-[9px] leading-4 text-[#8b641f]">The backend validates these rules when publishing. If the draft is incomplete, the exact server reason is shown above.</p></section>
+          {exam.status === 'DRAFT' && <button className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#edc9cc] bg-white text-[9px] font-semibold text-[#b32c33] disabled:cursor-not-allowed disabled:opacity-50" disabled={actionDisabled} onClick={() => setConfirmation('DELETE_EXAM')} type="button"><Icon name="alert" size={13} />Delete draft permanently</button>}
+        </aside>
+      </div>
+
+      {confirmation === 'CLOSE_EXAM' && (
+        <LifecycleConfirmationDialog
+          confirmLabel="Close examination"
+          description={`Students will no longer be able to start “${exam.title}”. This lifecycle change cannot be reverted from this screen.`}
+          isPending={pending === 'CLOSE_EXAM'}
+          onCancel={() => setConfirmation(null)}
+          onConfirm={closeExam}
+          title="Close this published examination?"
+        />
+      )}
+      {confirmation === 'DELETE_EXAM' && (
+        <LifecycleConfirmationDialog
+          confirmLabel="Delete draft"
+          description={`“${exam.title}” and all of its questions and choices will be permanently removed. This action cannot be undone.`}
+          isPending={pending === 'DELETE_EXAM'}
+          onCancel={() => setConfirmation(null)}
+          onConfirm={deleteExam}
+          title="Delete this draft examination?"
+          tone="danger"
+        />
+      )}
+    </div>
+  );
 }
 
 export default ExamOverviewPage;
