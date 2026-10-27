@@ -1,19 +1,2 @@
-function SystemFooter() {
-  return (
-    <footer
-      className="
-        mx-auto mt-6 flex w-full max-w-[1240px]
-        flex-wrap justify-center gap-2.5
-        text-xs text-slate-500
-      "
-    >
-      <span>Online Examination System</span>
-      <span aria-hidden="true">•</span>
-      <span>React Client</span>
-      <span aria-hidden="true">•</span>
-      <span>Spring Boot Server</span>
-    </footer>
-  );
-}
-
+function SystemFooter() { return <footer className="mx-auto mt-5 flex w-full max-w-[1240px] justify-center gap-2 text-[9px] text-[#7c898e]"><span>Qorrect Assessment Suite</span><span>·</span><span>Secure WebSocket Client</span></footer>; }
 export default SystemFooter;

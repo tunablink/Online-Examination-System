@@ -16,6 +16,11 @@ export type ConnectionStatus =
   | "error";
 
 export type ServerMessageHandler = (message: ServerMessage) => void;
+export type SendExamMessage = (
+  type: ClientMessageType,
+  payload?: Record<string, unknown>,
+  onResponse?: ServerMessageHandler,
+) => string | null;
 
 export type Unsubscribe = () => void;
 

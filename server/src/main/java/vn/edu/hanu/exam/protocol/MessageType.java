@@ -15,6 +15,12 @@ public enum MessageType {
     LOGIN(true),
     LOGGED_IN(false),
 
+    GET_STUDENTS(true),
+    STUDENTS(false),
+
+    GET_STUDENT(true),
+    STUDENT_DETAILS(false),
+
     GET_TEACHER_DASHBOARD(true),
     TEACHER_DASHBOARD(false),
 
@@ -41,6 +47,12 @@ public enum MessageType {
 
     CREATE_QUESTION(true),
     QUESTION_CREATED(false),
+
+    UPDATE_QUESTION(true),
+    QUESTION_UPDATED(false),
+
+    DELETE_QUESTION(true),
+    QUESTION_DELETED(false),
 
     GET_EXAM_QUESTIONS(true),
     EXAM_QUESTIONS(false),

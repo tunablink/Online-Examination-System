@@ -1,127 +1,30 @@
-import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router";
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router';
 
-import { useAuth } from "../../auth/useAuth";
-import { useWebSocket } from "../../websocket/useWebSocket";
-import type {
-  ExamStatus,
-  ServerMessageData,
-  TeacherDashboardData,
-  TeacherDashboardExamData,
-} from "../../websocket/protocol";
+import { useAuth } from '../../auth/useAuth';
+import Icon, { type IconName } from '../../components/common/Icon';
+import { MOCK_MONITORED_SESSIONS, MOCK_SUSPICIOUS_ACTIVITIES } from '../../mocks/monitoring';
+import type { TeacherDashboardData } from '../../websocket/protocol';
+import { useWebSocket } from '../../websocket/useWebSocket';
 
-const DATE_FORMATTER = new Intl.DateTimeFormat("en-GB", {
-  day: "2-digit",
-  month: "short",
-  year: "numeric",
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
+const dateFormatter = new Intl.DateTimeFormat('en-GB', {
+  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
 });
 
-function formatDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "Unknown" : DATE_FORMATTER.format(date);
-}
-
-function isExamStatus(value: unknown): value is ExamStatus {
-  return value === "DRAFT" || value === "PUBLISHED" || value === "CLOSED";
-}
-
-function isNonNegativeNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
-}
-
-function isRecentExam(value: unknown): value is TeacherDashboardExamData {
-  if (typeof value !== "object" || value === null) return false;
-  const exam = value as Record<string, unknown>;
-  return (
-    typeof exam.id === "number" &&
-    typeof exam.title === "string" &&
-    (typeof exam.description === "string" || exam.description === null) &&
-    isNonNegativeNumber(exam.durationMinutes) &&
-    isExamStatus(exam.status) &&
-    isNonNegativeNumber(exam.questionCount) &&
-    typeof exam.createdAt === "string" &&
-    typeof exam.updatedAt === "string"
-  );
-}
-
-function readDashboard(data: ServerMessageData | null): TeacherDashboardData | null {
-  if (
-    data === null ||
-    !isNonNegativeNumber(data.totalExams) ||
-    !isNonNegativeNumber(data.draftExamCount) ||
-    !isNonNegativeNumber(data.publishedExamCount) ||
-    !isNonNegativeNumber(data.closedExamCount) ||
-    !Array.isArray(data.recentExams) ||
-    data.recentExams.length > 5 ||
-    !data.recentExams.every(isRecentExam)
-  ) {
-    return null;
-  }
-  return {
-    totalExams: data.totalExams,
-    draftExamCount: data.draftExamCount,
-    publishedExamCount: data.publishedExamCount,
-    closedExamCount: data.closedExamCount,
-    recentExams: data.recentExams,
+function MetricCard({ icon, label, value, note, tone = 'teal' }: { icon: IconName; label: string; value: number | string; note: string; tone?: 'teal' | 'amber' | 'red' }) {
+  const tones = {
+    teal: 'text-[#00778b] border-[#d7e6e9]',
+    amber: 'text-[#a6670a] border-[#eadfcf]',
+    red: 'text-[#bd2f35] border-[#ecdadd]',
   };
-}
-
-function statusStyle(status: ExamStatus) {
-  if (status === "PUBLISHED") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-800";
-  }
-  if (status === "CLOSED") {
-    return "border-slate-200 bg-slate-100 text-slate-700";
-  }
-  return "border-amber-200 bg-amber-50 text-amber-800";
-}
-
-interface StatisticCardProps {
-  label: string;
-  value: number;
-  detail: string;
-  className: string;
-}
-
-function StatisticCard({ label, value, detail, className }: StatisticCardProps) {
   return (
-    <article className={`rounded-xl border p-5 ${className}`}>
-      <p className="text-[10px] font-bold uppercase tracking-[0.14em]">{label}</p>
-      <p className="mt-3 text-3xl font-semibold">{value}</p>
-      <p className="mt-2 text-xs opacity-80">{detail}</p>
-    </article>
-  );
-}
-
-function RecentExamRow({ exam }: { exam: TeacherDashboardExamData }) {
-  return (
-    <article className="border-b border-slate-100 px-5 py-4 last:border-b-0">
-      <div className="flex items-start justify-between gap-5 max-sm:flex-col">
-        <div className="min-w-0">
-          <p className="text-xs font-semibold text-blue-700">Examination #{exam.id}</p>
-          <h3 className="mt-2 truncate text-sm font-semibold text-slate-950">
-            {exam.title}
-          </h3>
-          <p className="mt-1 text-xs text-slate-500">
-            {exam.questionCount} {exam.questionCount === 1 ? "question" : "questions"}
-            {" · "}{exam.durationMinutes} minutes{" · Updated "}{formatDate(exam.updatedAt)}
-          </p>
-        </div>
-        <div className="flex shrink-0 flex-wrap items-center gap-2">
-          <span className={`rounded-full border px-2.5 py-1.5 text-xs font-semibold ${statusStyle(exam.status)}`}>
-            {exam.status.charAt(0) + exam.status.slice(1).toLowerCase()}
-          </span>
-          <Link className="rounded-md border border-slate-300 px-3 py-2 text-xs font-semibold text-slate-700 hover:border-blue-600 hover:text-blue-700" to={`/teacher/exams/${exam.id}/questions`}>
-            Manage questions
-          </Link>
-          <Link className="rounded-md bg-blue-700 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-800" to={`/teacher/exams/${exam.id}`}>
-            Open exam
-          </Link>
-        </div>
+    <article className="rounded-xl border border-[#dde7ea] bg-white p-4 shadow-[0_1px_2px_rgba(15,42,51,.02)]">
+      <div className="flex items-start justify-between gap-3">
+        <span className={`grid h-9 w-9 place-items-center rounded-full border bg-[#f7fafb] ${tones[tone]}`}><Icon name={icon} size={17} /></span>
+        <span className="rounded-full border border-[#e1e8eb] px-2 py-1 text-[9px] font-semibold text-[#6d7b80]">{note}</span>
       </div>
+      <p className="mt-5 text-[10px] font-bold uppercase tracking-[.08em] text-[#7d8b90]">{label}</p>
+      <p className={`mt-1 text-[28px] font-bold tracking-[-.04em] ${tone === 'red' ? 'text-[#bd2f35]' : 'text-[#172126]'}`}>{value}</p>
     </article>
   );
 }
@@ -130,115 +33,119 @@ function TeacherDashboardPage() {
   const { user } = useAuth();
   const { status: connectionStatus, sendMessage } = useWebSocket();
   const [dashboard, setDashboard] = useState<TeacherDashboardData | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const loadDashboard = useCallback(() => {
-    if (connectionStatus !== "connected") {
-      setIsLoading(false);
-      setErrorMessage("The server connection is unavailable. Restore the connection and try again.");
-      return;
-    }
-
-    setIsLoading(true);
-    setErrorMessage(null);
-    const requestId = sendMessage("GET_TEACHER_DASHBOARD", {}, (response) => {
-      setIsLoading(false);
-      if (response.type !== "TEACHER_DASHBOARD") {
-        setErrorMessage(response.error?.message ?? "The dashboard could not be loaded.");
+  useEffect(() => {
+    if (connectionStatus !== 'connected') return;
+    const requestId = sendMessage('GET_TEACHER_DASHBOARD', {}, (message) => {
+      setLoading(false);
+      if (message.type === 'TEACHER_DASHBOARD' && message.data &&
+        typeof message.data.totalExams === 'number' && typeof message.data.draftExamCount === 'number' &&
+        typeof message.data.publishedExamCount === 'number' && typeof message.data.closedExamCount === 'number' &&
+        Array.isArray(message.data.recentExams)) {
+        setError(null);
+        setDashboard({ totalExams: message.data.totalExams, draftExamCount: message.data.draftExamCount, publishedExamCount: message.data.publishedExamCount, closedExamCount: message.data.closedExamCount, recentExams: message.data.recentExams });
         return;
       }
-      const receivedDashboard = readDashboard(response.data);
-      if (receivedDashboard === null) {
-        setErrorMessage("The server returned an unexpected dashboard response.");
-        return;
-      }
-      setDashboard(receivedDashboard);
+      setError(message.error?.message ?? 'Could not load the teacher dashboard.');
     });
-
     if (requestId === null) {
-      setIsLoading(false);
-      setErrorMessage("The dashboard request could not be sent. Please try again.");
+      queueMicrotask(() => {
+        setLoading(false);
+        setError('The examination server is not ready.');
+      });
     }
   }, [connectionStatus, sendMessage]);
 
-  useEffect(() => {
-    if (connectionStatus !== "connected") {
-      if (connectionStatus !== "connecting") {
-        const errorTimer = window.setTimeout(() => {
-          setIsLoading(false);
-          setErrorMessage("The server connection was lost. Restore the connection and try again.");
-        }, 0);
-        return () => window.clearTimeout(errorTimer);
-      }
-      return;
-    }
-    const timer = window.setTimeout(loadDashboard, 0);
-    return () => window.clearTimeout(timer);
-  }, [connectionStatus, loadDashboard]);
+  const exams = dashboard?.recentExams ?? [];
+  const totals = { published: dashboard?.publishedExamCount ?? 0, draft: dashboard?.draftExamCount ?? 0, closed: dashboard?.closedExamCount ?? 0 };
+
+  const activeStudents = MOCK_MONITORED_SESSIONS.filter((session) => session.attemptStatus === 'TAKING').length;
+  const flagged = MOCK_SUSPICIOUS_ACTIVITIES.length;
+  const displayName = user?.fullName ?? 'Lecturer';
 
   return (
-    <>
-      <section className="flex items-end justify-between gap-8 max-md:flex-col max-md:items-start">
+    <div>
+      <section className="flex items-start justify-between gap-6 max-md:flex-col">
         <div>
-          <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-blue-700">Lecturer dashboard</p>
-          <h1 className="mt-3 text-3xl font-semibold tracking-[-0.035em] text-slate-950">
-            Welcome, {user?.fullName ?? "Lecturer"}
-          </h1>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-            Review your examination portfolio and continue working on recently updated exams.
-          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-[25px] font-bold tracking-[-.04em] text-[#172126]">Teacher Dashboard</h1>
+            <span className="rounded-full border border-[#dfe7e9] bg-white px-2.5 py-1 text-[9px] font-semibold text-[#617077]"><span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#c77d16]" />Academic Term 2026 / Q4</span>
+          </div>
+          <p className="mt-1 text-[12px] text-[#6d7b80]">Welcome back, <strong className="text-[#425157]">{displayName}</strong> — live oversight & academic analytics</p>
         </div>
-        <Link className="inline-flex min-h-11 items-center justify-center rounded-md bg-blue-700 px-5 text-sm font-semibold text-white hover:bg-blue-800" to="/teacher/exams/new">
-          Create examination
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#dbe5e8] bg-white px-3 text-[10px] font-semibold text-[#64747a]"><Icon name="refresh" size={14} /> {connectionStatus === 'connected' ? 'Live data synced' : 'Reconnecting'}</span>
+          <Link className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-[11px] font-semibold text-white hover:bg-[#006273]" to="/teacher/exams/new"><Icon name="plus" size={15} /> Create Exam</Link>
+        </div>
       </section>
 
-      {isLoading ? (
-        <section className="mt-8 rounded-xl border border-slate-200 bg-white px-6 py-16 text-center" aria-live="polite">
-          <p className="text-sm font-semibold text-slate-800">Loading dashboard...</p>
-          <p className="mt-2 text-xs text-slate-500">Waiting for your latest examination summary.</p>
-        </section>
-      ) : errorMessage !== null ? (
-        <section className="mt-8 rounded-xl border border-red-200 bg-red-50 px-6 py-12 text-center" role="alert">
-          <h2 className="text-sm font-semibold text-red-900">Unable to load dashboard</h2>
-          <p className="mt-2 text-xs text-red-700">{errorMessage}</p>
-          <button className="mt-5 rounded-md bg-red-700 px-4 py-2.5 text-xs font-semibold text-white hover:bg-red-800 disabled:opacity-60" type="button" disabled={connectionStatus !== "connected"} onClick={loadDashboard}>
-            Try again
-          </button>
-        </section>
-      ) : dashboard !== null ? (
-        <>
-          <section className="mt-8 grid grid-cols-4 gap-4 max-xl:grid-cols-2 max-sm:grid-cols-1" aria-label="Teacher dashboard statistics">
-            <StatisticCard label="Total examinations" value={dashboard.totalExams} detail="Across all statuses" className="border-slate-200 bg-white text-slate-950" />
-            <StatisticCard label="Draft" value={dashboard.draftExamCount} detail="Still being prepared" className="border-amber-200 bg-amber-50 text-amber-900" />
-            <StatisticCard label="Published" value={dashboard.publishedExamCount} detail="Available to students" className="border-emerald-200 bg-emerald-50 text-emerald-900" />
-            <StatisticCard label="Closed" value={dashboard.closedExamCount} detail="No longer accepting attempts" className="border-slate-300 bg-slate-100 text-slate-900" />
-          </section>
+      {error && <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#efd8da] bg-[#fff6f6] px-4 py-3 text-[11px] text-[#a82b31]"><Icon name="alert" size={15} />{error}</div>}
 
-          {dashboard.totalExams === 0 ? (
-            <section className="mt-8 rounded-xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-              <h2 className="text-sm font-semibold text-slate-800">No examinations yet</h2>
-              <p className="mt-2 text-xs text-slate-500">Create your first draft examination to start adding questions.</p>
-              <Link className="mt-5 inline-flex min-h-10 items-center justify-center rounded-md bg-blue-700 px-4 text-xs font-semibold text-white hover:bg-blue-800" to="/teacher/exams/new">
-                Create your first examination
-              </Link>
-            </section>
-          ) : (
-            <section className="mt-8 overflow-hidden rounded-xl border border-slate-200 bg-white">
-              <div className="flex items-center justify-between gap-5 border-b border-slate-200 px-5 py-4">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-950">Recent examinations</h2>
-                  <p className="mt-1 text-xs text-slate-500">Your five most recently updated examinations.</p>
-                </div>
-                <Link className="text-xs font-semibold text-blue-700 hover:text-blue-800" to="/teacher/exams">View all</Link>
-              </div>
-              {dashboard.recentExams.map((exam) => <RecentExamRow key={exam.id} exam={exam} />)}
-            </section>
-          )}
-        </>
-      ) : null}
-    </>
+      <section className="mt-5 grid grid-cols-5 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2 max-sm:grid-cols-1" aria-label="Dashboard metrics">
+        <MetricCard icon="document" label="Total exams" value={loading ? '—' : dashboard?.totalExams ?? 0} note={`${totals.draft} draft`} />
+        <MetricCard icon="activity" label="Active monitoring" value={totals.published} note="Live now" />
+        <MetricCard icon="users" label="Active students" value={activeStudents} note="Preview" />
+        <MetricCard icon="check" label="Closed exams" value={totals.closed} note="Completed" tone="amber" />
+        <MetricCard icon="alert" label="Flagged reviews" value={flagged} note="Needs action" tone="red" />
+      </section>
+
+      <section className="mt-5 flex items-center justify-between gap-5 rounded-xl border border-[#dce7ea] bg-white p-5 max-lg:flex-col max-lg:items-start">
+        <div className="flex items-center gap-5">
+          <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-[7px] border-[#cfe8ec] border-r-[#00778b] text-center">
+            <span className="text-sm font-bold text-[#26363c]">LIVE<small className="block text-[8px] font-semibold text-[#a36b16]">SESSION</small></span>
+          </div>
+          <div>
+            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[.08em] text-[#76858b]"><span className="h-2 w-2 rounded-full bg-[#00849a]" /> Live monitoring</div>
+            <h2 className="mt-2 text-[17px] font-bold tracking-[-.025em] text-[#1d292e]">Java Concurrency & System Design</h2>
+            <p className="mt-1 text-[11px] text-[#6b7a80]">Real-time proctor preview · {activeStudents} candidates currently active</p>
+            <div className="mt-3 flex flex-wrap gap-4 text-[10px] font-semibold text-[#53636a]"><span><Icon className="mr-1 inline text-[#00778b]" name="users" size={13} />{MOCK_MONITORED_SESSIONS.length} enrolled</span><span><Icon className="mr-1 inline text-[#bf7920]" name="check" size={13} />1 finished</span><span className="text-[#bd2f35]"><Icon className="mr-1 inline" name="flag" size={13} />{flagged} alerts</span></div>
+          </div>
+        </div>
+        <Link className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#bed8dd] bg-white px-4 text-[11px] font-semibold text-[#00778b] hover:bg-[#f0f8f9]" to="/teacher/monitoring"><Icon name="camera" size={15} />Launch Live Proctor Screen</Link>
+      </section>
+
+      <div className="mt-5 grid grid-cols-[minmax(0,2fr)_340px] gap-5 max-xl:grid-cols-1">
+        <section className="overflow-hidden rounded-xl border border-[#dce7ea] bg-white">
+          <div className="flex items-center justify-between border-b border-[#e7edef] px-5 py-4">
+            <div><h2 className="text-sm font-bold text-[#27343a]">Recent examinations</h2><p className="mt-1 text-[10px] text-[#7a888d]">Data loaded through the authenticated WebSocket session</p></div>
+            <Link className="text-[10px] font-semibold text-[#00778b]" to="/teacher/exams">View all schedules <Icon className="inline" name="arrow-right" size={12} /></Link>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left">
+              <thead className="bg-[#f1f5f6] text-[9px] font-bold uppercase tracking-[.06em] text-[#65747a]"><tr><th className="px-5 py-3">Exam name & code</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead>
+              <tbody>
+                {loading && <tr><td className="px-5 py-8 text-center text-xs text-[#7a888d]" colSpan={5}>Loading examination schedules…</td></tr>}
+                {!loading && exams.length === 0 && <tr><td className="px-5 py-10 text-center text-xs text-[#7a888d]" colSpan={5}>No examinations yet. Create your first draft to begin.</td></tr>}
+                {exams.slice(0, 5).map((exam) => (
+                  <tr className="border-t border-[#edf1f2]" key={exam.id}>
+                    <td className="px-5 py-4"><p className="text-[12px] font-semibold text-[#29363b]">{exam.title}</p><p className="mt-1 text-[9px] text-[#849197]">EX-{String(exam.id).padStart(4, '0')}</p></td>
+                    <td className="px-4 py-4 text-[10px] text-[#596970]">{dateFormatter.format(new Date(exam.createdAt))}</td>
+                    <td className="px-4 py-4 text-[10px] font-semibold text-[#53636a]">{exam.durationMinutes} mins</td>
+                    <td className="px-4 py-4"><span className={`rounded-full border px-2 py-1 text-[9px] font-semibold ${exam.status === 'PUBLISHED' ? 'border-[#b9dce2] bg-[#eff9fa] text-[#00778b]' : exam.status === 'CLOSED' ? 'border-[#dfe5e7] bg-[#f3f5f6] text-[#69787e]' : 'border-[#ead6b8] bg-[#fff8ed] text-[#9a6415]'}`}>{exam.status}</span></td>
+                    <td className="px-5 py-4 text-right"><Link className="text-[10px] font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}`}>Manage <Icon className="inline" name="arrow-right" size={11} /></Link></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <aside className="rounded-xl border border-[#dce7ea] bg-white p-5">
+          <div className="flex items-center justify-between"><h2 className="text-sm font-bold text-[#27343a]">Live Proctor Feed</h2><span className="h-2 w-2 rounded-full bg-[#c32c34]" /></div>
+          <p className="mt-1 text-[10px] text-[#7a888d]">Recent candidate anomalies & events</p>
+          <div className="mt-4 grid gap-2.5">
+            {MOCK_SUSPICIOUS_ACTIVITIES.slice(0, 3).map((event) => (
+              <article className="rounded-lg bg-[#f2f6f7] p-3" key={event.id}>
+                <div className="flex gap-3"><span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white ${event.severity === 'HIGH' ? 'text-[#bd2f35]' : 'text-[#a36a12]'}`}><Icon name={event.severity === 'HIGH' ? 'alert' : 'monitor'} size={14} /></span><div><p className="text-[10px] font-semibold text-[#39484e]">{event.type.replaceAll('_', ' ')}</p><p className="mt-1 text-[9px] text-[#68777d]">Candidate: <strong>{event.studentName}</strong></p></div></div>
+              </article>
+            ))}
+          </div>
+          <Link className="mt-4 inline-flex items-center gap-1 text-[10px] font-semibold text-[#00778b]" to="/teacher/activities">Full security audit <Icon name="arrow-right" size={12} /></Link>
+        </aside>
+      </div>
+    </div>
   );
 }
 

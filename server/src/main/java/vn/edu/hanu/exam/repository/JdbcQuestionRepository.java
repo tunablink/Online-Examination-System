@@ -19,7 +19,7 @@ import vn.edu.hanu.exam.domain.ExamStatus;
 import vn.edu.hanu.exam.domain.Question;
 
 
-@Repository 
+@Repository
 public class JdbcQuestionRepository implements QuestionRepository {
     private static final String QUESTION_COLUMNS = """
             SELECT id,
@@ -40,7 +40,8 @@ public class JdbcQuestionRepository implements QuestionRepository {
                    display_order
             FROM choices
             """;
-            
+
+    // Shared row mappers keep question and choice reads consistent.
     private static final RowMapper<Question> QUESTION_ROW_MAPPER = JdbcQuestionRepository::mapQuestion;
 
     private static final RowMapper<Choice> CHOICE_ROW_MAPPER = JdbcQuestionRepository::mapChoice;
@@ -132,8 +133,8 @@ public class JdbcQuestionRepository implements QuestionRepository {
         return results.stream().findFirst();
     }
 
-    @Override 
-    public Question insertQuestion(long examId, String content, int points, int displayOrder){
+    @Override
+    public Question insertQuestion(long examId, String content, int points, int displayOrder) {
         String sql = """
                 INSERT INTO questions (
                     exam_id,
@@ -161,7 +162,7 @@ public class JdbcQuestionRepository implements QuestionRepository {
         if(affectedRows != 1){
             throw new IllegalStateException("Expected one inserted question, but affected " + affectedRows + " rows.");
         }
-        
+
         Number generatedId = keyHolder.getKey();
 
         if (generatedId == null) {

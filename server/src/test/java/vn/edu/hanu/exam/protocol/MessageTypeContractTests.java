@@ -30,6 +30,12 @@ class MessageTypeContractTests {
                                 "LOGIN",
                                 "LOGGED_IN",
 
+                                "GET_STUDENTS",
+                                "STUDENTS",
+
+                                "GET_STUDENT",
+                                "STUDENT_DETAILS",
+
                                 "CREATE_EXAM",
                                 "EXAM_CREATED",
 
@@ -56,6 +62,12 @@ class MessageTypeContractTests {
 
                                 "CREATE_QUESTION",
                                 "QUESTION_CREATED",
+
+                                "UPDATE_QUESTION",
+                                "QUESTION_UPDATED",
+
+                                "DELETE_QUESTION",
+                                "QUESTION_DELETED",
 
                                 "GET_EXAM_QUESTIONS",
                                 "EXAM_QUESTIONS",
@@ -95,6 +107,12 @@ class MessageTypeContractTests {
                                                 MessageType.GET_EXAM_QUESTIONS,
                                                 MessageType.fromWireValue("get_exam_questions").orElseThrow()),
                                 () -> assertEquals(
+                                                MessageType.UPDATE_QUESTION,
+                                                MessageType.fromWireValue(" update_question ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.DELETE_QUESTION,
+                                                MessageType.fromWireValue("delete_question").orElseThrow()),
+                                () -> assertEquals(
                                                 MessageType.UPDATE_EXAM,
                                                 MessageType.fromWireValue(" update_exam ").orElseThrow()),
                                 () -> assertEquals(
@@ -132,6 +150,9 @@ class MessageTypeContractTests {
                                 MessageType.REGISTER,
                                 MessageType.LOGIN,
 
+                                MessageType.GET_STUDENTS,
+                                MessageType.GET_STUDENT,
+
                                 MessageType.CREATE_EXAM,
                                 MessageType.GET_TEACHER_DASHBOARD,
                                 MessageType.GET_TEACHER_EXAMS,
@@ -142,6 +163,8 @@ class MessageTypeContractTests {
                                 MessageType.DELETE_EXAM,
 
                                 MessageType.CREATE_QUESTION,
+                                MessageType.UPDATE_QUESTION,
+                                MessageType.DELETE_QUESTION,
                                 MessageType.GET_EXAM_QUESTIONS,
 
                                 MessageType.GET_AVAILABLE_EXAMS,
@@ -167,6 +190,9 @@ class MessageTypeContractTests {
 
                                 MessageType.LOGGED_IN,
 
+                                MessageType.STUDENTS,
+                                MessageType.STUDENT_DETAILS,
+
                                 MessageType.EXAM_CREATED,
                                 MessageType.TEACHER_DASHBOARD,
                                 MessageType.TEACHER_EXAMS,
@@ -177,6 +203,8 @@ class MessageTypeContractTests {
                                 MessageType.EXAM_DELETED,
 
                                 MessageType.QUESTION_CREATED,
+                                MessageType.QUESTION_UPDATED,
+                                MessageType.QUESTION_DELETED,
                                 MessageType.EXAM_QUESTIONS,
 
                                 MessageType.AVAILABLE_EXAMS,

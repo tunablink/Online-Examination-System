@@ -1,749 +1,169 @@
-import {useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router';
 
-import { Link, useParams } from "react-router";
+import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
+import Icon from '../../components/common/Icon';
+import type { QuestionEditorQuestion } from '../../types/questionEditor';
+import type { ExamStatus, TeacherChoiceData, TeacherQuestionData } from '../../websocket/protocol';
+import { useWebSocket } from '../../websocket/useWebSocket';
+import PublishReadinessPanel from './components/PublishReadinessPanel';
+import QuestionEditorForm from './components/QuestionEditorForm';
+import QuestionListItem from './components/QuestionListItem';
 
-import FeedbackMessage, {
-  type Feedback,
-} from "../../components/common/FeedbackMessage";
-
-import type {
-  TeacherChoiceData,
-  TeacherQuestionData,
-} from "../../websocket/protocol";
-
-import { useWebSocket } from "../../websocket/useWebSocket";
-
-import type { QuestionEditorQuestion } from "../../types/questionEditor";
-
-import PublishReadinessPanel from "./components/PublishReadinessPanel";
-import QuestionEditorForm from "./components/QuestionEditorForm";
-import QuestionListItem from "./components/QuestionListItem";
-
-function isTeacherChoiceData(value: unknown): value is TeacherChoiceData {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
+function isChoice(value: unknown): value is TeacherChoiceData {
+  if (typeof value !== 'object' || value === null) return false;
   const choice = value as Record<string, unknown>;
-
-  return (
-    typeof choice.id === "number" &&
-    typeof choice.questionId === "number" &&
-    typeof choice.content === "string" &&
-    typeof choice.correct === "boolean" &&
-    typeof choice.displayOrder === "number"
-  );
+  return typeof choice.id === 'number' && typeof choice.questionId === 'number' && typeof choice.content === 'string' && typeof choice.correct === 'boolean' && typeof choice.displayOrder === 'number';
 }
 
-function isTeacherQuestionData(value: unknown): value is TeacherQuestionData {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
+function isQuestion(value: unknown): value is TeacherQuestionData {
+  if (typeof value !== 'object' || value === null) return false;
   const question = value as Record<string, unknown>;
-
-  return (
-    typeof question.id === "number" &&
-    typeof question.examId === "number" &&
-    typeof question.content === "string" &&
-    typeof question.points === "number" &&
-    typeof question.displayOrder === "number" &&
-    typeof question.createdAt === "string" &&
-    typeof question.updatedAt === "string" &&
-    Array.isArray(question.choices) &&
-    question.choices.every(isTeacherChoiceData)
-  );
+  return typeof question.id === 'number' && typeof question.examId === 'number' && typeof question.content === 'string' && typeof question.points === 'number' && typeof question.displayOrder === 'number' && typeof question.createdAt === 'string' && typeof question.updatedAt === 'string' && Array.isArray(question.choices) && question.choices.every(isChoice);
 }
 
-function toEditorQuestion(
-  question: TeacherQuestionData,
-): QuestionEditorQuestion {
+function toEditorQuestion(question: TeacherQuestionData): QuestionEditorQuestion {
   return {
-    id: String(question.id),
+    id: String(question.id), content: question.content, points: question.points, displayOrder: question.displayOrder,
+    choices: [...question.choices].sort((a, b) => a.displayOrder - b.displayOrder).map((choice) => ({ id: String(choice.id), content: choice.content, correct: choice.correct })),
+  };
+}
+
+function questionPayload(question: QuestionEditorQuestion, displayOrder: number) {
+  return {
     content: question.content,
     points: question.points,
-
-    choices: [...question.choices]
-      .sort((left, right) => left.displayOrder - right.displayOrder)
-      .map((choice) => ({
-        id: String(choice.id),
-        content: choice.content,
-        correct: choice.correct,
-      })),
+    displayOrder,
+    choices: question.choices.map((choice, index) => ({ content: choice.content, correct: choice.correct, displayOrder: index })),
   };
 }
 
 function QuestionManagementPage() {
-  const { examId } = useParams<{
-    examId: string;
-  }>();
-
+  const { examId } = useParams();
   const { status: connectionStatus, sendMessage } = useWebSocket();
-
   const parsedExamId = Number(examId);
-
-  const numericExamId =
-    Number.isSafeInteger(parsedExamId) && parsedExamId > 0
-      ? parsedExamId
-      : null;
-
+  const numericExamId = Number.isSafeInteger(parsedExamId) && parsedExamId > 0 ? parsedExamId : null;
   const [questions, setQuestions] = useState<QuestionEditorQuestion[]>([]);
-
-  const [isLoading, setIsLoading] = useState(false);
-
-  const [isSaving, setIsSaving] = useState(false);
-
-  const [questionFormVersion, setQuestionFormVersion] = useState(0);
-
-  const [editingQuestionId, setEditingQuestionId] = useState<string | null>(
-    null,
-  );
-
-  const [pendingDeleteQuestion, setPendingDeleteQuestion] =
-    useState<QuestionEditorQuestion | null>(null);
-
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<QuestionEditorQuestion | null>(null);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
-
-  const [isPublished, setIsPublished] = useState(false);
-
-  const [isPublishing, setIsPublishing] = useState(false);
+  const [examStatus, setExamStatus] = useState<ExamStatus | null>(null);
+  const [examTitle, setExamTitle] = useState('Examination');
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
+  const [formVersion, setFormVersion] = useState(0);
 
   const loadQuestions = useCallback(() => {
-    if (numericExamId === null) {
-      setFeedback({
-        type: "error",
-        title: "Invalid examination ID",
-        message: "The URL does not contain a valid numeric examination ID.",
-      });
-
-      return;
-    }
-
-    if (connectionStatus !== "connected") {
-      setFeedback({
-        type: "error",
-        title: "Server connection unavailable",
-        message:
-          "Questions cannot be loaded until the WebSocket connection is restored.",
-      });
-
-      return;
-    }
-
-    setIsLoading(true);
+    if (numericExamId === null || connectionStatus !== 'connected') return;
+    setLoading(true);
     setFeedback(null);
-
-    const requestId = sendMessage(
-      "GET_EXAM_QUESTIONS",
-      {
-        examId: numericExamId,
-      },
-      (response) => {
-        setIsLoading(false);
-
-        const receivedQuestions = response.data?.questions;
-
-        if (
-          response.type === "EXAM_QUESTIONS" &&
-          Array.isArray(receivedQuestions) &&
-          receivedQuestions.every(isTeacherQuestionData)
-        ) {
-          const mappedQuestions = [...receivedQuestions]
-            .sort((left, right) => left.displayOrder - right.displayOrder)
-            .map(toEditorQuestion);
-
-          setQuestions(mappedQuestions);
-
-          return;
-        }
-
-        setFeedback({
-          type: "error",
-          title: "Unable to load questions",
-          message:
-            response.error?.message ??
-            "The server returned an unexpected question list.",
-        });
-      },
-    );
-
+    sendMessage('GET_EXAM', { examId: numericExamId }, (message) => {
+      if (message.type === 'EXAM_DETAILS' && typeof message.data?.title === 'string' && message.data.status) {
+        setExamTitle(message.data.title);
+        setExamStatus(message.data.status);
+      } else {
+        setFeedback({ type: 'error', title: 'Unable to load examination', message: message.error?.message ?? 'The server returned invalid examination details.' });
+      }
+    });
+    const requestId = sendMessage('GET_EXAM_QUESTIONS', { examId: numericExamId }, (message) => {
+      setLoading(false);
+      const received = message.data?.questions;
+      if (message.type === 'EXAM_QUESTIONS' && Array.isArray(received) && received.every(isQuestion)) {
+        setQuestions([...received].sort((a, b) => a.displayOrder - b.displayOrder).map(toEditorQuestion));
+        return;
+      }
+      setFeedback({ type: 'error', title: 'Unable to load questions', message: message.error?.message ?? 'The server returned an invalid question list.' });
+    });
     if (requestId === null) {
-      setIsLoading(false);
-
-      setFeedback({
-        type: "error",
-        title: "Request could not be sent",
-        message: "Wait for the server connection and try again.",
-      });
+      setLoading(false);
+      setFeedback({ type: 'error', message: 'The question request could not be sent.' });
     }
   }, [connectionStatus, numericExamId, sendMessage]);
 
   useEffect(() => {
-    if (connectionStatus !== "connected") {
-      return;
-    }
-
-    const loadTimer = window.setTimeout(() => {
-      loadQuestions();
-    }, 0);
-
-    return () => {
-      window.clearTimeout(loadTimer);
-    };
+    if (connectionStatus !== 'connected') return;
+    const timer = window.setTimeout(loadQuestions, 0);
+    return () => window.clearTimeout(timer);
   }, [connectionStatus, loadQuestions]);
 
-  const editingQuestion =
-    questions.find((question) => question.id === editingQuestionId) ?? null;
+  const editing = questions.find((question) => question.id === editingId) ?? null;
+  const published = examStatus === 'PUBLISHED';
 
-  const examTitle = "Draft examination";
-
-  const examCode = examId ?? "unknown";
-
-  const handleSaveQuestion = (savedQuestion: QuestionEditorQuestion) => {
-    if (numericExamId === null) {
-      setFeedback({
-        type: "error",
-        title: "Invalid examination ID",
-        message: "A question cannot be created without a valid examination ID.",
-      });
-
-      return;
-    }
-
-    if (connectionStatus !== "connected") {
-      setFeedback({
-        type: "error",
-        title: "Server connection unavailable",
-        message: "Reconnect to the server before adding a question.",
-      });
-
-      return;
-    }
-
-    if (isSaving) {
-      return;
-    }
-
-    setIsSaving(true);
+  const save = (question: QuestionEditorQuestion) => {
+    if (numericExamId === null || connectionStatus !== 'connected' || saving || examStatus !== 'DRAFT') return;
+    const isEditing = editingId !== null;
+    const displayOrder = isEditing ? (editing?.displayOrder ?? questions.findIndex((item) => item.id === editingId)) : questions.length;
+    setSaving(true);
     setFeedback(null);
-
-    const requestId = sendMessage(
-      "CREATE_QUESTION",
-      {
-        examId: numericExamId,
-
-        content: savedQuestion.content,
-
-        points: savedQuestion.points,
-
-        displayOrder: questions.length,
-
-        choices: savedQuestion.choices.map((choice, index) => ({
-          content: choice.content,
-
-          correct: choice.correct,
-
-          displayOrder: index,
-        })),
-      },
-      (response) => {
-        setIsSaving(false);
-        if (
-          response.type === "QUESTION_CREATED" &&
-          isTeacherQuestionData(response.data)
-        ) {
-          const createdQuestion = toEditorQuestion(response.data);
-
-          setQuestions((currentQuestions) => [
-            ...currentQuestions,
-            createdQuestion,
-          ]);
-
-          setQuestionFormVersion((currentVersion) => currentVersion + 1);
-
-          setFeedback({
-            type: "success",
-            title: "Question created",
-            message: "The question and its choices were saved to the database.",
-          });
-
-          return;
-        }
-
-        setFeedback({
-          type: "error",
-          title: "Unable to create question",
-          message:
-            response.error?.message ??
-            "The server returned an unexpected response.",
-        });
-      },
-    );
-
-    if (requestId === null) {
-      setIsSaving(false);
-
-      setFeedback({
-        type: "error",
-        title: "Request could not be sent",
-        message: "Wait for the WebSocket connection and try again.",
-      });
-    }
-  };
-
-  const handleEditQuestion = (question: QuestionEditorQuestion) => {
-    setEditingQuestionId(question.id);
-
-    setFeedback(null);
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  };
-
-  const handleConfirmDelete = () => {
-    if (pendingDeleteQuestion === null) {
-      return;
-    }
-
-    setQuestions((currentQuestions) =>
-      currentQuestions.filter(
-        (question) => question.id !== pendingDeleteQuestion.id,
-      ),
-    );
-
-    if (editingQuestionId === pendingDeleteQuestion.id) {
-      setEditingQuestionId(null);
-    }
-
-    setPendingDeleteQuestion(null);
-    setIsPublished(false);
-
-    setFeedback({
-      type: "success",
-      title: "Question removed",
-      message: "The question has been removed from the frontend draft.",
-    });
-  };
-
-  const moveQuestion = (questionId: string, direction: -1 | 1) => {
-    setQuestions((currentQuestions) => {
-      const currentIndex = currentQuestions.findIndex(
-        (question) => question.id === questionId,
-      );
-
-      const targetIndex = currentIndex + direction;
-
-      if (
-        currentIndex < 0 ||
-        targetIndex < 0 ||
-        targetIndex >= currentQuestions.length
-      ) {
-        return currentQuestions;
+    const requestId = sendMessage(isEditing ? 'UPDATE_QUESTION' : 'CREATE_QUESTION', {
+      ...(isEditing ? { questionId: Number(editingId) } : { examId: numericExamId }),
+      ...questionPayload(question, displayOrder),
+    }, (message) => {
+      setSaving(false);
+      if ((message.type === 'QUESTION_CREATED' || message.type === 'QUESTION_UPDATED') && isQuestion(message.data)) {
+        const persisted = toEditorQuestion(message.data);
+        setQuestions((current) => isEditing ? current.map((item) => item.id === persisted.id ? persisted : item) : [...current, persisted]);
+        setEditingId(null);
+        setFormVersion((value) => value + 1);
+        setFeedback({ type: 'success', title: isEditing ? 'Question updated' : 'Question created', message: 'The question and its choices were saved to PostgreSQL.' });
+        return;
       }
-
-      const reorderedQuestions = [...currentQuestions];
-
-      const [movedQuestion] = reorderedQuestions.splice(currentIndex, 1);
-
-      reorderedQuestions.splice(targetIndex, 0, movedQuestion);
-
-      return reorderedQuestions;
+      setFeedback({ type: 'error', title: isEditing ? 'Unable to update question' : 'Unable to create question', message: message.error?.message ?? 'The server rejected this question.' });
     });
-
-    setIsPublished(false);
+    if (requestId === null) { setSaving(false); setFeedback({ type: 'error', message: 'The save request could not be sent.' }); }
   };
 
-  const handlePublish = () => {
-    if (numericExamId === null) {
-      setFeedback({
-        type: "error",
-        title: "Invalid examination ID",
-        message: "The examination cannot be published without a valid ID.",
-      });
-
-      return;
-    }
-
-    if (connectionStatus !== "connected") {
-      setFeedback({
-        type: "error",
-        title: "Server connection unavailable",
-        message: "Reconnect to the server before publishing the examination.",
-      });
-
-      return;
-    }
-
-    if (isPublishing) {
-      return;
-    }
-
-    setIsPublishing(true);
-    setFeedback(null);
-
-    const requestId = sendMessage(
-      "PUBLISH_EXAM",
-      { examId: numericExamId },
-      (response) => {
-        setIsPublishing(false);
-
-        if (
-          response.type === "EXAM_PUBLISHED" &&
-          response.data?.status === "PUBLISHED"
-        ) {
-          setIsPublished(true);
-
-          setFeedback({
-            type: "success",
-            title: "Examination published",
-            message: "The published status was saved to the database.",
-          });
-
-          return;
-        }
-
-        setFeedback({
-          type: "error",
-          title: "Unable to publish examination",
-          message:
-            response.error?.message ??
-            "The server returned an unexpected publication response.",
-        });
-      },
-    );
-
-    if (requestId !== null) {
-      return;
-    }
-
-    setIsPublishing(false);
-
-    setFeedback({
-      type: "error",
-      title: "Request could not be sent",
-      message: "Wait for the WebSocket connection and try again.",
+  const remove = () => {
+    if (!pendingDelete || connectionStatus !== 'connected' || saving) return;
+    const target = pendingDelete;
+    setSaving(true);
+    const requestId = sendMessage('DELETE_QUESTION', { questionId: Number(target.id) }, (message) => {
+      setSaving(false);
+      if (message.type === 'QUESTION_DELETED') {
+        setQuestions((current) => current.filter((item) => item.id !== target.id));
+        setPendingDelete(null);
+        if (editingId === target.id) setEditingId(null);
+        setFeedback({ type: 'success', title: 'Question deleted', message: 'The question and choices were removed from PostgreSQL.' });
+        return;
+      }
+      setFeedback({ type: 'error', message: message.error?.message ?? 'The question could not be deleted.' });
     });
+    if (requestId === null) { setSaving(false); setFeedback({ type: 'error', message: 'The delete request could not be sent.' }); }
   };
 
-  return (
-    <>
-      <section
-        className="
-          flex items-end
-          justify-between gap-8
-          max-xl:flex-col
-          max-xl:items-start
-        "
-      >
-        <div>
-          <p
-            className="
-              text-[11px] font-bold
-              uppercase
-              tracking-[0.16em]
-              text-blue-700
-            "
-          >
-            Question management
-          </p>
+  const move = (questionId: string, direction: -1 | 1) => {
+    if (examStatus !== 'DRAFT' || connectionStatus !== 'connected') return;
+    const from = questions.findIndex((item) => item.id === questionId); const to = from + direction;
+    if (from < 0 || to < 0 || to >= questions.length) return;
+    const reordered = [...questions]; const [item] = reordered.splice(from, 1); reordered.splice(to, 0, item);
+    const normalized = reordered.map((question, index) => ({ ...question, displayOrder: index }));
+    setQuestions(normalized);
+    [normalized[from], normalized[to]].forEach((question) => sendMessage('UPDATE_QUESTION', { questionId: Number(question.id), ...questionPayload(question, question.displayOrder ?? 0) }, (message) => {
+      if (message.type === 'ERROR') setFeedback({ type: 'error', title: 'Unable to reorder questions', message: message.error?.message ?? 'Reload the question list and try again.' });
+    }));
+  };
 
-          <h1
-            className="
-              mt-3 text-3xl
-              font-semibold
-              tracking-[-0.035em]
-              text-slate-950
-            "
-          >
-            {examTitle}
-          </h1>
+  const publish = () => {
+    if (numericExamId === null || connectionStatus !== 'connected' || publishing) return;
+    setPublishing(true);
+    const requestId = sendMessage('PUBLISH_EXAM', { examId: numericExamId }, (message) => {
+      setPublishing(false);
+      if (message.type === 'EXAM_PUBLISHED' && message.data?.status === 'PUBLISHED') {
+        setExamStatus('PUBLISHED');
+        setEditingId(null);
+        setFeedback({ type: 'success', title: 'Examination published', message: 'The published status was saved to PostgreSQL.' });
+      } else setFeedback({ type: 'error', title: 'Unable to publish examination', message: message.error?.message ?? 'The server rejected publication.' });
+    });
+    if (requestId === null) { setPublishing(false); setFeedback({ type: 'error', message: 'The publish request could not be sent.' }); }
+  };
 
-          <p className="mt-3 text-sm text-slate-600">Exam ID: {examCode}</p>
-        </div>
-
-        <div className="flex flex-wrap gap-3">
-          <Link
-            className="
-              inline-flex min-h-11
-              items-center
-              justify-center
-              rounded-md border
-              border-slate-300
-              bg-white px-4
-              text-sm font-semibold
-              text-slate-700
-              transition-colors
-              hover:border-blue-600
-              hover:text-blue-700
-            "
-            to="/teacher/exams"
-          >
-            Back to examinations
-          </Link>
-
-          <Link
-            className="
-              inline-flex min-h-11
-              items-center
-              justify-center
-              rounded-md bg-blue-700
-              px-4 text-sm
-              font-semibold
-              text-white
-              transition-colors
-              hover:bg-blue-800
-            "
-            to={`/teacher/exams/${examId}`}
-          >
-            Examination overview
-          </Link>
-        </div>
-      </section>
-
-      <div
-        className="
-          mt-6 rounded-lg
-          border border-amber-200
-          bg-amber-50 px-4 py-3
-          text-xs leading-5
-          text-amber-900
-        "
-      >
-        <strong>Current backend scope:</strong> new questions are saved to
-        PostgreSQL. Editing, deleting, reordering, and publishing are disabled
-        until their server commands are implemented.
-      </div>
-
-      {feedback !== null && (
-        <div className="mt-6">
-          <FeedbackMessage
-            feedback={feedback}
-            onClose={() => setFeedback(null)}
-          />
-        </div>
-      )}
-
-      <div
-        className="
-          mt-6 grid
-          grid-cols-[minmax(0,2fr)_340px]
-          items-start gap-6
-          max-2xl:grid-cols-1
-        "
-      >
-        <div className="space-y-6">
-          <QuestionEditorForm
-            key={editingQuestion?.id ?? `new-question-${questionFormVersion}`}
-            initialQuestion={editingQuestion}
-            isSaving={isSaving}
-            onCancel={() => setEditingQuestionId(null)}
-            onSave={handleSaveQuestion}
-          />
-
-          <section>
-            <div
-              className="
-                flex items-end
-                justify-between gap-5
-              "
-            >
-              <div>
-                <h2 className="text-lg font-semibold text-slate-950">
-                  Examination questions
-                </h2>
-
-                <p className="mt-1 text-xs text-slate-500">
-                  {questions.length}{" "}
-                  {questions.length === 1 ? "question" : "questions"}
-                </p>
-              </div>
-            </div>
-
-            {isLoading ? (
-              <div
-                className="
-                  mt-4 rounded-xl
-                  border border-slate-200
-                  bg-white px-6 py-12
-                  text-center
-                "
-              >
-                <p className="text-sm font-semibold text-slate-800">
-                  Loading questions...
-                </p>
-
-                <p className="mt-2 text-xs text-slate-500">
-                  The client is requesting the latest question list from the
-                  server.
-                </p>
-              </div>
-            ) : questions.length > 0 ? (
-              <div className="mt-4 grid gap-4">
-                {questions.map((question, index) => (
-                  <QuestionListItem
-                    key={question.id}
-                    index={index}
-                    isFirst={index === 0}
-                    isLast={index === questions.length - 1}
-                    actionsEnabled={false}
-                    question={question}
-                    onDelete={setPendingDeleteQuestion}
-                    onEdit={handleEditQuestion}
-                    onMoveDown={(questionId) => moveQuestion(questionId, 1)}
-                    onMoveUp={(questionId) => moveQuestion(questionId, -1)}
-                  />
-                ))}
-              </div>
-            ) : (
-              <div
-                className="
-                  mt-4 rounded-xl
-                  border border-dashed
-                  border-slate-300
-                  bg-white px-6 py-16
-                  text-center
-                "
-              >
-                <p className="text-sm font-semibold text-slate-800">
-                  No questions yet
-                </p>
-
-                <p className="mt-2 text-xs text-slate-500">
-                  Use the editor above to add the first question.
-                </p>
-              </div>
-            )}
-          </section>
-        </div>
-
-        <aside
-          className="
-            sticky top-[100px]
-            max-2xl:static
-          "
-        >
-          <PublishReadinessPanel
-            isPublished={isPublished}
-            isPublishing={isPublishing}
-            questions={questions}
-            onPublish={handlePublish}
-          />
-        </aside>
-      </div>
-
-      {pendingDeleteQuestion !== null && (
-        <div
-          className="
-            fixed inset-0 z-50
-            grid place-items-center
-            bg-slate-950/55 p-5
-          "
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) {
-              setPendingDeleteQuestion(null);
-            }
-          }}
-        >
-          <section
-            className="
-              w-full max-w-md
-              rounded-xl border
-              border-slate-200
-              bg-white p-6
-              shadow-[0_30px_80px_rgb(15_23_42/0.30)]
-            "
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="delete-question-title"
-          >
-            <p
-              className="
-                text-[11px] font-bold
-                uppercase
-                tracking-[0.15em]
-                text-red-700
-              "
-            >
-              Delete question
-            </p>
-
-            <h2
-              id="delete-question-title"
-              className="
-                mt-3 text-xl
-                font-semibold
-                text-slate-950
-              "
-            >
-              Remove this question?
-            </h2>
-
-            <p
-              className="
-                mt-3 text-sm
-                leading-6
-                text-slate-600
-              "
-            >
-              This action removes the question and all of its choices from the
-              frontend draft.
-            </p>
-
-            <p
-              className="
-                mt-4 rounded-lg
-                bg-slate-50 p-4
-                text-sm leading-6
-                text-slate-800
-              "
-            >
-              {pendingDeleteQuestion.content}
-            </p>
-
-            <div
-              className="
-                mt-6 grid
-                grid-cols-2 gap-3
-                max-sm:grid-cols-1
-              "
-            >
-              <button
-                className="
-                  min-h-11 rounded-md
-                  border border-slate-300
-                  bg-white px-4
-                  text-sm font-semibold
-                  text-slate-700
-                "
-                type="button"
-                onClick={() => setPendingDeleteQuestion(null)}
-              >
-                Cancel
-              </button>
-
-              <button
-                className="
-                  min-h-11 rounded-md
-                  bg-red-700 px-4
-                  text-sm font-semibold
-                  text-white
-                  transition-colors
-                  hover:bg-red-800
-                "
-                type="button"
-                onClick={handleConfirmDelete}
-              >
-                Delete question
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-    </>
-  );
+  return <div><div className="flex items-center gap-2 text-[9px] font-semibold text-[#75848a]"><Link to="/teacher/exams">Examinations</Link><Icon name="arrow-right" size={10} /><Link to={`/teacher/exams/${examId}`}>EX-{String(examId).padStart(4,'0')}</Link><Icon name="arrow-right" size={10} /><span>Questions</span></div><section className="mt-4 flex items-start justify-between gap-5 max-md:flex-col"><div><p className="text-[9px] font-bold uppercase tracking-[.13em] text-[#00778b]">Question management</p><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">{examTitle}</h1><p className="mt-1 text-[11px] text-[#718087]">Create, persist, reorder, and validate single-choice questions.</p></div><Link className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d3e0e3] px-3 text-[9px] font-semibold text-[#526269]" to={`/teacher/exams/${examId}`}><Icon name="arrow-left" size={12} />Exam overview</Link></section>
+    <div className={`mt-5 flex items-start gap-3 rounded-lg border p-4 text-[10px] leading-5 ${examStatus === 'DRAFT' ? 'border-[#b9dfe4] bg-[#eff9fa] text-[#315e67]' : 'border-[#dce4e6] bg-[#f4f7f8] text-[#607178]'}`}><Icon className="mt-0.5 shrink-0" name={examStatus === 'DRAFT' ? 'check' : 'lock'} size={14} /><p><strong>Exam status: {examStatus ?? 'Loading'}.</strong> Questions are loaded and saved through WebSocket and can only be changed while this examination is a draft.</p></div>
+    {feedback && <div className="mt-5"><FeedbackMessage feedback={feedback} onClose={() => setFeedback(null)} /></div>}
+    <div className="mt-5 grid grid-cols-[minmax(0,2fr)_330px] items-start gap-5 max-xl:grid-cols-1"><div className="grid gap-5">{examStatus === 'DRAFT' && <QuestionEditorForm isSaving={saving} key={editing?.id ?? `new-${formVersion}`} initialQuestion={editing} onCancel={() => setEditingId(null)} onSave={save} />}<section><div className="mb-3 flex items-end justify-between"><div><h2 className="text-[13px] font-bold">Examination questions</h2><p className="mt-1 text-[9px] text-[#7c898e]">{questions.length} persisted questions</p></div></div>{loading ? <div className="rounded-xl border border-[#dce7ea] bg-white py-12 text-center text-[10px] text-[#7a888d]">Loading questions through WebSocket…</div> : <div className="grid gap-3">{questions.map((question,index) => <QuestionListItem actionsEnabled={examStatus === 'DRAFT' && !saving} index={index} isFirst={index === 0} isLast={index === questions.length - 1} key={question.id} onDelete={setPendingDelete} onEdit={(selected) => { setEditingId(selected.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onMoveDown={(id) => move(id, 1)} onMoveUp={(id) => move(id, -1)} question={question} />)}{questions.length === 0 && <div className="rounded-xl border border-dashed border-[#cad9dd] bg-white py-12 text-center text-[10px] text-[#7a888d]">Add the first question using the editor above.</div>}</div>}</section></div><aside className="sticky top-[88px] max-xl:static"><PublishReadinessPanel isPublished={published} isPublishing={publishing} onPublish={publish} questions={questions} /></aside></div>
+    {pendingDelete && <div className="fixed inset-0 z-50 grid place-items-center bg-[#10272e]/55 p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setPendingDelete(null); }}><section className="w-full max-w-md rounded-xl bg-white p-6"><h2 className="text-[16px] font-bold">Delete this question?</h2><p className="mt-2 text-[10px] leading-5 text-[#68777d]">This permanently removes the question and all choices from PostgreSQL.</p><div className="mt-5 flex justify-end gap-2"><button className="h-9 rounded-lg border border-[#d6e1e4] px-4 text-[9px] font-semibold" onClick={() => setPendingDelete(null)} type="button">Cancel</button><button className="h-9 rounded-lg bg-[#bd2f35] px-4 text-[9px] font-semibold text-white disabled:opacity-50" disabled={saving} onClick={remove} type="button">{saving ? 'Deleting…' : 'Delete question'}</button></div></section></div>}
+  </div>;
 }
 
 export default QuestionManagementPage;

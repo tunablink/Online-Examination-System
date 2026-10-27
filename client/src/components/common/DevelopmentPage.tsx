@@ -1,87 +1,10 @@
 import { Link } from 'react-router';
+import Icon from './Icon';
 
-interface DevelopmentPageProps {
-  eyebrow: string;
-  title: string;
-  description: string;
-  backTo?: string;
-  backLabel?: string;
-}
+interface DevelopmentPageProps { eyebrow: string; title: string; description: string; backTo?: string; backLabel?: string; }
 
-function DevelopmentPage({
-  eyebrow,
-  title,
-  description,
-  backTo = '/login',
-  backLabel = 'Return to sign in',
-}: DevelopmentPageProps) {
-  return (
-    <main
-      className="
-        grid min-h-screen place-items-center
-        bg-[#f4f7fb] p-6
-      "
-    >
-      <section
-        className="
-          w-full max-w-2xl rounded-xl
-          border border-slate-200 bg-white
-          p-10
-          shadow-[0_20px_50px_rgb(15_23_42/0.08)]
-          max-sm:p-6
-        "
-      >
-        <div
-          className="
-            grid h-11 w-11 place-items-center
-            rounded-md bg-blue-700
-            text-xs font-extrabold text-white
-          "
-          aria-hidden="true"
-        >
-          OE
-        </div>
-
-        <p
-          className="
-            mt-8 text-[11px] font-bold
-            tracking-[0.16em] text-blue-700
-          "
-        >
-          {eyebrow}
-        </p>
-
-        <h1
-          className="
-            mt-3 text-3xl font-semibold
-            tracking-[-0.035em] text-slate-950
-          "
-        >
-          {title}
-        </h1>
-
-        <p className="mt-4 text-sm leading-7 text-slate-600">
-          {description}
-        </p>
-
-        <div className="mt-8 border-t border-slate-200 pt-6">
-          <Link
-            className="
-              inline-flex min-h-11 items-center
-              justify-center rounded-md
-              border border-slate-300 bg-white
-              px-4 text-sm font-semibold text-slate-800
-              transition-colors
-              hover:border-blue-700 hover:text-blue-700
-            "
-            to={backTo}
-          >
-            ← {backLabel}
-          </Link>
-        </div>
-      </section>
-    </main>
-  );
+function DevelopmentPage({ eyebrow, title, description, backTo = '/login', backLabel = 'Return to sign in' }: DevelopmentPageProps) {
+  return <main className="grid min-h-screen place-items-center bg-[#f5f9fb] p-6"><section className="w-full max-w-xl rounded-xl border border-[#dce7ea] bg-white p-9 text-center shadow-[0_20px_50px_rgba(15,42,51,.07)]"><span className="mx-auto grid h-12 w-12 place-items-center rounded-xl bg-[#00778b] text-white"><Icon name="document" size={21} /></span><p className="mt-6 text-[10px] font-bold uppercase tracking-[.14em] text-[#00778b]">{eyebrow}</p><h1 className="mt-2 text-[26px] font-bold tracking-[-.04em]">{title}</h1><p className="mx-auto mt-3 max-w-md text-[12px] leading-6 text-[#68777d]">{description}</p><Link className="mt-7 inline-flex h-10 items-center gap-2 rounded-lg border border-[#b8d7dd] px-4 text-[10px] font-semibold text-[#00778b]" to={backTo}><Icon name="arrow-left" size={13} />{backLabel}</Link></section></main>;
 }
 
 export default DevelopmentPage;

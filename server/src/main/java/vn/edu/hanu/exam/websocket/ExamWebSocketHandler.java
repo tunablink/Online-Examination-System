@@ -27,6 +27,7 @@ import vn.edu.hanu.exam.websocket.handler.ExamManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.QuestionManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.RegistrationMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.StudentExamCatalogMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.StudentManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.TeacherDashboardMessageHandler;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
@@ -45,6 +46,8 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
 
         private final StudentExamCatalogMessageHandler studentExamCatalogMessageHandler;
 
+        private final StudentManagementMessageHandler studentManagementMessageHandler;
+
         private final TeacherDashboardMessageHandler teacherDashboardMessageHandler;
 
         private final LoginService loginService;
@@ -57,6 +60,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                         ExamManagementMessageHandler examManagementMessageHandler,
                         QuestionManagementMessageHandler questionManagementMessageHandler,
                         StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
+                        StudentManagementMessageHandler studentManagementMessageHandler,
                         TeacherDashboardMessageHandler teacherDashboardMessageHandler,
                         LoginService loginService,
                         AuthenticatedSessionRegistry authenticatedSessionRegistry) {
@@ -65,6 +69,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                 this.examManagementMessageHandler = examManagementMessageHandler;
                 this.questionManagementMessageHandler = questionManagementMessageHandler;
                 this.studentExamCatalogMessageHandler = studentExamCatalogMessageHandler;
+                this.studentManagementMessageHandler = studentManagementMessageHandler;
                 this.teacherDashboardMessageHandler = teacherDashboardMessageHandler;
                 this.loginService = loginService;
                 this.authenticatedSessionRegistry = authenticatedSessionRegistry;
@@ -84,6 +89,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                 examManagementMessageHandler,
                                 questionManagementMessageHandler,
                                 studentExamCatalogMessageHandler,
+                                null,
                                 null,
                                 loginService,
                                 authenticatedSessionRegistry);
@@ -173,6 +179,20 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                                 session,
                                                 clientMessage);
 
+                        case GET_STUDENTS ->
+                                sendMessage(
+                                                session,
+                                                studentManagementMessageHandler.handleList(
+                                                                session,
+                                                                clientMessage));
+
+                        case GET_STUDENT ->
+                                sendMessage(
+                                                session,
+                                                studentManagementMessageHandler.handleGet(
+                                                                session,
+                                                                clientMessage));
+
                         case GET_TEACHER_DASHBOARD ->
                                 sendMessage(
                                                 session,
@@ -233,6 +253,20 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                 sendMessage(
                                                 session,
                                                 questionManagementMessageHandler.handleCreate(
+                                                                session,
+                                                                clientMessage));
+
+                        case UPDATE_QUESTION ->
+                                sendMessage(
+                                                session,
+                                                questionManagementMessageHandler.handleUpdate(
+                                                                session,
+                                                                clientMessage));
+
+                        case DELETE_QUESTION ->
+                                sendMessage(
+                                                session,
+                                                questionManagementMessageHandler.handleDelete(
                                                                 session,
                                                                 clientMessage));
 

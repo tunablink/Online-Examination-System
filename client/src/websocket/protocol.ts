@@ -2,6 +2,8 @@ export type ClientMessageType =
   | 'PING'
   | 'REGISTER'
   | 'LOGIN'
+  | 'GET_STUDENTS'
+  | 'GET_STUDENT'
   | 'GET_TEACHER_DASHBOARD'
   | 'CREATE_EXAM'
   | 'GET_TEACHER_EXAMS'
@@ -11,6 +13,8 @@ export type ClientMessageType =
   | 'CLOSE_EXAM'
   | 'DELETE_EXAM'
   | 'CREATE_QUESTION'
+  | 'UPDATE_QUESTION'
+  | 'DELETE_QUESTION'
   | 'GET_EXAM_QUESTIONS'
   | 'GET_AVAILABLE_EXAMS'
   | 'GET_AVAILABLE_EXAM';
@@ -20,6 +24,8 @@ export type ServerMessageType =
   | 'PONG'
   | 'REGISTERED'
   | 'LOGGED_IN'
+  | 'STUDENTS'
+  | 'STUDENT_DETAILS'
   | 'TEACHER_DASHBOARD'
   | 'EXAM_CREATED'
   | 'TEACHER_EXAMS'
@@ -29,6 +35,8 @@ export type ServerMessageType =
   | 'EXAM_CLOSED'
   | 'EXAM_DELETED'
   | 'QUESTION_CREATED'
+  | 'QUESTION_UPDATED'
+  | 'QUESTION_DELETED'
   | 'EXAM_QUESTIONS'
   | 'AVAILABLE_EXAMS'
   | 'AVAILABLE_EXAM_DETAILS'
@@ -94,6 +102,18 @@ export interface CreateQuestionPayload {
   choices: CreateQuestionChoicePayload[];
 }
 
+export interface UpdateQuestionPayload {
+  questionId: number;
+  content: string;
+  points: number;
+  displayOrder: number;
+  choices: CreateQuestionChoicePayload[];
+}
+
+export interface DeleteQuestionPayload {
+  questionId: number;
+}
+
 export interface TeacherChoiceData {
   id: number;
   questionId: number;
@@ -127,6 +147,17 @@ export interface ExamDetailsData {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface StudentDirectoryData {
+  id: number;
+  username: string;
+  fullName: string;
+  email: string;
+  active: boolean;
+  createdAt: string;
+}
+
+export type ServerExam = ExamDetailsData;
 
 export interface TeacherDashboardExamData {
   id: number;
@@ -178,6 +209,7 @@ export interface ServerMessageData {
   email?: string;
   role?: UserRole;
   active?: boolean;
+  students?: StudentDirectoryData[];
 
   title?: string;
   description?: string | null;

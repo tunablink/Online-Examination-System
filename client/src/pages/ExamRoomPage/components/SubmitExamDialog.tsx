@@ -19,7 +19,7 @@ function SubmitExamDialog({
       className="
         fixed inset-0 z-50
         grid place-items-center
-        bg-slate-950/55 p-5
+        bg-[#10252c]/60 p-5 backdrop-blur-sm
       "
       role="presentation"
       onMouseDown={(event) => {
@@ -31,7 +31,7 @@ function SubmitExamDialog({
       <section
         className="
           w-full max-w-md
-          rounded-xl border border-slate-200
+          rounded-xl border border-[#d5e4e7]
           bg-white p-6
           shadow-[0_30px_80px_rgb(15_23_42/0.30)]
         "
@@ -42,7 +42,7 @@ function SubmitExamDialog({
         <p
           className="
             text-[11px] font-bold uppercase
-            tracking-[0.15em] text-red-600
+            tracking-[0.15em] text-[#00778b]
           "
         >
           Final submission
@@ -52,13 +52,13 @@ function SubmitExamDialog({
           id="submit-exam-title"
           className="
             mt-3 text-xl font-semibold
-            tracking-[-0.02em] text-slate-950
+            tracking-[-0.02em] text-[#172126]
           "
         >
           Submit this examination?
         </h2>
 
-        <p className="mt-3 text-sm leading-6 text-slate-600">
+        <p className="mt-3 text-sm leading-6 text-[#66777d]">
           Once submitted, the attempt cannot be reopened or edited.
         </p>
 
@@ -69,40 +69,40 @@ function SubmitExamDialog({
         >
           <div
             className="
-              rounded-lg border border-emerald-200
-              bg-emerald-50 p-4
+              rounded-lg border border-[#bee0e5]
+              bg-[#edf9fa] p-4
             "
           >
             <p
               className="
                 text-[10px] font-bold uppercase
-                tracking-[0.12em] text-emerald-700
+                tracking-[0.12em] text-[#00778b]
               "
             >
               Answered
             </p>
 
-            <p className="mt-2 text-2xl font-semibold text-emerald-950">
+            <p className="mt-2 text-2xl font-semibold text-[#17434b]">
               {answeredCount}
             </p>
           </div>
 
           <div
             className="
-              rounded-lg border border-amber-200
-              bg-amber-50 p-4
+              rounded-lg border border-[#ead6b7]
+              bg-[#fff8ed] p-4
             "
           >
             <p
               className="
                 text-[10px] font-bold uppercase
-                tracking-[0.12em] text-amber-700
+                tracking-[0.12em] text-[#9a6415]
               "
             >
               Unanswered
             </p>
 
-            <p className="mt-2 text-2xl font-semibold text-amber-950">
+            <p className="mt-2 text-2xl font-semibold text-[#704812]">
               {unansweredCount}
             </p>
           </div>
@@ -112,9 +112,9 @@ function SubmitExamDialog({
           <p
             className="
               mt-4 rounded-md
-              border border-amber-200
-              bg-amber-50 px-3 py-2.5
-              text-xs leading-5 text-amber-800
+              border border-[#ead6b7]
+              bg-[#fff8ed] px-3 py-2.5
+              text-xs leading-5 text-[#81591d]
             "
           >
             You still have unanswered questions. You may return and
@@ -131,12 +131,12 @@ function SubmitExamDialog({
           <button
             className="
               min-h-11 rounded-md
-              border border-slate-300
+              border border-[#cbdadd]
               bg-white px-4
-              text-sm font-semibold text-slate-700
+              text-sm font-semibold text-[#53636a]
               transition-colors
-              hover:border-slate-400
-              hover:text-slate-950
+              hover:border-[#8cbcc5]
+              hover:text-[#17343b]
             "
             type="button"
             onClick={onCancel}
@@ -147,9 +147,9 @@ function SubmitExamDialog({
           <button
             className="
               min-h-11 rounded-md
-              bg-red-700 px-4
+              bg-[#00778b] px-4
               text-sm font-semibold text-white
-              transition-colors hover:bg-red-800
+              transition-colors hover:bg-[#006273]
             "
             type="button"
             onClick={onConfirm}

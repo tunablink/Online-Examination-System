@@ -673,4 +673,4 @@ class QuestionManagementMessageHandlerTests {
                 response.error().code()
         );
     }
-}                                        
+}
