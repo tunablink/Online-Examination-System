@@ -17,6 +17,7 @@ import vn.edu.hanu.exam.domain.Exam;
 import vn.edu.hanu.exam.domain.ExamStatus;
 import vn.edu.hanu.exam.domain.Question;
 import vn.edu.hanu.exam.domain.attempt.AttemptChoice;
+import vn.edu.hanu.exam.domain.attempt.AttemptHistoryEntry;
 import vn.edu.hanu.exam.domain.attempt.AttemptQuestion;
 import vn.edu.hanu.exam.domain.attempt.AttemptScore;
 import vn.edu.hanu.exam.domain.attempt.AttemptStatus;
@@ -34,6 +35,7 @@ public class ExamAttemptService {
     public static final String ATTEMPT_NOT_ACTIVE = "ATTEMPT_NOT_ACTIVE";
     public static final String ATTEMPT_EXPIRED = "ATTEMPT_EXPIRED";
     public static final String INVALID_ANSWER = "INVALID_ANSWER";
+    public static final String ATTEMPT_RESULT_NOT_FOUND = "ATTEMPT_RESULT_NOT_FOUND";
     public static final String DATABASE_ERROR = "DATABASE_ERROR";
 
     private final AttemptRepository attemptRepository;
@@ -193,6 +195,40 @@ public class ExamAttemptService {
         }
     }
 
+    @Transactional(readOnly = true)
+    public AttemptHistoryResult getAttemptHistory(long studentId) {
+        if (studentId <= 0) {
+            throw new IllegalArgumentException("A valid student ID is required.");
+        }
+
+        try {
+            List<StudentAttemptResult> attempts = attemptRepository
+                    .findHistoryByStudentId(studentId)
+                    .stream()
+                    .map(ExamAttemptService::toStudentResult)
+                    .toList();
+            return new AttemptHistoryResult(attempts);
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw databaseError(exception);
+        }
+    }
+
+    @Transactional(readOnly = true)
+    public StudentAttemptResult getAttemptResult(long attemptId, long studentId) {
+        if (attemptId <= 0 || studentId <= 0) {
+            throw attemptResultNotFound();
+        }
+
+        try {
+            return attemptRepository
+                    .findCompletedAttemptByIdAndStudent(attemptId, studentId)
+                    .map(ExamAttemptService::toStudentResult)
+                    .orElseThrow(ExamAttemptService::attemptResultNotFound);
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw databaseError(exception);
+        }
+    }
+
     private ExamAttemptDetails buildDetails(ExamAttempt attempt, Exam exam) {
         List<AttemptQuestion> questions = attemptRepository.findAttemptQuestions(attempt.id());
         Map<Long, List<AttemptChoiceDetails>> choicesByQuestion = new LinkedHashMap<>();
@@ -255,6 +291,20 @@ public class ExamAttemptService {
                 result.totalQuestions());
     }
 
+    private static StudentAttemptResult toStudentResult(AttemptHistoryEntry entry) {
+        return new StudentAttemptResult(
+                entry.attemptId(),
+                entry.examId(),
+                entry.examTitle(),
+                entry.status(),
+                entry.startedAt(),
+                entry.submittedAt(),
+                entry.score(),
+                entry.maxScore(),
+                entry.correctAnswers(),
+                entry.totalQuestions());
+    }
+
     private static void validateExamContent(List<Question> questions, List<Choice> choices) {
         if (questions.isEmpty()) {
             throw new AttemptException(EXAM_NOT_READY, "Exam does not contain any questions.");
@@ -291,6 +341,12 @@ public class ExamAttemptService {
         return new AttemptException(
                 INVALID_ANSWER,
                 "The selected choice does not belong to this attempt question.");
+    }
+
+    private static AttemptException attemptResultNotFound() {
+        return new AttemptException(
+                ATTEMPT_RESULT_NOT_FOUND,
+                "The completed attempt result was not found.");
     }
 
     private static AttemptException databaseError(RuntimeException cause) {

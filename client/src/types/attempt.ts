@@ -43,6 +43,23 @@ export interface ExamSubmissionResult {
   totalQuestions: number;
 }
 
+export interface StudentAttemptResult {
+  attemptId: number;
+  examId: number;
+  examTitle: string;
+  status: 'SUBMITTED' | 'EXPIRED';
+  startedAt: string;
+  submittedAt: string;
+  score: number;
+  maxScore: number;
+  correctAnswers: number;
+  totalQuestions: number;
+}
+
+export interface AttemptHistoryResult {
+  attempts: StudentAttemptResult[];
+}
+
 export type AnswerMap = Partial<Record<number, number>>;
 
 export function isExamAttempt(value: unknown): value is ExamAttempt {
@@ -106,4 +123,26 @@ export function isExamSubmissionResult(value: unknown): value is ExamSubmissionR
     && typeof result.maxScore === 'number'
     && typeof result.correctAnswers === 'number'
     && typeof result.totalQuestions === 'number';
+}
+
+export function isStudentAttemptResult(value: unknown): value is StudentAttemptResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const result = value as Record<string, unknown>;
+  return typeof result.attemptId === 'number'
+    && typeof result.examId === 'number'
+    && typeof result.examTitle === 'string'
+    && (result.status === 'SUBMITTED' || result.status === 'EXPIRED')
+    && typeof result.startedAt === 'string'
+    && typeof result.submittedAt === 'string'
+    && typeof result.score === 'number'
+    && typeof result.maxScore === 'number'
+    && typeof result.correctAnswers === 'number'
+    && typeof result.totalQuestions === 'number';
+}
+
+export function isAttemptHistoryResult(value: unknown): value is AttemptHistoryResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const result = value as Record<string, unknown>;
+  return Array.isArray(result.attempts)
+    && result.attempts.every(isStudentAttemptResult);
 }

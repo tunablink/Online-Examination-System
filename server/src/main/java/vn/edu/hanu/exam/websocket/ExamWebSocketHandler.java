@@ -352,6 +352,20 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                                 session,
                                                 clientMessage));
 
+                        case GET_ATTEMPT_HISTORY ->
+                                sendMessage(
+                                        session,
+                                        attemptMessageHandler.handleHistory(
+                                                session,
+                                                clientMessage));
+
+                        case GET_ATTEMPT_RESULT ->
+                                sendMessage(
+                                        session,
+                                        attemptMessageHandler.handleResult(
+                                                session,
+                                                clientMessage));
+
                         default ->
                                 sendUnsupportedMessageType(
                                                 session,

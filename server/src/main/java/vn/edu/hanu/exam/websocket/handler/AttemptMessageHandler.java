@@ -18,6 +18,7 @@ import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptService;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
+import vn.edu.hanu.exam.websocket.dto.GetAttemptResultPayload;
 import vn.edu.hanu.exam.websocket.dto.GetExamAttemptPayload;
 import vn.edu.hanu.exam.websocket.dto.SaveAnswerPayload;
 import vn.edu.hanu.exam.websocket.dto.StartExamPayload;
@@ -29,6 +30,8 @@ public class AttemptMessageHandler {
     static final String TYPE_EXAM_ATTEMPT_DETAILS = "EXAM_ATTEMPT_DETAILS";
     static final String TYPE_ANSWER_SAVED = "ANSWER_SAVED";
     static final String TYPE_EXAM_SUBMITTED = "EXAM_SUBMITTED";
+    static final String TYPE_ATTEMPT_HISTORY = "ATTEMPT_HISTORY";
+    static final String TYPE_ATTEMPT_RESULT = "ATTEMPT_RESULT";
     static final String CODE_AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED";
     static final String CODE_FORBIDDEN = "FORBIDDEN";
     static final String CODE_INVALID_PAYLOAD = "INVALID_PAYLOAD";
@@ -63,6 +66,14 @@ public class AttemptMessageHandler {
 
     public ServerMessage handleSubmit(WebSocketSession session, ClientMessage message) {
         return handleSubmit(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleHistory(WebSocketSession session, ClientMessage message) {
+        return handleHistory(session.getId(), message.requestId());
+    }
+
+    public ServerMessage handleResult(WebSocketSession session, ClientMessage message) {
+        return handleResult(session.getId(), message.requestId(), message.payload());
     }
 
     public ServerMessage handleStart(String sessionId, String requestId, Map<String, Object> payload) {
@@ -112,6 +123,26 @@ public class AttemptMessageHandler {
                     requestId,
                     TYPE_EXAM_SUBMITTED,
                     attemptService.submitExam(input.attemptId(), student.id()));
+        });
+    }
+
+    public ServerMessage handleHistory(String sessionId, String requestId) {
+        return withStudent(sessionId, requestId, student -> ServerMessage.success(
+                requestId,
+                TYPE_ATTEMPT_HISTORY,
+                attemptService.getAttemptHistory(student.id())));
+    }
+
+    public ServerMessage handleResult(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload) {
+        return withStudent(sessionId, requestId, student -> {
+            GetAttemptResultPayload input = convertResultPayload(payload);
+            return ServerMessage.success(
+                    requestId,
+                    TYPE_ATTEMPT_RESULT,
+                    attemptService.getAttemptResult(input.attemptId(), student.id()));
         });
     }
 
@@ -209,6 +240,23 @@ public class AttemptMessageHandler {
         try {
             SubmitExamPayload input = jsonMapper.convertValue(payload, SubmitExamPayload.class);
             if (input.attemptId() == null) {
+                throw new InvalidPayloadException();
+            }
+            return input;
+        } catch (JacksonException | IllegalArgumentException exception) {
+            throw new InvalidPayloadException();
+        }
+    }
+
+    private GetAttemptResultPayload convertResultPayload(Map<String, Object> payload) {
+        if (payload == null || !isIntegralNumber(payload.get("attemptId"))) {
+            throw new InvalidPayloadException();
+        }
+        try {
+            GetAttemptResultPayload input = jsonMapper.convertValue(
+                    payload,
+                    GetAttemptResultPayload.class);
+            if (input.attemptId() == null || input.attemptId() <= 0) {
                 throw new InvalidPayloadException();
             }
             return input;

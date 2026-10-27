@@ -12,14 +12,14 @@ Student xem đề → bắt đầu/tiếp tục attempt → lưu đáp án → n
 Teacher theo dõi tiến độ và suspicious activity theo thời gian thực
 ```
 
-Phân công dưới đây được thiết kế để làm song song, giảm sửa cùng một file và ưu tiên hai phần quan trọng nhất cho **Phanh** và **Hoàng Yến**.
+Phân công dưới đây ghi nhận phần Exam Attempt Core của **Phanh đã hoàn thành và được merge**, đồng thời tách các phần còn lại để có thể làm song song và giảm sửa cùng một file.
 
-| Thành viên | Feature phụ trách | Mức ưu tiên |
+| Thành viên | Feature phụ trách | Trạng thái / mức ưu tiên |
 | --- | --- | --- |
-| Phanh | Exam Attempt Core, randomization và recovery | Rất cao |
+| Phanh | Exam Attempt Core, randomization và recovery | Đã hoàn thành, đã merge vào `main` |
 | Hoàng Yến | Hoàn thiện Real-time Monitoring & Anti-cheating end-to-end | Rất cao |
-| Linh | Question Management end-to-end: update/delete | Cao |
-| Hải Yến | Teacher Exam Lifecycle UI: update/publish/close/delete | Cao |
+| Linh | Automatic Deadline Finalizer cho các attempt quá hạn | Cao |
+| Hải Yến | Teacher Submission & Result Review end-to-end | Cao |
 | Leader | Review, tích hợp protocol/router/schema, Student Catalog UI và quality gate | Rất cao |
 
 ## 2. Quy tắc làm việc chung
@@ -44,13 +44,15 @@ server/src/main/resources/schema.sql
 
 Người thực hiện ghi rõ phần bổ sung cần tích hợp vào PR; leader review và tích hợp các file central để tránh conflict.
 
-## 3. Nhiệm vụ của Phanh — Exam Attempt Core, randomization và recovery
+## 3. Phần của Phanh — Exam Attempt Core, randomization và recovery (đã merge)
+
+> **Trạng thái:** Đã hoàn thành và có trong `main`. Commit tích hợp là `927522a` (`Merge branch 'integration/phanh-exam-attempt-resolution'`); phần triển khai chính nằm ở `5a33b52`, sau đó answer saving và exam submission được bổ sung ở `3ffcd68`. Mục này được giữ lại để ghi nhận phạm vi và tiêu chí của phần đã hoàn thành, không phải nhiệm vụ đang chờ Phanh thực hiện.
 
 ### 3.1. Mục tiêu
 
 Xây dựng phần lõi của một lượt thi thật. Student có thể bắt đầu hoặc tiếp tục attempt; server tạo deadline, random question/choice và giữ nguyên biến thể đề sau reconnect.
 
-### 3.2. Phạm vi cần làm
+### 3.2. Phạm vi đã triển khai
 
 - Thiết kế schema cho các bảng cần thiết:
   - `exam_attempts`
@@ -99,7 +101,7 @@ server/src/test/java/**/Attempt*Tests.java
 
 Phanh đề xuất phần thay đổi cho `schema.sql`, `MessageType.java` và `ExamWebSocketHandler.java` trong PR; leader sẽ tích hợp sau review.
 
-### 3.5. Test bắt buộc
+### 3.5. Tiêu chí kiểm thử của phần đã merge
 
 1. Student start published exam thành công.
 2. Draft/closed exam bị từ chối.
@@ -110,12 +112,12 @@ Phanh đề xuất phần thay đổi cho `schema.sql`, `MessageType.java` và `
 7. Deadline do server tạo và hợp lệ.
 8. Session chưa login trả `AUTHENTICATION_REQUIRED`; teacher gọi trả `FORBIDDEN`.
 
-### 3.6. Bàn giao
-
-Branch đề xuất:
+### 3.6. Thông tin tích hợp
 
 ```text
-feature/phanh-exam-attempt
+Feature source: origin/feature/phanh-exam-attempt
+Integration branch: integration/phanh-exam-attempt-resolution
+Merge commit on main: 927522a
 ```
 
 ## 4. Nhiệm vụ của Hoàng Yến — Hoàn thiện Real-time Monitoring & Anti-cheating end-to-end
@@ -340,127 +342,199 @@ test: cover monitoring authorization and warning threshold
 
 Khi bàn giao phải gửi: tên branch, danh sách commit/file sửa, request/response mẫu, thay đổi schema, kết quả test và hướng dẫn manual test.
 
-## 5. Nhiệm vụ của Linh — Question Management end-to-end
+## 5. Nhiệm vụ của Linh — Automatic Deadline Finalizer
 
 ### 5.1. Mục tiêu
 
-Hoàn thiện việc teacher sửa và xóa question trên UI với dữ liệu thật. Backend update/delete đã có nền tảng; nhiệm vụ là bảo đảm protocol, routing, test và React UI hoạt động end-to-end.
+Hoàn thiện một module backend tự động kết thúc các exam attempt đã quá hạn. Attempt phải được chuyển từ `IN_PROGRESS` sang `EXPIRED`, chấm điểm từ các đáp án đã lưu và lưu kết quả ngay cả khi student đã đóng trình duyệt hoặc mất kết nối.
+
+Luồng xử lý dự kiến:
+
+```text
+AttemptDeadlineScheduler
+        -> AttemptDeadlineFinalizer
+        -> AttemptDeadlineFinalizationWorker
+        -> AttemptRepository / PostgreSQL
+```
 
 ### 5.2. Phạm vi cần làm
 
-- Hoàn thiện command/response:
+- Tạo scheduler chạy định kỳ bằng Spring Scheduling.
+- Mỗi lần chạy, lấy một batch ID của các attempt thỏa mãn:
+  - status là `IN_PROGRESS`;
+  - `deadline_at <=` thời gian hiện tại của server.
+- Với từng attempt, worker phải mở transaction riêng, khóa lại bản ghi và kiểm tra điều kiện lần cuối.
+- Tái sử dụng logic chấm điểm hiện có; không viết một công thức tính điểm thứ hai.
+- Hoàn tất attempt với status `EXPIRED` và lưu đầy đủ score/result.
+- Một attempt lỗi không được làm dừng toàn bộ batch; phải log đủ `attemptId` để debug.
+- Cấu hình có default hợp lý, đề xuất delay `1000 ms` và batch size `50`.
 
-```text
-UPDATE_QUESTION -> QUESTION_UPDATED
-DELETE_QUESTION -> QUESTION_DELETED
-```
+### 5.3. Yêu cầu an toàn và concurrency
 
-- Hoàn thiện DTO `UpdateQuestionPayload`, `DeleteQuestionPayload` và handler.
-- Nối command vào central protocol/router thông qua hướng dẫn của leader.
-- Cập nhật `QuestionManagementPage`:
-  - Edit mở form chứa dữ liệu cũ;
-  - validate content, points, choice count và exactly one correct choice;
-  - save bằng `UPDATE_QUESTION`;
-  - delete phải có confirmation;
-  - chỉ reload/update UI sau response success từ server;
-  - status không phải `DRAFT` thì không hiển thị thao tác edit/delete.
-- Cập nhật TypeScript protocol liên quan và thêm loading/error/success feedback.
-
-### 5.3. Business rules bắt buộc
-
-- Teacher chỉ sửa/xóa question của exam do mình tạo.
-- Chỉ question của exam `DRAFT` được sửa/xóa.
-- Question phải có 2–6 choices, content không rỗng và đúng một đáp án correct.
-- Update replacement choices và delete question/choices phải dùng transaction.
+- PostgreSQL là nguồn sự thật; không dùng `synchronized` làm cơ chế chống race chính.
+- Repository phải khóa attempt trước khi finalize, ví dụ `SELECT ... FOR UPDATE`.
+- Worker phải kiểm tra lại status và deadline sau khi đã giữ lock.
+- Chạy scheduler nhiều lần không được chấm hoặc finalize cùng attempt hai lần.
+- Nếu student submit đúng lúc scheduler chạy, chỉ một luồng được finalize thành công.
+- Không tin deadline/status gửi từ client và không dùng đồng hồ phía client để quyết định hết giờ.
 
 ### 5.4. Files dự kiến sở hữu
 
 ```text
-server/src/main/java/vn/edu/hanu/exam/repository/QuestionRepository.java
-server/src/main/java/vn/edu/hanu/exam/repository/JdbcQuestionRepository.java
-server/src/main/java/vn/edu/hanu/exam/service/question/**
-server/src/main/java/vn/edu/hanu/exam/websocket/dto/UpdateQuestionPayload.java
-server/src/main/java/vn/edu/hanu/exam/websocket/dto/DeleteQuestionPayload.java
-server/src/main/java/vn/edu/hanu/exam/websocket/handler/QuestionManagementMessageHandler.java
-server/src/test/java/**/QuestionManagement*Tests.java
-client/src/pages/QuestionManagementPage/**
+server/src/main/java/vn/edu/hanu/exam/config/DeadlineSchedulingConfiguration.java
+server/src/main/java/vn/edu/hanu/exam/service/attempt/deadline/AttemptDeadlineScheduler.java
+server/src/main/java/vn/edu/hanu/exam/service/attempt/deadline/AttemptDeadlineFinalizer.java
+server/src/main/java/vn/edu/hanu/exam/service/attempt/deadline/AttemptDeadlineFinalizationWorker.java
+server/src/main/java/vn/edu/hanu/exam/service/attempt/deadline/DeadlineFinalizationSummary.java
+server/src/main/java/vn/edu/hanu/exam/repository/AttemptRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcAttemptRepository.java
+server/src/test/java/**/attempt/deadline/**
+server/src/test/java/**/AttemptDeadlineFinalizerIntegrationTests.java
+server/src/main/resources/application.properties    (chỉ cấu hình scheduler nếu cần)
 ```
+
+Repository tối thiểu cần hỗ trợ tương đương:
+
+```java
+List<Long> findDueAttemptIds(OffsetDateTime currentTime, int limit);
+
+Optional<ExamAttempt> findDueAttemptByIdForUpdate(
+        long attemptId,
+        OffsetDateTime currentTime);
+```
+
+Tên method có thể điều chỉnh theo code hiện tại, nhưng semantics và locking phải được giữ.
 
 ### 5.5. Test bắt buộc
 
-1. Update question hợp lệ thành công.
-2. Invalid content/points/choices bị từ chối.
-3. Teacher không sửa/xóa question của teacher khác.
-4. Published/closed exam không cho sửa/xóa.
-5. Delete xóa cả question và choices, rollback khi lỗi.
-6. `mvn test`, `npm run lint`, `npm run build` pass.
+1. Không có attempt quá hạn: batch trả về 0 và không sửa database.
+2. Attempt quá hạn được chấm điểm và chuyển sang `EXPIRED`.
+3. Attempt chưa tới deadline vẫn giữ `IN_PROGRESS`.
+4. Attempt đã `SUBMITTED`/`EXPIRED` không bị xử lý lại.
+5. Đáp án thiếu hoặc mới trả lời một phần vẫn cho score đúng.
+6. Chạy finalizer hai lần vẫn chỉ finalize một lần.
+7. Một attempt lỗi không ngăn các attempt khác trong batch hoàn thành.
+8. Race giữa student submit và scheduler không tạo kết quả trùng hoặc trạng thái sai.
+9. Hai worker cùng xử lý một attempt vẫn chỉ một worker thành công.
+10. `mvn test` pass toàn bộ, không chỉ riêng test mới.
 
-### 5.6. Bàn giao
+### 5.6. Giới hạn phạm vi và bàn giao
+
+- Không sửa client, Monitoring/Anti-cheating, Student History/Result hoặc Question Management.
+- Không tự ý sửa `MessageType`, WebSocket router hay schema nếu module không thực sự cần.
+- Nếu phải sửa file trung tâm đang được người khác dùng, báo leader trước khi commit.
 
 Branch đề xuất:
 
 ```text
-feature/linh-question-management-ui
+feature/linh-deadline-finalizer
 ```
 
-## 6. Nhiệm vụ của Hải Yến — Teacher Exam Lifecycle UI
+Nên tách commit theo thứ tự: repository/locking → service/scheduler → tests/config.
+
+## 6. Nhiệm vụ của Hải Yến — Teacher Submission & Result Review
 
 ### 6.1. Mục tiêu
 
-Hoàn thiện giao diện quản lý vòng đời exam để teacher thao tác với backend đã có: update draft, publish, close và delete draft.
+Hoàn thiện một vertical slice để teacher xem danh sách bài làm của một exam và xem kết quả chi tiết của từng bài đã kết thúc. Dữ liệu phải đọc từ PostgreSQL, kiểm tra quyền sở hữu exam ở backend và hoạt động end-to-end từ WebSocket đến React UI.
 
-### 6.2. Phạm vi cần làm
-
-- Hoàn thiện `ExamManagementPage` và `ExamOverviewPage` cho các command:
+Protocol dự kiến:
 
 ```text
-GET_EXAM
-UPDATE_EXAM -> EXAM_UPDATED
-PUBLISH_EXAM -> EXAM_PUBLISHED
-CLOSE_EXAM -> EXAM_CLOSED
-DELETE_EXAM -> EXAM_DELETED
+GET_EXAM_SUBMISSIONS -> EXAM_SUBMISSIONS
+GET_SUBMISSION_RESULT -> SUBMISSION_RESULT
 ```
 
-- UI requirements:
-  - Edit/Delete chỉ hiện khi status `DRAFT`;
-  - Publish chỉ hiện với `DRAFT`;
-  - Close chỉ hiện với `PUBLISHED`;
-  - Close/Delete có confirmation rõ ràng;
-  - response success mới update/reload UI;
-  - có loading, disabled state, error/success feedback;
-  - giải thích lỗi publish từ server, ví dụ chưa có question hoặc choices không hợp lệ.
+### 6.2. Backend cần làm
 
-### 6.3. Giới hạn phạm vi
+- Tạo repository riêng để giảm conflict với phần deadline của Linh:
 
-- Không sửa business logic backend exam lifecycle nếu không thật sự phát hiện bug.
-- Không sửa Question Management hoặc Attempt/Monitoring.
-- Không dùng mock/local state làm nguồn dữ liệu sau reload; phải đọc lại từ server.
+```text
+TeacherSubmissionRepository.java
+JdbcTeacherSubmissionRepository.java
+```
+
+- Không sửa `AttemptRepository` và `JdbcAttemptRepository` cho task này.
+- Query phải join `exam_attempts`, `exams`, `users` và kiểm tra ownership ngay trong SQL bằng điều kiện tương đương `exams.created_by = teacherId`.
+- Danh sách submission cần tối thiểu:
+  - `attemptId`, `examId`, `examTitle`;
+  - `studentId`, `username`, `studentFullName`;
+  - `status`, `startedAt`, `deadline`, `submittedAt`;
+  - `score`, `maxScore`, `correctAnswers`, `totalQuestions`.
+- Với attempt chưa hoàn tất, các trường kết quả nullable phải giữ `null`, không biến thành `0`. Có thể dùng `ResultSet#getObject(column, Integer.class)`.
+- Result detail chỉ trả về cho attempt terminal (`SUBMITTED` hoặc `EXPIRED`) và exam phải thuộc teacher đang đăng nhập.
+- Tạo `TeacherSubmissionService`, các record/model cần thiết và `TeacherSubmissionException` có error code an toàn.
+- Tạo DTO `GetExamSubmissionsPayload(Long examId)`, `GetSubmissionResultPayload(Long attemptId)` và `TeacherSubmissionMessageHandler`.
+- Handler lấy identity/role từ authenticated session; không tin `teacherId` hay role từ payload.
+
+### 6.3. Frontend cần làm
+
+- Tạo trang danh sách submission cho một exam:
+
+```text
+client/src/pages/TeacherSubmissionPage/**
+```
+
+- Tạo trang xem một kết quả:
+
+```text
+client/src/pages/TeacherSubmissionResultPage/**
+```
+
+- Routes đề xuất:
+
+```text
+/teacher/exams/:examId/submissions
+/teacher/submissions/:attemptId
+```
+
+- Trang danh sách cần có loading, error, empty state, tổng số bài, tìm kiếm theo student và filter theo status.
+- Chỉ hiện link xem result cho attempt terminal; attempt `IN_PROGRESS` chỉ hiển thị tiến độ/trạng thái.
+- Trang result hiển thị thông tin student, exam, thời gian nộp, status và các số liệu tổng hợp.
+- Không tự suy luận `PASS/FAIL` vì hệ thống hiện chưa có passing threshold chính thức.
+- Bổ sung TypeScript types và runtime validator cho response mới; không ép kiểu mù bằng `as`.
 
 ### 6.4. Files dự kiến sở hữu
 
 ```text
-client/src/pages/ExamManagementPage/**
-client/src/pages/ExamOverviewPage/**
-client/src/components/**                 (chỉ component dùng lại cho lifecycle)
-client/src/websocket/protocol.ts         (chỉ các kiểu lifecycle còn thiếu)
+server/src/main/java/vn/edu/hanu/exam/domain/submission/**
+server/src/main/java/vn/edu/hanu/exam/repository/TeacherSubmissionRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcTeacherSubmissionRepository.java
+server/src/main/java/vn/edu/hanu/exam/service/submission/**
+server/src/main/java/vn/edu/hanu/exam/websocket/dto/GetExamSubmissionsPayload.java
+server/src/main/java/vn/edu/hanu/exam/websocket/dto/GetSubmissionResultPayload.java
+server/src/main/java/vn/edu/hanu/exam/websocket/handler/TeacherSubmissionMessageHandler.java
+server/src/test/java/**/TeacherSubmission*Tests.java
+client/src/pages/TeacherSubmissionPage/**
+client/src/pages/TeacherSubmissionResultPage/**
 ```
 
-### 6.5. Test/verification bắt buộc
+Các file trung tâm như `MessageType`, WebSocket router, `client/src/websocket/protocol.ts` và `App.tsx` chỉ sửa sau khi pull/rebase `main` mới nhất; để chúng trong commit tích hợp riêng.
 
-1. Update draft thành công và refresh vẫn đúng dữ liệu PostgreSQL.
-2. Publish hợp lệ thành công; publish thiếu readiness hiển thị lỗi server.
-3. Close chỉ hoạt động với published exam.
-4. Delete chỉ hoạt động với draft exam.
-5. Action không hợp lệ không được hiển thị hoặc phải bị disabled.
-6. `npm run lint`, `npm run build` và manual flow pass.
+### 6.5. Test và acceptance criteria
 
-### 6.6. Bàn giao
+1. Teacher xem được submissions của exam do mình tạo.
+2. Teacher không xem được exam/submission của teacher khác.
+3. Student hoặc session chưa đăng nhập bị từ chối bằng error code an toàn.
+4. Attempt `IN_PROGRESS` giữ các trường score/result là `null`.
+5. Result của `SUBMITTED` và `EXPIRED` trả đúng số liệu đã lưu.
+6. Danh sách có thứ tự xác định, ưu tiên dữ liệu mới nhất.
+7. Response không chứa password hash, correct choices hoặc dữ liệu nhạy cảm.
+8. Backend tests, `npm run lint`, `npm run build` và manual flow đều pass.
+
+### 6.6. Giới hạn phạm vi và bàn giao
+
+- Không sửa deadline finalizer, Monitoring/Anti-cheating, Student History/Result hoặc ExamRoom.
+- Không thay đổi schema nếu có thể lấy đủ dữ liệu từ các bảng hiện tại.
+- Nếu cần thêm protocol/router/routes, phải giữ thay đổi nhỏ và báo leader để review conflict.
 
 Branch đề xuất:
 
 ```text
-feature/hai-yen-exam-lifecycle-ui
+feature/hai-yen-teacher-submission-review
 ```
+
+Nên tách commit theo thứ tự: backend read model/repository → service/handler/tests → frontend → central integration.
 
 ## 7. Trách nhiệm của leader
 
@@ -482,13 +556,14 @@ GET_AVAILABLE_EXAM -> AVAILABLE_EXAM_DETAILS
 
 Thứ tự khuyến nghị:
 
-1. Merge phần Linh; chạy backend/client quality gate.
-2. Merge phần Hải Yến; chạy backend/client quality gate.
-3. Review contract attempt, merge phần Phanh; chạy full backend test.
-4. Leader hoàn thiện/commit Student History & Result và đẩy `main` để chốt các file protocol central.
-5. Hoàng Yến rebase/merge `main` mới nhất, hoàn thiện Monitoring & Anti-cheating end-to-end rồi bàn giao.
-6. Merge phần Hoàng Yến; chạy full backend test, frontend lint/build và manual flow student → monitoring → teacher.
-7. Leader cập nhật README và lưu bằng chứng kiểm thử cuối milestone.
+1. Leader hoàn thiện, kiểm thử và đẩy phần Student History & Result hiện tại lên `main` để chốt baseline.
+2. Linh và Hải Yến pull/rebase `main` mới nhất rồi làm trên hai branch riêng; hai task có thể triển khai song song.
+3. Merge phần Linh trước; chạy full backend test và kiểm tra scheduler/concurrency với PostgreSQL.
+4. Hải Yến rebase lên `main` sau bước 3; merge backend read model trước, sau đó tích hợp protocol/router/routes và frontend.
+5. Chạy full backend test, frontend lint/build và manual flow teacher xem submission/result.
+6. Hoàng Yến rebase/merge `main` mới nhất, hoàn thiện Monitoring & Anti-cheating end-to-end rồi bàn giao.
+7. Merge phần Hoàng Yến; chạy manual flow student → attempt/deadline → result → teacher monitoring/review.
+8. Leader cập nhật README và lưu bằng chứng kiểm thử cuối milestone.
 
 Mỗi người trước khi gửi PR chạy:
 

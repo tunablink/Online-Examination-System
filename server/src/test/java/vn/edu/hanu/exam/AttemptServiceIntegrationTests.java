@@ -21,10 +21,12 @@ import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
 import vn.edu.hanu.exam.exception.AttemptException;
 import vn.edu.hanu.exam.service.attempt.AttemptQuestionDetails;
+import vn.edu.hanu.exam.service.attempt.AttemptHistoryResult;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptDetails;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptService;
 import vn.edu.hanu.exam.service.attempt.ExamSubmissionResult;
 import vn.edu.hanu.exam.service.attempt.SavedAnswerDetails;
+import vn.edu.hanu.exam.service.attempt.StudentAttemptResult;
 
 @SpringBootTest
 @Transactional
@@ -153,6 +155,24 @@ class AttemptServiceIntegrationTests {
         assertEquals(1, first.correctAnswers());
         assertEquals(1, first.totalQuestions());
         assertEquals(1, count("attempt_answers", "attempt_id", started.attemptId()));
+
+        AttemptHistoryResult history = attemptService.getAttemptHistory(studentId);
+        assertEquals(1, history.attempts().size());
+        StudentAttemptResult historyItem = history.attempts().getFirst();
+        assertEquals(started.attemptId(), historyItem.attemptId());
+        assertEquals("Attempt integration exam", historyItem.examTitle());
+        assertEquals(first.submittedAt(), historyItem.submittedAt());
+        assertEquals(first.score(), historyItem.score());
+
+        StudentAttemptResult result = attemptService.getAttemptResult(
+                started.attemptId(),
+                studentId);
+        assertEquals(historyItem, result);
+
+        long otherStudentId = insertUser("STUDENT");
+        assertAttemptError(
+                "ATTEMPT_RESULT_NOT_FOUND",
+                () -> attemptService.getAttemptResult(started.attemptId(), otherStudentId));
     }
 
     private long insertUser(String role) {

@@ -8,6 +8,7 @@ import vn.edu.hanu.exam.domain.Choice;
 import vn.edu.hanu.exam.domain.Exam;
 import vn.edu.hanu.exam.domain.Question;
 import vn.edu.hanu.exam.domain.attempt.AttemptChoice;
+import vn.edu.hanu.exam.domain.attempt.AttemptHistoryEntry;
 import vn.edu.hanu.exam.domain.attempt.AttemptQuestion;
 import vn.edu.hanu.exam.domain.attempt.AttemptScore;
 import vn.edu.hanu.exam.domain.attempt.AttemptStatus;
@@ -55,4 +56,11 @@ public interface AttemptRepository {
             AttemptScore score);
 
     Optional<StoredAttemptResult> findSubmissionResult(long attemptId, long studentId);
+
+    List<AttemptHistoryEntry> findHistoryByStudentId(
+            long studentId);
+
+    Optional<AttemptHistoryEntry> findCompletedAttemptByIdAndStudent(
+            long attemptId,
+            long studentId);
 }

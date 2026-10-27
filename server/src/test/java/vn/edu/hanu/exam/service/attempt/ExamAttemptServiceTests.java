@@ -19,6 +19,7 @@ import org.junit.jupiter.api.Test;
 
 import vn.edu.hanu.exam.domain.Exam;
 import vn.edu.hanu.exam.domain.ExamStatus;
+import vn.edu.hanu.exam.domain.attempt.AttemptHistoryEntry;
 import vn.edu.hanu.exam.domain.attempt.AttemptStatus;
 import vn.edu.hanu.exam.domain.attempt.AttemptScore;
 import vn.edu.hanu.exam.domain.attempt.ExamAttempt;
@@ -174,6 +175,47 @@ class ExamAttemptServiceTests {
         verify(repository, never()).finalizeAttempt(anyLong(), any(), any(), any());
     }
 
+    @Test
+    void historyContainsOnlyRepositoryResultsMappedForTheStudent() {
+        AttemptHistoryEntry newest = completedEntry(32L, "Algorithms Final");
+        AttemptHistoryEntry older = completedEntry(31L, "Java Final");
+        when(repository.findHistoryByStudentId(20L)).thenReturn(List.of(newest, older));
+
+        AttemptHistoryResult result = service.getAttemptHistory(20L);
+
+        assertEquals(2, result.attempts().size());
+        assertEquals(32L, result.attempts().get(0).attemptId());
+        assertEquals("Algorithms Final", result.attempts().get(0).examTitle());
+        assertEquals(31L, result.attempts().get(1).attemptId());
+        verify(repository).findHistoryByStudentId(20L);
+    }
+
+    @Test
+    void completedResultIsScopedByAttemptAndStudent() {
+        AttemptHistoryEntry entry = completedEntry(31L, "Java Final");
+        when(repository.findCompletedAttemptByIdAndStudent(31L, 20L))
+                .thenReturn(Optional.of(entry));
+
+        StudentAttemptResult result = service.getAttemptResult(31L, 20L);
+
+        assertEquals(31L, result.attemptId());
+        assertEquals("Java Final", result.examTitle());
+        assertEquals(8, result.score());
+        verify(repository).findCompletedAttemptByIdAndStudent(31L, 20L);
+    }
+
+    @Test
+    void missingOrForeignCompletedResultUsesTheSameSafeError() {
+        when(repository.findCompletedAttemptByIdAndStudent(31L, 20L))
+                .thenReturn(Optional.empty());
+
+        AttemptException exception = assertThrows(
+                AttemptException.class,
+                () -> service.getAttemptResult(31L, 20L));
+
+        assertEquals("ATTEMPT_RESULT_NOT_FOUND", exception.code());
+    }
+
     private static Exam sampleExam(ExamStatus status) {
         OffsetDateTime createdAt = OffsetDateTime.parse("2026-10-27T01:00:00Z");
         return new Exam(
@@ -196,6 +238,21 @@ class ExamAttemptServiceTests {
                 AttemptStatus.IN_PROGRESS,
                 startedAt,
                 startedAt.plusMinutes(60));
+    }
+
+    private static AttemptHistoryEntry completedEntry(long attemptId, String title) {
+        OffsetDateTime startedAt = OffsetDateTime.parse("2026-10-27T01:00:00Z");
+        return new AttemptHistoryEntry(
+                attemptId,
+                12L,
+                title,
+                AttemptStatus.SUBMITTED,
+                startedAt,
+                startedAt.plusMinutes(30),
+                8,
+                10,
+                4,
+                5);
     }
 
     private static ExamAttempt activeAttempt(AttemptStatus status) {

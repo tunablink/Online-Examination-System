@@ -14,12 +14,15 @@
 - Exam Room chỉ báo `Answer saved to server` sau khi nhận `ANSWER_SAVED`; response cũ của một lựa chọn trước không được ghi đè trạng thái của lựa chọn mới hơn.
 - `SUBMIT_EXAM` khóa hàng attempt, chấm từ dữ liệu server, lưu trạng thái terminal và kết quả trong cùng transaction. Request submit lặp lại trả lại cùng kết quả đã lưu thay vì chấm lần hai.
 - Exam Room có xác nhận nộp, khóa tương tác khi đang submit và hiển thị điểm server trả về ngay sau khi hoàn tất.
+- `GET_ATTEMPT_HISTORY` trả danh sách attempt đã `SUBMITTED`/`EXPIRED` của chính student đang đăng nhập; `GET_ATTEMPT_RESULT` trả một kết quả cụ thể với ownership được áp dụng ngay trong SQL và service.
+- Exam History và Exam Result đã bỏ mock, dùng WebSocket data thật, có loading/error/empty state, filter/search và route kết quả theo `attemptId`.
 
 ### Database và protocol mới
 
 - `exam_attempts` có thêm `submitted_at`, `score`, `max_score`, `correct_answers` và `total_questions`.
 - `attempt_answers` lưu một lựa chọn cho mỗi cặp `(attempt_id, question_id)` và dùng upsert để hỗ trợ đổi đáp án.
 - Protocol đã thêm `SAVE_ANSWER` → `ANSWER_SAVED` và `SUBMIT_EXAM` → `EXAM_SUBMITTED` ở cả Java lẫn TypeScript.
+- Protocol History/Result đã thêm `GET_ATTEMPT_HISTORY` → `ATTEMPT_HISTORY` và `GET_ATTEMPT_RESULT` → `ATTEMPT_RESULT` ở cả Java lẫn TypeScript.
 - Repository dùng `points_snapshot` khi đọc/chấm attempt, không phụ thuộc vào điểm hiện tại của câu hỏi gốc.
 
 ### Bằng chứng kiểm tra gần nhất
@@ -27,22 +30,24 @@
 - Milestone save answer → recovery → submit → grading đã được commit tại `3ffcd68` (`feat: implement answer saving and exam submission`).
 - PostgreSQL integration test `AttemptServiceIntegrationTests` đã pass `6/6`, bao gồm save answer, phục hồi đáp án, chấm điểm và duplicate submit idempotent.
 - Backend compile mới nhất: `BUILD SUCCESS` với 133 main source files và 29 test source files.
-- Unit/handler/protocol regression tests của milestone save/submit đã pass; riêng `MessageTypeContractTests` mới nhất pass `5/5` sau khi mở rộng protocol History/Result.
-- Client: `npm run lint` pass và `npm run build` pass (`139` modules transformed).
-- Full backend suite vẫn cần được chạy lại bằng `mvn test` trong terminal có đúng `DB_PASSWORD` sau khi hoàn thiện vertical slice History/Result tiếp theo.
+- History/Result unit, handler, protocol và WebSocket regression tests pass `34/34` (`0` failures, `0` errors).
+- Client: `npm run lint` pass và `npm run build` pass (`138` modules transformed).
+- `AttemptServiceIntegrationTests` đã được mở rộng để kiểm tra history, result và việc student khác không đọc được kết quả. Cần chạy lại test này và full `mvn test` trong terminal có đúng `DB_PASSWORD` trước khi commit.
 
-### Đang triển khai: Student Attempt History và Result
+### Student Attempt History và Result đã hoàn thiện trong working tree
 
-- Java protocol đã khai báo `GET_ATTEMPT_HISTORY` → `ATTEMPT_HISTORY` và `GET_ATTEMPT_RESULT` → `ATTEMPT_RESULT`, với hướng message client/server được kiểm tra bằng contract test.
-- Đã tạo các model/response nền tảng `AttemptHistoryEntry`, `AttemptHistoryResult` và `StudentAttemptResult`.
-- Đã tạo `GetAttemptResultPayload`; student chỉ gửi `attemptId`, còn `studentId` phải được lấy từ authenticated WebSocket session để ngăn đọc kết quả của người khác.
-- Chưa hoàn thành repository query, service ownership validation, WebSocket handler/dispatcher và kết nối `ExamHistoryPage`/`ExamResultPage` với dữ liệu thật. Hai trang này vẫn chưa được xem là end-to-end cho đến khi bỏ mock và test đủ các tầng.
+- Repository query join `exam_attempts` với `exams`, chỉ lấy terminal attempt và sắp xếp ổn định theo thời gian mới nhất.
+- `ExamAttemptService` map domain sang response an toàn và dùng cùng lỗi `ATTEMPT_RESULT_NOT_FOUND` cho kết quả không tồn tại hoặc thuộc student khác.
+- `AttemptMessageHandler` lấy `studentId` từ authenticated session; payload result chỉ chứa `attemptId`.
+- Central WebSocket router đã dispatch hai command mới; Java và TypeScript protocol đã đồng bộ.
+- `ExamHistoryPage` và `ExamResultPage` dùng server data thật; UI không tự suy luận pass/fail vì hệ thống chưa có passing-threshold policy.
+- Source, unit/handler/router regression, frontend lint và build đã pass; PostgreSQL integration/full suite còn là quality gate cuối trước commit.
 
 ### Phần core còn lại
 
 - Scheduled deadline finalizer để tự động chuyển attempt hết giờ sang `EXPIRED` ngay cả khi client không gửi submit.
 - Persistent authentication/session resume sau refresh hoặc reconnect WebSocket.
-- Hoàn thiện Student history/result từ repository đến frontend; sau đó triển khai teacher submission/result review.
+- Teacher submission/result review.
 - Server-push monitoring đầy đủ, lưu suspicious activity từ client và các rule anti-cheating end-to-end.
 - Concurrency integration/load test cho save sát deadline và submit đồng thời với deadline finalizer.
 

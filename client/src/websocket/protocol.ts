@@ -24,7 +24,9 @@ export type ClientMessageType =
   | 'START_EXAM'
   | 'GET_EXAM_ATTEMPT'
   | 'SAVE_ANSWER'
-  | 'SUBMIT_EXAM';
+  | 'SUBMIT_EXAM'
+  | 'GET_ATTEMPT_HISTORY'
+  | 'GET_ATTEMPT_RESULT';
 
 export type ServerMessageType =
   | 'CONNECTED'
@@ -54,6 +56,8 @@ export type ServerMessageType =
   | 'EXAM_ATTEMPT_DETAILS'
   | 'ANSWER_SAVED'
   | 'EXAM_SUBMITTED'
+  | 'ATTEMPT_HISTORY'
+  | 'ATTEMPT_RESULT'
   | 'ERROR';
 
 export type UserRole =
@@ -171,6 +175,10 @@ export interface SubmitExamPayload {
   attemptId: number;
 }
 
+export interface GetAttemptResultPayload {
+  attemptId: number;
+}
+
 export interface ExamDetailsData {
   id: number;
   title: string;
@@ -270,7 +278,9 @@ export interface ServerMessageData {
   updatedAt?: string;
 
   exams?: unknown[];
+  attempts?: unknown[];
   examId?: number;
+  examTitle?: string;
   content?: string;
   points?: number;
   displayOrder?: number;
@@ -278,6 +288,7 @@ export interface ServerMessageData {
   questionId?: number;
   choiceId?: number;
   savedAt?: string;
+  startedAt?: string;
   submittedAt?: string;
   score?: number;
   maxScore?: number;

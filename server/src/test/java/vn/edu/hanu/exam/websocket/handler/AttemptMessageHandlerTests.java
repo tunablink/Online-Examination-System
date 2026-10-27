@@ -23,11 +23,13 @@ import vn.edu.hanu.exam.exception.AttemptException;
 import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.attempt.AttemptChoiceDetails;
+import vn.edu.hanu.exam.service.attempt.AttemptHistoryResult;
 import vn.edu.hanu.exam.service.attempt.AttemptQuestionDetails;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptDetails;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptService;
 import vn.edu.hanu.exam.service.attempt.ExamSubmissionResult;
 import vn.edu.hanu.exam.service.attempt.SavedAnswerDetails;
+import vn.edu.hanu.exam.service.attempt.StudentAttemptResult;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 class AttemptMessageHandlerTests {
@@ -119,6 +121,34 @@ class AttemptMessageHandlerTests {
     }
 
     @Test
+    void authenticatedStudentCanLoadAttemptHistory() {
+        authenticate(UserRole.STUDENT, 20L);
+        StudentAttemptResult item = sampleResult();
+        AttemptHistoryResult history = new AttemptHistoryResult(List.of(item));
+        when(attemptService.getAttemptHistory(20L)).thenReturn(history);
+
+        ServerMessage response = handler.handleHistory(SESSION_ID, REQUEST_ID);
+
+        assertSuccess(response, "ATTEMPT_HISTORY", history);
+        verify(attemptService).getAttemptHistory(20L);
+    }
+
+    @Test
+    void authenticatedStudentCanLoadOwnCompletedResult() {
+        authenticate(UserRole.STUDENT, 20L);
+        StudentAttemptResult result = sampleResult();
+        when(attemptService.getAttemptResult(31L, 20L)).thenReturn(result);
+
+        ServerMessage response = handler.handleResult(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("attemptId", 31L));
+
+        assertSuccess(response, "ATTEMPT_RESULT", result);
+        verify(attemptService).getAttemptResult(31L, 20L);
+    }
+
+    @Test
     void unauthenticatedSessionIsRejectedBeforeCallingService() {
         ServerMessage response = handler.handleStart(
                 "missing-session",
@@ -163,6 +193,9 @@ class AttemptMessageHandlerTests {
         assertError(
                 handler.handleSubmit(SESSION_ID, REQUEST_ID, Map.of("attemptId", "31")),
                 "INVALID_PAYLOAD");
+        assertError(
+                handler.handleResult(SESSION_ID, REQUEST_ID, Map.of("attemptId", 0L)),
+                "INVALID_PAYLOAD");
     }
 
     @Test
@@ -184,6 +217,21 @@ class AttemptMessageHandlerTests {
         sessionRegistry.authenticate(
                 SESSION_ID,
                 new LoggedInUser(userId, "attempt-user", "Attempt User", "attempt@example.com", role));
+    }
+
+    private static StudentAttemptResult sampleResult() {
+        OffsetDateTime startedAt = OffsetDateTime.parse("2026-10-27T01:00:00Z");
+        return new StudentAttemptResult(
+                31L,
+                12L,
+                "Java Final",
+                AttemptStatus.SUBMITTED,
+                startedAt,
+                startedAt.plusMinutes(30),
+                8,
+                10,
+                4,
+                5);
     }
 
     private static ExamAttemptDetails sampleAttempt() {

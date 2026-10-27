@@ -44,7 +44,7 @@ function App() {
         />
 
         <Route
-          path="/student/attempts/:examId/result"
+          path="/student/attempts/:attemptId/result"
           element={<ExamResultPage />}
         />
       </Route>
