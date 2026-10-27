@@ -18,7 +18,11 @@ import vn.edu.hanu.exam.domain.ExamStatus;
 import vn.edu.hanu.exam.domain.Question;
 import vn.edu.hanu.exam.domain.attempt.AttemptChoice;
 import vn.edu.hanu.exam.domain.attempt.AttemptQuestion;
+import vn.edu.hanu.exam.domain.attempt.AttemptScore;
+import vn.edu.hanu.exam.domain.attempt.AttemptStatus;
 import vn.edu.hanu.exam.domain.attempt.ExamAttempt;
+import vn.edu.hanu.exam.domain.attempt.SavedAnswer;
+import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 import vn.edu.hanu.exam.exception.AttemptException;
 import vn.edu.hanu.exam.repository.AttemptRepository;
 
@@ -27,6 +31,9 @@ public class ExamAttemptService {
     public static final String EXAM_NOT_AVAILABLE = "EXAM_NOT_AVAILABLE";
     public static final String EXAM_NOT_READY = "EXAM_NOT_READY";
     public static final String ATTEMPT_NOT_FOUND = "ATTEMPT_NOT_FOUND";
+    public static final String ATTEMPT_NOT_ACTIVE = "ATTEMPT_NOT_ACTIVE";
+    public static final String ATTEMPT_EXPIRED = "ATTEMPT_EXPIRED";
+    public static final String INVALID_ANSWER = "INVALID_ANSWER";
     public static final String DATABASE_ERROR = "DATABASE_ERROR";
 
     private final AttemptRepository attemptRepository;
@@ -105,6 +112,87 @@ public class ExamAttemptService {
         }
     }
 
+    @Transactional
+    public SavedAnswerDetails saveAnswer(
+            long attemptId,
+            long questionId,
+            long choiceId,
+            long studentId) {
+        if (attemptId <= 0 || questionId <= 0 || choiceId <= 0) {
+            throw invalidAnswer();
+        }
+
+        try {
+            ExamAttempt attempt = attemptRepository
+                    .findByIdAndStudentForUpdate(attemptId, studentId)
+                    .orElseThrow(ExamAttemptService::attemptNotFound);
+            if (attempt.status() != AttemptStatus.IN_PROGRESS) {
+                throw new AttemptException(
+                        ATTEMPT_NOT_ACTIVE,
+                        "The examination attempt is no longer active.");
+            }
+
+            OffsetDateTime savedAt = OffsetDateTime.now(ZoneOffset.UTC);
+            if (!savedAt.isBefore(attempt.deadline())) {
+                throw new AttemptException(
+                        ATTEMPT_EXPIRED,
+                        "The examination deadline has passed.");
+            }
+            if (!attemptRepository.containsAttemptChoice(attemptId, questionId, choiceId)) {
+                throw invalidAnswer();
+            }
+
+            SavedAnswer answer = attemptRepository.upsertAnswer(
+                    attemptId,
+                    questionId,
+                    choiceId,
+                    savedAt);
+            return toDetails(answer);
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw databaseError(exception);
+        }
+    }
+
+    @Transactional
+    public ExamSubmissionResult submitExam(long attemptId, long studentId) {
+        if (attemptId <= 0) {
+            throw attemptNotFound();
+        }
+
+        try {
+            ExamAttempt attempt = attemptRepository
+                    .findByIdAndStudentForUpdate(attemptId, studentId)
+                    .orElseThrow(ExamAttemptService::attemptNotFound);
+
+            if (attempt.status() != AttemptStatus.IN_PROGRESS) {
+                return attemptRepository.findSubmissionResult(attemptId, studentId)
+                        .map(ExamAttemptService::toResult)
+                        .orElseThrow(() -> new IllegalStateException(
+                                "A terminal attempt does not contain a stored result."));
+            }
+
+            OffsetDateTime submittedAt = OffsetDateTime.now(ZoneOffset.UTC);
+            AttemptStatus finalStatus = submittedAt.isBefore(attempt.deadline())
+                    ? AttemptStatus.SUBMITTED
+                    : AttemptStatus.EXPIRED;
+            AttemptScore score = attemptRepository.calculateScore(attemptId);
+            if (!attemptRepository.finalizeAttempt(
+                    attemptId,
+                    finalStatus,
+                    submittedAt,
+                    score)) {
+                throw new IllegalStateException("The active attempt could not be finalized.");
+            }
+
+            return attemptRepository.findSubmissionResult(attemptId, studentId)
+                    .map(ExamAttemptService::toResult)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "The finalized attempt result could not be read back."));
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw databaseError(exception);
+        }
+    }
+
     private ExamAttemptDetails buildDetails(ExamAttempt attempt, Exam exam) {
         List<AttemptQuestion> questions = attemptRepository.findAttemptQuestions(attempt.id());
         Map<Long, List<AttemptChoiceDetails>> choicesByQuestion = new LinkedHashMap<>();
@@ -126,6 +214,16 @@ public class ExamAttemptService {
                         choicesByQuestion.getOrDefault(question.questionId(), List.of())))
                 .toList();
 
+        List<SavedAnswerDetails> answers = attemptRepository.findSavedAnswers(attempt.id())
+                .stream()
+                .map(ExamAttemptService::toDetails)
+                .toList();
+        ExamSubmissionResult result = attempt.status() == AttemptStatus.IN_PROGRESS
+                ? null
+                : attemptRepository.findSubmissionResult(attempt.id(), attempt.studentId())
+                        .map(ExamAttemptService::toResult)
+                        .orElse(null);
+
         return new ExamAttemptDetails(
                 attempt.id(),
                 attempt.examId(),
@@ -133,7 +231,28 @@ public class ExamAttemptService {
                 attempt.status(),
                 attempt.startedAt(),
                 attempt.deadline(),
-                questionDetails);
+                questionDetails,
+                answers,
+                result);
+    }
+
+    private static SavedAnswerDetails toDetails(SavedAnswer answer) {
+        return new SavedAnswerDetails(
+                answer.questionId(),
+                answer.choiceId(),
+                answer.savedAt());
+    }
+
+    private static ExamSubmissionResult toResult(StoredAttemptResult result) {
+        return new ExamSubmissionResult(
+                result.attemptId(),
+                result.examId(),
+                result.status(),
+                result.submittedAt(),
+                result.score(),
+                result.maxScore(),
+                result.correctAnswers(),
+                result.totalQuestions());
     }
 
     private static void validateExamContent(List<Question> questions, List<Choice> choices) {
@@ -166,6 +285,12 @@ public class ExamAttemptService {
 
     private static AttemptException attemptNotFound() {
         return new AttemptException(ATTEMPT_NOT_FOUND, "Attempt was not found.");
+    }
+
+    private static AttemptException invalidAnswer() {
+        return new AttemptException(
+                INVALID_ANSWER,
+                "The selected choice does not belong to this attempt question.");
     }
 
     private static AttemptException databaseError(RuntimeException cause) {

@@ -26,6 +26,8 @@ import vn.edu.hanu.exam.service.attempt.AttemptChoiceDetails;
 import vn.edu.hanu.exam.service.attempt.AttemptQuestionDetails;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptDetails;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptService;
+import vn.edu.hanu.exam.service.attempt.ExamSubmissionResult;
+import vn.edu.hanu.exam.service.attempt.SavedAnswerDetails;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 class AttemptMessageHandlerTests {
@@ -77,6 +79,46 @@ class AttemptMessageHandlerTests {
     }
 
     @Test
+    void authenticatedStudentCanSaveAnAnswer() {
+        authenticate(UserRole.STUDENT, 20L);
+        OffsetDateTime savedAt = OffsetDateTime.parse("2026-10-27T01:15:00Z");
+        SavedAnswerDetails details = new SavedAnswerDetails(41L, 51L, savedAt);
+        when(attemptService.saveAnswer(31L, 41L, 51L, 20L)).thenReturn(details);
+
+        ServerMessage response = handler.handleSaveAnswer(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("attemptId", 31L, "questionId", 41L, "choiceId", 51L));
+
+        assertSuccess(response, "ANSWER_SAVED", details);
+        verify(attemptService).saveAnswer(31L, 41L, 51L, 20L);
+    }
+
+    @Test
+    void authenticatedStudentCanSubmitAnAttempt() {
+        authenticate(UserRole.STUDENT, 20L);
+        OffsetDateTime submittedAt = OffsetDateTime.parse("2026-10-27T01:30:00Z");
+        ExamSubmissionResult result = new ExamSubmissionResult(
+                31L,
+                12L,
+                AttemptStatus.SUBMITTED,
+                submittedAt,
+                8,
+                10,
+                4,
+                5);
+        when(attemptService.submitExam(31L, 20L)).thenReturn(result);
+
+        ServerMessage response = handler.handleSubmit(
+                SESSION_ID,
+                REQUEST_ID,
+                Map.of("attemptId", 31L));
+
+        assertSuccess(response, "EXAM_SUBMITTED", result);
+        verify(attemptService).submitExam(31L, 20L);
+    }
+
+    @Test
     void unauthenticatedSessionIsRejectedBeforeCallingService() {
         ServerMessage response = handler.handleStart(
                 "missing-session",
@@ -111,6 +153,15 @@ class AttemptMessageHandlerTests {
                 "INVALID_PAYLOAD");
         assertError(
                 handler.handleGet(SESSION_ID, REQUEST_ID, Map.of("attemptId", 31.5)),
+                "INVALID_PAYLOAD");
+        assertError(
+                handler.handleSaveAnswer(
+                        SESSION_ID,
+                        REQUEST_ID,
+                        Map.of("attemptId", 31L, "questionId", 41L, "choiceId", "51")),
+                "INVALID_PAYLOAD");
+        assertError(
+                handler.handleSubmit(SESSION_ID, REQUEST_ID, Map.of("attemptId", "31")),
                 "INVALID_PAYLOAD");
     }
 
@@ -151,7 +202,9 @@ class AttemptMessageHandlerTests {
                         0,
                         List.of(
                                 new AttemptChoiceDetails(51L, "Set", 0),
-                                new AttemptChoiceDetails(52L, "List", 1)))));
+                                new AttemptChoiceDetails(52L, "List", 1)))),
+                List.of(),
+                null);
     }
 
     private static void assertSuccess(ServerMessage response, String type, Object data) {

@@ -19,12 +19,16 @@ import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptService;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.websocket.dto.GetExamAttemptPayload;
+import vn.edu.hanu.exam.websocket.dto.SaveAnswerPayload;
 import vn.edu.hanu.exam.websocket.dto.StartExamPayload;
+import vn.edu.hanu.exam.websocket.dto.SubmitExamPayload;
 
 @Component
 public class AttemptMessageHandler {
     static final String TYPE_EXAM_STARTED = "EXAM_STARTED";
     static final String TYPE_EXAM_ATTEMPT_DETAILS = "EXAM_ATTEMPT_DETAILS";
+    static final String TYPE_ANSWER_SAVED = "ANSWER_SAVED";
+    static final String TYPE_EXAM_SUBMITTED = "EXAM_SUBMITTED";
     static final String CODE_AUTHENTICATION_REQUIRED = "AUTHENTICATION_REQUIRED";
     static final String CODE_FORBIDDEN = "FORBIDDEN";
     static final String CODE_INVALID_PAYLOAD = "INVALID_PAYLOAD";
@@ -53,6 +57,14 @@ public class AttemptMessageHandler {
         return handleGet(session.getId(), message.requestId(), message.payload());
     }
 
+    public ServerMessage handleSaveAnswer(WebSocketSession session, ClientMessage message) {
+        return handleSaveAnswer(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleSubmit(WebSocketSession session, ClientMessage message) {
+        return handleSubmit(session.getId(), message.requestId(), message.payload());
+    }
+
     public ServerMessage handleStart(String sessionId, String requestId, Map<String, Object> payload) {
         return withStudent(sessionId, requestId, student -> {
             StartExamPayload input = convertStartPayload(payload);
@@ -70,6 +82,36 @@ public class AttemptMessageHandler {
                     requestId,
                     TYPE_EXAM_ATTEMPT_DETAILS,
                     attemptService.getAttempt(input.attemptId(), student.id()));
+        });
+    }
+
+    public ServerMessage handleSaveAnswer(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload) {
+        return withStudent(sessionId, requestId, student -> {
+            SaveAnswerPayload input = convertSaveAnswerPayload(payload);
+            return ServerMessage.success(
+                    requestId,
+                    TYPE_ANSWER_SAVED,
+                    attemptService.saveAnswer(
+                            input.attemptId(),
+                            input.questionId(),
+                            input.choiceId(),
+                            student.id()));
+        });
+    }
+
+    public ServerMessage handleSubmit(
+            String sessionId,
+            String requestId,
+            Map<String, Object> payload) {
+        return withStudent(sessionId, requestId, student -> {
+            SubmitExamPayload input = convertSubmitPayload(payload);
+            return ServerMessage.success(
+                    requestId,
+                    TYPE_EXAM_SUBMITTED,
+                    attemptService.submitExam(input.attemptId(), student.id()));
         });
     }
 
@@ -131,6 +173,41 @@ public class AttemptMessageHandler {
         }
         try {
             GetExamAttemptPayload input = jsonMapper.convertValue(payload, GetExamAttemptPayload.class);
+            if (input.attemptId() == null) {
+                throw new InvalidPayloadException();
+            }
+            return input;
+        } catch (JacksonException | IllegalArgumentException exception) {
+            throw new InvalidPayloadException();
+        }
+    }
+
+    private SaveAnswerPayload convertSaveAnswerPayload(Map<String, Object> payload) {
+        if (payload == null
+                || !isIntegralNumber(payload.get("attemptId"))
+                || !isIntegralNumber(payload.get("questionId"))
+                || !isIntegralNumber(payload.get("choiceId"))) {
+            throw new InvalidPayloadException();
+        }
+        try {
+            SaveAnswerPayload input = jsonMapper.convertValue(payload, SaveAnswerPayload.class);
+            if (input.attemptId() == null
+                    || input.questionId() == null
+                    || input.choiceId() == null) {
+                throw new InvalidPayloadException();
+            }
+            return input;
+        } catch (JacksonException | IllegalArgumentException exception) {
+            throw new InvalidPayloadException();
+        }
+    }
+
+    private SubmitExamPayload convertSubmitPayload(Map<String, Object> payload) {
+        if (payload == null || !isIntegralNumber(payload.get("attemptId"))) {
+            throw new InvalidPayloadException();
+        }
+        try {
+            SubmitExamPayload input = jsonMapper.convertValue(payload, SubmitExamPayload.class);
             if (input.attemptId() == null) {
                 throw new InvalidPayloadException();
             }

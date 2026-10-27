@@ -91,6 +91,12 @@ class MessageTypeContractTests {
                                 "GET_EXAM_ATTEMPT",
                                 "EXAM_ATTEMPT_DETAILS",
 
+                                "SAVE_ANSWER",
+                                "ANSWER_SAVED",
+
+                                "SUBMIT_EXAM",
+                                "EXAM_SUBMITTED",
+
                                 "ERROR");
 
                 assertEquals(
@@ -142,7 +148,13 @@ class MessageTypeContractTests {
                                                 MessageType.fromWireValue(" start_exam ").orElseThrow()),
                                 () -> assertEquals(
                                                 MessageType.GET_EXAM_ATTEMPT,
-                                                MessageType.fromWireValue("get_exam_attempt").orElseThrow()));
+                                                MessageType.fromWireValue("get_exam_attempt").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.SAVE_ANSWER,
+                                                MessageType.fromWireValue(" save_answer ").orElseThrow()),
+                                () -> assertEquals(
+                                                MessageType.SUBMIT_EXAM,
+                                                MessageType.fromWireValue("submit_exam").orElseThrow()));
         }
 
         @Test
@@ -194,7 +206,9 @@ class MessageTypeContractTests {
                                 MessageType.GET_AVAILABLE_EXAM,
 
                                 MessageType.START_EXAM,
-                                MessageType.GET_EXAM_ATTEMPT);
+                                MessageType.GET_EXAM_ATTEMPT,
+                                MessageType.SAVE_ANSWER,
+                                MessageType.SUBMIT_EXAM);
 
                 assertEquals(
                                 expectedClientCommandTypes,
@@ -242,6 +256,8 @@ class MessageTypeContractTests {
 
                                 MessageType.EXAM_STARTED,
                                 MessageType.EXAM_ATTEMPT_DETAILS,
+                                MessageType.ANSWER_SAVED,
+                                MessageType.EXAM_SUBMITTED,
 
                                 MessageType.ERROR);
 

@@ -20,8 +20,11 @@ import vn.edu.hanu.exam.domain.ExamStatus;
 import vn.edu.hanu.exam.domain.Question;
 import vn.edu.hanu.exam.domain.attempt.AttemptChoice;
 import vn.edu.hanu.exam.domain.attempt.AttemptQuestion;
+import vn.edu.hanu.exam.domain.attempt.AttemptScore;
 import vn.edu.hanu.exam.domain.attempt.AttemptStatus;
 import vn.edu.hanu.exam.domain.attempt.ExamAttempt;
+import vn.edu.hanu.exam.domain.attempt.SavedAnswer;
+import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 
 @Repository
 public class JdbcAttemptRepository implements AttemptRepository {
@@ -85,10 +88,19 @@ public class JdbcAttemptRepository implements AttemptRepository {
 
     @Override
     public Optional<ExamAttempt> findByIdAndStudent(long attemptId, long studentId) {
+        return queryAttempt(attemptId, studentId, false);
+    }
+
+    @Override
+    public Optional<ExamAttempt> findByIdAndStudentForUpdate(long attemptId, long studentId) {
+        return queryAttempt(attemptId, studentId, true);
+    }
+
+    private Optional<ExamAttempt> queryAttempt(long attemptId, long studentId, boolean lockForUpdate) {
         String sql = ATTEMPT_COLUMNS + """
                 WHERE id = :attemptId
                   AND student_id = :studentId
-                """;
+                """ + (lockForUpdate ? "FOR UPDATE" : "");
         return jdbcTemplate.query(
                         sql,
                         Map.of("attemptId", attemptId, "studentId", studentId),
@@ -200,7 +212,7 @@ public class JdbcAttemptRepository implements AttemptRepository {
                 SELECT aq.attempt_id,
                        aq.question_id,
                        q.content,
-                       q.points,
+                       aq.points_snapshot AS points,
                        aq.display_order
                 FROM attempt_questions aq
                 INNER JOIN questions q ON q.id = aq.question_id
@@ -245,6 +257,166 @@ public class JdbcAttemptRepository implements AttemptRepository {
                         resultSet.getInt("display_order")));
     }
 
+    @Override
+    public boolean containsAttemptChoice(long attemptId, long questionId, long choiceId) {
+        String sql = """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM attempt_choices
+                    WHERE attempt_id = :attemptId
+                      AND question_id = :questionId
+                      AND choice_id = :choiceId
+                )
+                """;
+        Boolean exists = jdbcTemplate.queryForObject(
+                sql,
+                Map.of(
+                        "attemptId", attemptId,
+                        "questionId", questionId,
+                        "choiceId", choiceId),
+                Boolean.class);
+        return Boolean.TRUE.equals(exists);
+    }
+
+    @Override
+    public SavedAnswer upsertAnswer(
+            long attemptId,
+            long questionId,
+            long choiceId,
+            OffsetDateTime savedAt) {
+        String sql = """
+                INSERT INTO attempt_answers (
+                    attempt_id,
+                    question_id,
+                    choice_id,
+                    saved_at
+                )
+                VALUES (:attemptId, :questionId, :choiceId, :savedAt)
+                ON CONFLICT (attempt_id, question_id)
+                DO UPDATE SET
+                    choice_id = EXCLUDED.choice_id,
+                    saved_at = EXCLUDED.saved_at
+                RETURNING attempt_id, question_id, choice_id, saved_at
+                """;
+        return jdbcTemplate.queryForObject(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("attemptId", attemptId)
+                        .addValue("questionId", questionId)
+                        .addValue("choiceId", choiceId)
+                        .addValue("savedAt", savedAt),
+                JdbcAttemptRepository::mapSavedAnswer);
+    }
+
+    @Override
+    public List<SavedAnswer> findSavedAnswers(long attemptId) {
+        String sql = """
+                SELECT attempt_id, question_id, choice_id, saved_at
+                FROM attempt_answers
+                WHERE attempt_id = :attemptId
+                ORDER BY question_id
+                """;
+        return jdbcTemplate.query(
+                sql,
+                Map.of("attemptId", attemptId),
+                JdbcAttemptRepository::mapSavedAnswer);
+    }
+
+    @Override
+    public AttemptScore calculateScore(long attemptId) {
+        String sql = """
+                SELECT COALESCE(SUM(
+                           CASE WHEN c.correct IS TRUE THEN aq.points_snapshot ELSE 0 END
+                       ), 0) AS score,
+                       COALESCE(SUM(aq.points_snapshot), 0) AS max_score,
+                       COUNT(*) FILTER (WHERE c.correct IS TRUE) AS correct_answers,
+                       COUNT(*) AS total_questions
+                FROM attempt_questions aq
+                LEFT JOIN attempt_answers aa
+                  ON aa.attempt_id = aq.attempt_id
+                 AND aa.question_id = aq.question_id
+                LEFT JOIN choices c
+                  ON c.id = aa.choice_id
+                 AND c.question_id = aq.question_id
+                WHERE aq.attempt_id = :attemptId
+                """;
+        return jdbcTemplate.queryForObject(
+                sql,
+                Map.of("attemptId", attemptId),
+                (resultSet, rowNumber) -> new AttemptScore(
+                        resultSet.getInt("score"),
+                        resultSet.getInt("max_score"),
+                        resultSet.getInt("correct_answers"),
+                        resultSet.getInt("total_questions")));
+    }
+
+    @Override
+    public boolean finalizeAttempt(
+            long attemptId,
+            AttemptStatus status,
+            OffsetDateTime submittedAt,
+            AttemptScore score) {
+        String sql = """
+                UPDATE exam_attempts
+                SET status = :status,
+                    submitted_at = :submittedAt,
+                    score = :score,
+                    max_score = :maxScore,
+                    correct_answers = :correctAnswers,
+                    total_questions = :totalQuestions
+                WHERE id = :attemptId
+                  AND status = :expectedStatus
+                """;
+        int affectedRows = jdbcTemplate.update(
+                sql,
+                new MapSqlParameterSource()
+                        .addValue("attemptId", attemptId)
+                        .addValue("status", status.name())
+                        .addValue("submittedAt", submittedAt)
+                        .addValue("score", score.score())
+                        .addValue("maxScore", score.maxScore())
+                        .addValue("correctAnswers", score.correctAnswers())
+                        .addValue("totalQuestions", score.totalQuestions())
+                        .addValue("expectedStatus", AttemptStatus.IN_PROGRESS.name()));
+        return affectedRows == 1;
+    }
+
+    @Override
+    public Optional<StoredAttemptResult> findSubmissionResult(long attemptId, long studentId) {
+        String sql = """
+                SELECT id,
+                       exam_id,
+                       status,
+                       submitted_at,
+                       score,
+                       max_score,
+                       correct_answers,
+                       total_questions
+                FROM exam_attempts
+                WHERE id = :attemptId
+                  AND student_id = :studentId
+                  AND status IN (:submittedStatus, :expiredStatus)
+                """;
+        return jdbcTemplate.query(
+                        sql,
+                        new MapSqlParameterSource()
+                                .addValue("attemptId", attemptId)
+                                .addValue("studentId", studentId)
+                                .addValue("submittedStatus", AttemptStatus.SUBMITTED.name())
+                                .addValue("expiredStatus", AttemptStatus.EXPIRED.name()),
+                        (resultSet, rowNumber) -> new StoredAttemptResult(
+                                resultSet.getLong("id"),
+                                resultSet.getLong("exam_id"),
+                                AttemptStatus.valueOf(resultSet.getString("status")),
+                                resultSet.getObject("submitted_at", OffsetDateTime.class),
+                                resultSet.getInt("score"),
+                                resultSet.getInt("max_score"),
+                                resultSet.getInt("correct_answers"),
+                                resultSet.getInt("total_questions")))
+                .stream()
+                .findFirst();
+    }
+
     private static Exam mapExam(ResultSet resultSet, int rowNumber) throws SQLException {
         return new Exam(
                 resultSet.getLong("id"),
@@ -285,5 +457,13 @@ public class JdbcAttemptRepository implements AttemptRepository {
                 resultSet.getString("content"),
                 resultSet.getBoolean("correct"),
                 resultSet.getInt("display_order"));
+    }
+
+    private static SavedAnswer mapSavedAnswer(ResultSet resultSet, int rowNumber) throws SQLException {
+        return new SavedAnswer(
+                resultSet.getLong("attempt_id"),
+                resultSet.getLong("question_id"),
+                resultSet.getLong("choice_id"),
+                resultSet.getObject("saved_at", OffsetDateTime.class));
     }
 }

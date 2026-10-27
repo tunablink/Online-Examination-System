@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -22,6 +23,8 @@ import vn.edu.hanu.exam.exception.AttemptException;
 import vn.edu.hanu.exam.service.attempt.AttemptQuestionDetails;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptDetails;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptService;
+import vn.edu.hanu.exam.service.attempt.ExamSubmissionResult;
+import vn.edu.hanu.exam.service.attempt.SavedAnswerDetails;
 
 @SpringBootTest
 @Transactional
@@ -114,6 +117,44 @@ class AttemptServiceIntegrationTests {
         assertEquals(started.deadline(), recovered.deadline());
     }
 
+    @Test
+    void savedAnswerIsRecoveredAndSubmissionIsGradedIdempotently() {
+        long teacherId = insertUser("TEACHER");
+        long studentId = insertUser("STUDENT");
+        long examId = insertExam(teacherId, "PUBLISHED", 60);
+        List<Long> choiceIds = insertQuestionWithChoices(
+                examId,
+                "Persisted answer question",
+                4,
+                0);
+
+        ExamAttemptDetails started = attemptService.startExam(examId, studentId);
+        long questionId = started.questions().getFirst().id();
+        long correctChoiceId = choiceIds.getFirst();
+
+        SavedAnswerDetails saved = attemptService.saveAnswer(
+                started.attemptId(),
+                questionId,
+                correctChoiceId,
+                studentId);
+        ExamAttemptDetails recovered = attemptService.getAttempt(started.attemptId(), studentId);
+
+        assertEquals(questionId, saved.questionId());
+        assertEquals(correctChoiceId, saved.choiceId());
+        assertEquals(List.of(saved), recovered.answers());
+
+        ExamSubmissionResult first = attemptService.submitExam(started.attemptId(), studentId);
+        ExamSubmissionResult duplicate = attemptService.submitExam(started.attemptId(), studentId);
+
+        assertEquals(first, duplicate);
+        assertEquals("SUBMITTED", first.status().name());
+        assertEquals(4, first.score());
+        assertEquals(4, first.maxScore());
+        assertEquals(1, first.correctAnswers());
+        assertEquals(1, first.totalQuestions());
+        assertEquals(1, count("attempt_answers", "attempt_id", started.attemptId()));
+    }
+
     private long insertUser(String role) {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         String sql = """
@@ -142,7 +183,11 @@ class AttemptServiceIntegrationTests {
         return requireId(id);
     }
 
-    private void insertQuestionWithChoices(long examId, String content, int points, int displayOrder) {
+    private List<Long> insertQuestionWithChoices(
+            long examId,
+            String content,
+            int points,
+            int displayOrder) {
         String questionSql = """
                 INSERT INTO questions (exam_id, content, points, display_order)
                 VALUES (:examId, :content, :points, :displayOrder)
@@ -161,14 +206,18 @@ class AttemptServiceIntegrationTests {
         String choiceSql = """
                 INSERT INTO choices (question_id, content, correct, display_order)
                 VALUES (:questionId, :content, :correct, :displayOrder)
+                RETURNING id
                 """;
+        List<Long> choiceIds = new ArrayList<>();
         for (int index = 0; index < 3; index++) {
-            jdbcTemplate.update(choiceSql, new MapSqlParameterSource()
+            Long choiceId = jdbcTemplate.queryForObject(choiceSql, new MapSqlParameterSource()
                     .addValue("questionId", questionId)
                     .addValue("content", "Option " + index + " for " + content)
                     .addValue("correct", index == 0)
-                    .addValue("displayOrder", index));
+                    .addValue("displayOrder", index), Long.class);
+            choiceIds.add(requireId(choiceId));
         }
+        return List.copyOf(choiceIds);
     }
 
     private int count(String table, String column, long id) {

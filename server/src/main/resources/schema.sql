@@ -156,6 +156,11 @@ CREATE TABLE IF NOT EXISTS exam_attempts (
     status      VARCHAR(20)              NOT NULL DEFAULT 'IN_PROGRESS',
     started_at  TIMESTAMP WITH TIME ZONE NOT NULL,
     deadline_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    submitted_at TIMESTAMP WITH TIME ZONE,
+    score       INT,
+    max_score   INT,
+    correct_answers INT,
+    total_questions INT,
 
     CONSTRAINT pk_exam_attempts
         PRIMARY KEY (id),
@@ -170,8 +175,30 @@ CREATE TABLE IF NOT EXISTS exam_attempts (
         CHECK (status IN ('IN_PROGRESS', 'SUBMITTED', 'EXPIRED')),
 
     CONSTRAINT ck_exam_attempts_deadline_after_start
-        CHECK (deadline_at > started_at)
+        CHECK (deadline_at > started_at),
+
+    CONSTRAINT ck_exam_attempts_score_non_negative
+        CHECK (score IS NULL OR score >= 0),
+
+    CONSTRAINT ck_exam_attempts_max_score_non_negative
+        CHECK (max_score IS NULL OR max_score >= 0)
 );
+
+-- Keep existing development databases compatible with the current schema.
+ALTER TABLE exam_attempts
+    ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE exam_attempts
+    ADD COLUMN IF NOT EXISTS score INT;
+
+ALTER TABLE exam_attempts
+    ADD COLUMN IF NOT EXISTS max_score INT;
+
+ALTER TABLE exam_attempts
+    ADD COLUMN IF NOT EXISTS correct_answers INT;
+
+ALTER TABLE exam_attempts
+    ADD COLUMN IF NOT EXISTS total_questions INT;
 
 CREATE INDEX IF NOT EXISTS idx_exam_attempts_exam_id
     ON exam_attempts (exam_id);
@@ -237,3 +264,24 @@ CREATE TABLE IF NOT EXISTS attempt_choices (
 
 CREATE INDEX IF NOT EXISTS idx_attempt_choices_choice_id
     ON attempt_choices (choice_id);
+
+CREATE TABLE IF NOT EXISTS attempt_answers (
+    attempt_id BIGINT                   NOT NULL,
+    question_id BIGINT                  NOT NULL,
+    choice_id  BIGINT                   NOT NULL,
+    saved_at   TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT pk_attempt_answers
+        PRIMARY KEY (attempt_id, question_id),
+
+    CONSTRAINT fk_attempt_answers_attempt_question
+        FOREIGN KEY (attempt_id, question_id)
+        REFERENCES attempt_questions(attempt_id, question_id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT fk_attempt_answers_choice
+        FOREIGN KEY (choice_id) REFERENCES choices(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_attempt_answers_choice_id
+    ON attempt_answers (choice_id);

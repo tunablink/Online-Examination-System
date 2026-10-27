@@ -9,7 +9,11 @@ import vn.edu.hanu.exam.domain.Exam;
 import vn.edu.hanu.exam.domain.Question;
 import vn.edu.hanu.exam.domain.attempt.AttemptChoice;
 import vn.edu.hanu.exam.domain.attempt.AttemptQuestion;
+import vn.edu.hanu.exam.domain.attempt.AttemptScore;
+import vn.edu.hanu.exam.domain.attempt.AttemptStatus;
 import vn.edu.hanu.exam.domain.attempt.ExamAttempt;
+import vn.edu.hanu.exam.domain.attempt.SavedAnswer;
+import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 
 public interface AttemptRepository {
     Optional<Exam> findExamById(long examId);
@@ -19,6 +23,8 @@ public interface AttemptRepository {
     Optional<ExamAttempt> findInProgressByExamAndStudent(long examId, long studentId);
 
     Optional<ExamAttempt> findByIdAndStudent(long attemptId, long studentId);
+
+    Optional<ExamAttempt> findByIdAndStudentForUpdate(long attemptId, long studentId);
 
     ExamAttempt insertAttempt(long examId, long studentId, OffsetDateTime startedAt, OffsetDateTime deadline);
 
@@ -33,4 +39,20 @@ public interface AttemptRepository {
     List<AttemptQuestion> findAttemptQuestions(long attemptId);
 
     List<AttemptChoice> findAttemptChoices(long attemptId);
+
+    boolean containsAttemptChoice(long attemptId, long questionId, long choiceId);
+
+    SavedAnswer upsertAnswer(long attemptId, long questionId, long choiceId, OffsetDateTime savedAt);
+
+    List<SavedAnswer> findSavedAnswers(long attemptId);
+
+    AttemptScore calculateScore(long attemptId);
+
+    boolean finalizeAttempt(
+            long attemptId,
+            AttemptStatus status,
+            OffsetDateTime submittedAt,
+            AttemptScore score);
+
+    Optional<StoredAttemptResult> findSubmissionResult(long attemptId, long studentId);
 }

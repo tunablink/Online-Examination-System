@@ -22,7 +22,9 @@ export type ClientMessageType =
   | 'GET_AVAILABLE_EXAMS'
   | 'GET_AVAILABLE_EXAM'
   | 'START_EXAM'
-  | 'GET_EXAM_ATTEMPT';
+  | 'GET_EXAM_ATTEMPT'
+  | 'SAVE_ANSWER'
+  | 'SUBMIT_EXAM';
 
 export type ServerMessageType =
   | 'CONNECTED'
@@ -50,6 +52,8 @@ export type ServerMessageType =
   | 'AVAILABLE_EXAM_DETAILS'
   | 'EXAM_STARTED'
   | 'EXAM_ATTEMPT_DETAILS'
+  | 'ANSWER_SAVED'
+  | 'EXAM_SUBMITTED'
   | 'ERROR';
 
 export type UserRole =
@@ -157,6 +161,16 @@ export interface GetExamAttemptPayload {
   attemptId: number;
 }
 
+export interface SaveAnswerPayload {
+  attemptId: number;
+  questionId: number;
+  choiceId: number;
+}
+
+export interface SubmitExamPayload {
+  attemptId: number;
+}
+
 export interface ExamDetailsData {
   id: number;
   title: string;
@@ -260,6 +274,15 @@ export interface ServerMessageData {
   content?: string;
   points?: number;
   displayOrder?: number;
+  attemptId?: number;
+  questionId?: number;
+  choiceId?: number;
+  savedAt?: string;
+  submittedAt?: string;
+  score?: number;
+  maxScore?: number;
+  correctAnswers?: number;
+  totalQuestions?: number;
   choices?: TeacherChoiceData[];
   questions?: TeacherQuestionData[];
 

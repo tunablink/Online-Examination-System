@@ -78,6 +78,12 @@ public enum MessageType {
     GET_EXAM_ATTEMPT(true),
     EXAM_ATTEMPT_DETAILS(false),
 
+    SAVE_ANSWER(true),
+    ANSWER_SAVED(false),
+
+    SUBMIT_EXAM(true),
+    EXAM_SUBMITTED(false),
+
     ERROR(false);
 
     private final boolean acceptedFromClient;

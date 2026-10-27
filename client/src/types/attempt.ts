@@ -14,6 +14,12 @@ export interface ExamQuestion {
 
 export type AttemptStatus = 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED';
 
+export interface SavedAnswer {
+  questionId: number;
+  choiceId: number;
+  savedAt: string;
+}
+
 export interface ExamAttempt {
   attemptId: number;
   examId: number;
@@ -22,6 +28,19 @@ export interface ExamAttempt {
   startedAt: string;
   deadline: string;
   questions: ExamQuestion[];
+  answers: SavedAnswer[];
+  result: ExamSubmissionResult | null;
+}
+
+export interface ExamSubmissionResult {
+  attemptId: number;
+  examId: number;
+  status: 'SUBMITTED' | 'EXPIRED';
+  submittedAt: string;
+  score: number;
+  maxScore: number;
+  correctAnswers: number;
+  totalQuestions: number;
 }
 
 export type AnswerMap = Partial<Record<number, number>>;
@@ -38,12 +57,14 @@ export function isExamAttempt(value: unknown): value is ExamAttempt {
     typeof attempt.startedAt !== 'string' ||
     typeof attempt.deadline !== 'string' ||
     !Array.isArray(attempt.questions) ||
-    attempt.questions.length === 0
+    attempt.questions.length === 0 ||
+    !Array.isArray(attempt.answers) ||
+    !(attempt.result === null || isExamSubmissionResult(attempt.result))
   ) {
     return false;
   }
 
-  return attempt.questions.every((questionValue) => {
+  const validQuestions = attempt.questions.every((questionValue) => {
     if (typeof questionValue !== 'object' || questionValue === null) return false;
     const question = questionValue as Record<string, unknown>;
     if (
@@ -64,4 +85,25 @@ export function isExamAttempt(value: unknown): value is ExamAttempt {
         typeof choice.displayOrder === 'number';
     });
   });
+
+  return validQuestions && attempt.answers.every((answerValue) => {
+    if (typeof answerValue !== 'object' || answerValue === null) return false;
+    const answer = answerValue as Record<string, unknown>;
+    return typeof answer.questionId === 'number'
+      && typeof answer.choiceId === 'number'
+      && typeof answer.savedAt === 'string';
+  });
+}
+
+export function isExamSubmissionResult(value: unknown): value is ExamSubmissionResult {
+  if (typeof value !== 'object' || value === null) return false;
+  const result = value as Record<string, unknown>;
+  return typeof result.attemptId === 'number'
+    && typeof result.examId === 'number'
+    && (result.status === 'SUBMITTED' || result.status === 'EXPIRED')
+    && typeof result.submittedAt === 'string'
+    && typeof result.score === 'number'
+    && typeof result.maxScore === 'number'
+    && typeof result.correctAnswers === 'number'
+    && typeof result.totalQuestions === 'number';
 }

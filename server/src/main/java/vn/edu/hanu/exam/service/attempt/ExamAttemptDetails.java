@@ -12,8 +12,11 @@ public record ExamAttemptDetails(
         AttemptStatus status,
         OffsetDateTime startedAt,
         OffsetDateTime deadline,
-        List<AttemptQuestionDetails> questions) {
+        List<AttemptQuestionDetails> questions,
+        List<SavedAnswerDetails> answers,
+        ExamSubmissionResult result) {
     public ExamAttemptDetails {
         questions = List.copyOf(questions);
+        answers = List.copyOf(answers);
     }
 }

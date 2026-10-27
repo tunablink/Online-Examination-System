@@ -1,6 +1,43 @@
 # Online Examination System
 
-## Cập nhật triển khai hiện tại - 2026-10-26
+## Cập nhật triển khai hiện tại - 2026-10-27
+
+> Mục này thay thế phần mô tả tiến độ ngày `2026-10-26` ở bên dưới. Các phần thiết kế dài hạn vẫn được giữ để làm tài liệu kiến trúc, nhưng chỉ các chức năng liệt kê tại đây mới được xem là đã có trong source hiện tại.
+
+### Luồng thi sinh viên đã nối end-to-end
+
+- Student Dashboard và Exam Detail đã dùng Student Exam Catalog thật qua WebSocket/PostgreSQL.
+- `START_EXAM` tạo hoặc phục hồi một attempt đang hoạt động, với deadline do server quyết định.
+- Thứ tự câu hỏi và lựa chọn được xáo một lần rồi lưu theo attempt; response cho sinh viên không chứa trường đáp án đúng.
+- `GET_EXAM_ATTEMPT` phục hồi đúng thứ tự câu hỏi/lựa chọn và các đáp án đã auto-save.
+- `SAVE_ANSWER` kiểm tra authenticated student, ownership, trạng thái attempt, deadline và choice thuộc đúng question snapshot trước khi upsert vào `attempt_answers`.
+- Exam Room chỉ báo `Answer saved to server` sau khi nhận `ANSWER_SAVED`; response cũ của một lựa chọn trước không được ghi đè trạng thái của lựa chọn mới hơn.
+- `SUBMIT_EXAM` khóa hàng attempt, chấm từ dữ liệu server, lưu trạng thái terminal và kết quả trong cùng transaction. Request submit lặp lại trả lại cùng kết quả đã lưu thay vì chấm lần hai.
+- Exam Room có xác nhận nộp, khóa tương tác khi đang submit và hiển thị điểm server trả về ngay sau khi hoàn tất.
+
+### Database và protocol mới
+
+- `exam_attempts` có thêm `submitted_at`, `score`, `max_score`, `correct_answers` và `total_questions`.
+- `attempt_answers` lưu một lựa chọn cho mỗi cặp `(attempt_id, question_id)` và dùng upsert để hỗ trợ đổi đáp án.
+- Protocol đã thêm `SAVE_ANSWER` → `ANSWER_SAVED` và `SUBMIT_EXAM` → `EXAM_SUBMITTED` ở cả Java lẫn TypeScript.
+- Repository dùng `points_snapshot` khi đọc/chấm attempt, không phụ thuộc vào điểm hiện tại của câu hỏi gốc.
+
+### Bằng chứng kiểm tra gần nhất
+
+- Backend compile: `BUILD SUCCESS` với 129 source files.
+- Unit/handler/protocol regression tests liên quan: `29/29` pass.
+- Client: `npm run lint` pass và `npm run build` pass (`139` modules transformed).
+- Integration test PostgreSQL mới cho save → recovery → submit → duplicate submit đã được thêm vào `AttemptServiceIntegrationTests`; cần chạy `mvn test` trong terminal có đúng `DB_PASSWORD` để xác nhận với database cục bộ trước khi commit.
+
+### Phần core còn lại
+
+- Scheduled deadline finalizer để tự động chuyển attempt hết giờ sang `EXPIRED` ngay cả khi client không gửi submit.
+- Persistent authentication/session resume sau refresh hoặc reconnect WebSocket.
+- Student history/result lấy từ backend và teacher submission/result review.
+- Server-push monitoring đầy đủ, lưu suspicious activity từ client và các rule anti-cheating end-to-end.
+- Concurrency integration/load test cho save sát deadline và submit đồng thời với deadline finalizer.
+
+## Mốc tiến độ trước đó - 2026-10-26
 
 > Đây là mục trạng thái có thẩm quyền của source hiện tại. Các phần kiến trúc, yêu cầu và kế hoạch ở dưới vẫn được giữ làm tài liệu thiết kế; nếu một mô tả tiến độ cũ mâu thuẫn với mục này thì ưu tiên mục cập nhật này.
 
