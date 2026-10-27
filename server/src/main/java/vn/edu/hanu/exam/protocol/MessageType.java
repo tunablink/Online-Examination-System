@@ -90,6 +90,12 @@ public enum MessageType {
     GET_ATTEMPT_RESULT(true),
     ATTEMPT_RESULT(false),
 
+    GET_EXAM_SUBMISSIONS(true),
+    EXAM_SUBMISSIONS(false),
+
+    GET_SUBMISSION_RESULT(true),
+    SUBMISSION_RESULT(false),
+
     REPORT_ACTIVITY(true),
     ACTIVITY_RECORDED(false),
 

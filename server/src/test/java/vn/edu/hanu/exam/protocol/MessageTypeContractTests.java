@@ -106,6 +106,12 @@ class MessageTypeContractTests {
                 "GET_ATTEMPT_RESULT",
                 "ATTEMPT_RESULT",
 
+                "GET_EXAM_SUBMISSIONS",
+                "EXAM_SUBMISSIONS",
+
+                "GET_SUBMISSION_RESULT",
+                "SUBMISSION_RESULT",
+
                 "REPORT_ACTIVITY",
                 "ACTIVITY_RECORDED",
 
@@ -225,6 +231,18 @@ class MessageTypeContractTests {
                                 .orElseThrow()),
 
                 () -> assertEquals(
+                        MessageType.GET_EXAM_SUBMISSIONS,
+                        MessageType.fromWireValue(
+                                " get_exam_submissions ")
+                                .orElseThrow()),
+
+                () -> assertEquals(
+                        MessageType.GET_SUBMISSION_RESULT,
+                        MessageType.fromWireValue(
+                                "get_submission_result")
+                                .orElseThrow()),
+
+                () -> assertEquals(
                         MessageType.REPORT_ACTIVITY,
                         MessageType.fromWireValue(
                                 " report_activity ")
@@ -300,6 +318,9 @@ class MessageTypeContractTests {
                 MessageType.GET_ATTEMPT_HISTORY,
                 MessageType.GET_ATTEMPT_RESULT,
 
+                MessageType.GET_EXAM_SUBMISSIONS,
+                MessageType.GET_SUBMISSION_RESULT,
+
                 MessageType.REPORT_ACTIVITY,
                 MessageType.GET_EXAM_MONITORING);
 
@@ -357,6 +378,9 @@ class MessageTypeContractTests {
 
                 MessageType.ATTEMPT_HISTORY,
                 MessageType.ATTEMPT_RESULT,
+
+                MessageType.EXAM_SUBMISSIONS,
+                MessageType.SUBMISSION_RESULT,
 
                 MessageType.ACTIVITY_RECORDED,
                 MessageType.EXAM_MONITORING,
