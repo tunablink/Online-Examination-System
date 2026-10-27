@@ -31,6 +31,7 @@ import vn.edu.hanu.exam.websocket.handler.ProfileManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.StudentExamCatalogMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.StudentManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.TeacherDashboardMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.TeacherSubmissionMessageHandler;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 @Component
@@ -56,6 +57,8 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
 
         private final ProfileManagementMessageHandler profileManagementMessageHandler;
 
+        private final TeacherSubmissionMessageHandler teacherSubmissionMessageHandler;
+
         private final LoginService loginService;
         private final AuthenticatedSessionRegistry authenticatedSessionRegistry;
 
@@ -70,6 +73,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                         StudentManagementMessageHandler studentManagementMessageHandler,
                         TeacherDashboardMessageHandler teacherDashboardMessageHandler,
                         ProfileManagementMessageHandler profileManagementMessageHandler,
+                        TeacherSubmissionMessageHandler teacherSubmissionMessageHandler,
                         LoginService loginService,
                         AuthenticatedSessionRegistry authenticatedSessionRegistry) {
                 this.jsonMapper = jsonMapper;
@@ -81,6 +85,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                 this.studentManagementMessageHandler = studentManagementMessageHandler;
                 this.teacherDashboardMessageHandler = teacherDashboardMessageHandler;
                 this.profileManagementMessageHandler = profileManagementMessageHandler;
+                this.teacherSubmissionMessageHandler = teacherSubmissionMessageHandler;
                 this.loginService = loginService;
                 this.authenticatedSessionRegistry = authenticatedSessionRegistry;
         }
@@ -99,6 +104,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                 examManagementMessageHandler,
                                 questionManagementMessageHandler,
                                 studentExamCatalogMessageHandler,
+                                null,
                                 null,
                                 null,
                                 null,
@@ -363,6 +369,20 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                 sendMessage(
                                         session,
                                         attemptMessageHandler.handleResult(
+                                                session,
+                                                clientMessage));
+
+                        case GET_EXAM_SUBMISSIONS ->
+                                sendMessage(
+                                        session,
+                                        teacherSubmissionMessageHandler.handleList(
+                                                session,
+                                                clientMessage));
+
+                        case GET_SUBMISSION_RESULT ->
+                                sendMessage(
+                                        session,
+                                        teacherSubmissionMessageHandler.handleResult(
                                                 session,
                                                 clientMessage));
 
