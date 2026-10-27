@@ -24,16 +24,25 @@
 
 ### Bằng chứng kiểm tra gần nhất
 
-- Backend compile: `BUILD SUCCESS` với 129 source files.
-- Unit/handler/protocol regression tests liên quan: `29/29` pass.
+- Milestone save answer → recovery → submit → grading đã được commit tại `3ffcd68` (`feat: implement answer saving and exam submission`).
+- PostgreSQL integration test `AttemptServiceIntegrationTests` đã pass `6/6`, bao gồm save answer, phục hồi đáp án, chấm điểm và duplicate submit idempotent.
+- Backend compile mới nhất: `BUILD SUCCESS` với 133 main source files và 29 test source files.
+- Unit/handler/protocol regression tests của milestone save/submit đã pass; riêng `MessageTypeContractTests` mới nhất pass `5/5` sau khi mở rộng protocol History/Result.
 - Client: `npm run lint` pass và `npm run build` pass (`139` modules transformed).
-- Integration test PostgreSQL mới cho save → recovery → submit → duplicate submit đã được thêm vào `AttemptServiceIntegrationTests`; cần chạy `mvn test` trong terminal có đúng `DB_PASSWORD` để xác nhận với database cục bộ trước khi commit.
+- Full backend suite vẫn cần được chạy lại bằng `mvn test` trong terminal có đúng `DB_PASSWORD` sau khi hoàn thiện vertical slice History/Result tiếp theo.
+
+### Đang triển khai: Student Attempt History và Result
+
+- Java protocol đã khai báo `GET_ATTEMPT_HISTORY` → `ATTEMPT_HISTORY` và `GET_ATTEMPT_RESULT` → `ATTEMPT_RESULT`, với hướng message client/server được kiểm tra bằng contract test.
+- Đã tạo các model/response nền tảng `AttemptHistoryEntry`, `AttemptHistoryResult` và `StudentAttemptResult`.
+- Đã tạo `GetAttemptResultPayload`; student chỉ gửi `attemptId`, còn `studentId` phải được lấy từ authenticated WebSocket session để ngăn đọc kết quả của người khác.
+- Chưa hoàn thành repository query, service ownership validation, WebSocket handler/dispatcher và kết nối `ExamHistoryPage`/`ExamResultPage` với dữ liệu thật. Hai trang này vẫn chưa được xem là end-to-end cho đến khi bỏ mock và test đủ các tầng.
 
 ### Phần core còn lại
 
 - Scheduled deadline finalizer để tự động chuyển attempt hết giờ sang `EXPIRED` ngay cả khi client không gửi submit.
 - Persistent authentication/session resume sau refresh hoặc reconnect WebSocket.
-- Student history/result lấy từ backend và teacher submission/result review.
+- Hoàn thiện Student history/result từ repository đến frontend; sau đó triển khai teacher submission/result review.
 - Server-push monitoring đầy đủ, lưu suspicious activity từ client và các rule anti-cheating end-to-end.
 - Concurrency integration/load test cho save sát deadline và submit đồng thời với deadline finalizer.
 

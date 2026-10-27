@@ -17,7 +17,7 @@ Phân công dưới đây được thiết kế để làm song song, giảm s�
 | Thành viên | Feature phụ trách | Mức ưu tiên |
 | --- | --- | --- |
 | Phanh | Exam Attempt Core, randomization và recovery | Rất cao |
-| Hoàng Yến | Real-time monitoring và anti-cheating foundation | Rất cao |
+| Hoàng Yến | Hoàn thiện Real-time Monitoring & Anti-cheating end-to-end | Rất cao |
 | Linh | Question Management end-to-end: update/delete | Cao |
 | Hải Yến | Teacher Exam Lifecycle UI: update/publish/close/delete | Cao |
 | Leader | Review, tích hợp protocol/router/schema, Student Catalog UI và quality gate | Rất cao |
@@ -118,55 +118,27 @@ Branch đề xuất:
 feature/phanh-exam-attempt
 ```
 
-## 4. Nhiệm vụ của Hoàng Yến — Real-time Monitoring & Anti-cheating foundation
+## 4. Nhiệm vụ của Hoàng Yến — Hoàn thiện Real-time Monitoring & Anti-cheating end-to-end
 
 ### 4.1. Mục tiêu
 
-Xây dựng novelty của đề tài: ghi nhận suspicious activity có rule rõ ràng và cung cấp dữ liệu monitoring cho teacher. Hệ thống chỉ đánh dấu **suspicious**, không được tự kết luận student gian lận.
-
-### 4.2. Phạm vi cần làm
-
-- Thiết kế schema cho:
-  - `suspicious_activities`;
-  - có thể thêm `attempt_activity_logs` nếu thực sự cần lưu event thô.
-- Tạo model, repository, service và handler riêng cho monitoring.
-- Xây dựng các rule nền tảng:
+Hoàn thiện novelty chính của dự án thành một vertical slice có thể demo bằng dữ liệu thật:
 
 ```text
-TAB_HIDDEN
-WINDOW_BLUR
-DISCONNECTED
-RECONNECTED
-MULTIPLE_WARNING_THRESHOLD
+Student đang thi
+    -> chuyển tab/mất focus/mất kết nối/kết nối lại
+    -> React gửi REPORT_ACTIVITY
+    -> Java server xác thực session và ownership
+    -> PostgreSQL lưu suspicious activity
+    -> teacher gọi GET_EXAM_MONITORING
+    -> Monitoring Page hiển thị dữ liệu thật
 ```
 
-- Thêm protocol đề xuất:
+Hệ thống chỉ được ghi nhận **suspicious signal** và yêu cầu teacher review; không được tự động kết luận student gian lận.
 
-```text
-REPORT_ACTIVITY -> ACTIVITY_RECORDED
-GET_EXAM_MONITORING -> EXAM_MONITORING
-SUSPICIOUS_ACTIVITY_RECORDED  (server-push event cho teacher, nếu cần)
-```
+### 4.2. Nền tảng đã có — không viết lại từ đầu
 
-- `REPORT_ACTIVITY` phải kiểm tra student có sở hữu `attemptId` hay không.
-- `GET_EXAM_MONITORING` chỉ cho phép teacher sở hữu exam đó.
-- Monitoring response nên gồm: student an toàn để hiển thị, attempt status, deadline, warning count, suspicious activity gần nhất.
-
-### 4.3. Phụ thuộc với Phanh
-
-Hoàng Yến và Phanh phải thống nhất trước tên/ý nghĩa tối thiểu của các field:
-
-```text
-attemptId
-examId
-studentId (server-side only)
-attempt status
-deadline
-```
-
-Nếu attempt core chưa merge, Hoàng Yến vẫn có thể làm schema, repository, service rule và unit test trước; phần handler tích hợp sau khi contract attempt đã chốt.
-
-### 4.4. Files dự kiến sở hữu
+Source hiện đã có các thành phần nền tảng:
 
 ```text
 server/src/main/java/vn/edu/hanu/exam/domain/monitoring/**
@@ -180,24 +152,193 @@ server/src/main/java/vn/edu/hanu/exam/websocket/handler/MonitoringMessageHandler
 server/src/test/java/**/Monitoring*Tests.java
 ```
 
-Hoàng Yến ghi rõ phần cần tích hợp vào `schema.sql`, `MessageType.java` và router central trong PR; leader merge phần central.
+Các rule nền tảng hiện gồm:
 
-### 4.5. Test bắt buộc
+```text
+TAB_HIDDEN
+WINDOW_BLUR
+DISCONNECTED
+RECONNECTED
+MULTIPLE_WARNING_THRESHOLD
+```
 
-1. Activity được persist đúng với attempt của student sở hữu.
-2. Student không report activity cho attempt người khác.
-3. Teacher không xem monitoring của exam teacher khác.
-4. Rule threshold tạo suspicious activity đúng số lần warning.
-5. `DISCONNECTED`/`RECONNECTED` không làm hỏng attempt đang active.
-6. Response không lộ đáp án đúng, password hay dữ liệu nội bộ.
+Hoàng Yến phải audit, sửa lỗi và bổ sung các tầng còn thiếu; không tạo một bộ domain/repository/service monitoring thứ hai có chức năng trùng lặp.
 
-### 4.6. Bàn giao
+### 4.3. Phạm vi bắt buộc
+
+#### A. Database và repository
+
+- Hoàn thiện bảng `suspicious_activities` trong PostgreSQL và index theo `(attempt_id, occurred_at)`.
+- Foreign key phải tham chiếu `exam_attempts(id)` và có chính sách xóa phù hợp.
+- Thống nhất chính xác tên column với SQL trong `JdbcMonitoringRepository`.
+- Không thêm `attempt_activity_logs` nếu không chứng minh được dữ liệu đó khác về mục đích và thật sự cần thiết.
+- Mọi SQL phải parameterized.
+
+#### B. Protocol và WebSocket backend
+
+Hoàn thiện hai cặp message bắt buộc:
+
+```text
+REPORT_ACTIVITY -> ACTIVITY_RECORDED
+GET_EXAM_MONITORING -> EXAM_MONITORING
+```
+
+Server-push sau là tùy chọn, chỉ làm sau khi hai flow bắt buộc ổn định:
+
+```text
+SUSPICIOUS_ACTIVITY_RECORDED
+```
+
+- Route `REPORT_ACTIVITY` và `GET_EXAM_MONITORING` đến `MonitoringMessageHandler`.
+- Cập nhật contract test khi bổ sung `MessageType`.
+- Response phải giữ đúng `requestId`.
+- Không trả stack trace, SQL message hoặc thông tin nội bộ cho client.
+
+#### C. Authorization và business rules
+
+- `REPORT_ACTIVITY` chỉ dành cho authenticated `STUDENT`.
+- Student ID phải lấy từ `AuthenticatedSessionRegistry`, không nhận từ payload.
+- Attempt phải thuộc đúng student đang đăng nhập.
+- `GET_EXAM_MONITORING` chỉ dành cho authenticated `TEACHER`.
+- Teacher ID phải lấy từ authenticated session; teacher chỉ xem exam do mình sở hữu.
+- `attemptId` và `examId` phải là số nguyên dương.
+- `occurredAt` và severity do server tạo; không tin thời gian/severity từ client.
+- Student chỉ được report `TAB_HIDDEN`, `WINDOW_BLUR`, `DISCONNECTED`, `RECONNECTED`.
+- `MULTIPLE_WARNING_THRESHOLD` phải do server tự tạo, client không được gửi trực tiếp.
+- Threshold mặc định là warning thứ ba và chỉ tạo đúng một threshold activity, không tạo lặp ở warning thứ tư trở đi.
+- Monitoring không được làm thay đổi hoặc làm hỏng trạng thái attempt đang thi.
+
+#### D. Student client reporting
+
+Hoàn thiện reporting trong Exam Room:
+
+- `visibilitychange` + `document.visibilityState === 'hidden'` gửi `TAB_HIDDEN`.
+- `window.blur` gửi `WINDOW_BLUR`.
+- Mất kết nối/kết nối lại gửi `DISCONNECTED`/`RECONNECTED` khi có attempt active.
+- Listener phải được cleanup khi component unmount.
+- Chỉ report khi có `attemptId` hợp lệ, bài còn active và chưa submit/expire.
+- Có deduplication/throttle cơ bản để browser event không tạo spam record.
+- Report monitoring thất bại không được chặn luồng lưu đáp án hoặc làm student mất bài.
+
+#### E. Teacher Monitoring Page
+
+- Bỏ mock khỏi `ExamMonitoringPage` cho flow được giao.
+- Gửi `GET_EXAM_MONITORING` và hiển thị loading/error/empty/success state.
+- Hiển thị dữ liệu an toàn: student, attempt status, deadline, warning count, activity gần nhất, severity và server time.
+- Luôn hiển thị thông điệp tương đương:
+
+```text
+Monitoring signals require teacher review and do not prove cheating.
+```
+
+- Không dùng nhãn `Cheater`, `Cheating confirmed` hoặc tự kết luận vi phạm.
+
+### 4.4. Request/response tối thiểu
+
+Student request:
+
+```json
+{
+  "requestId": "activity-001",
+  "type": "REPORT_ACTIVITY",
+  "payload": {
+    "attemptId": 15,
+    "activityType": "TAB_HIDDEN"
+  }
+}
+```
+
+Teacher request:
+
+```json
+{
+  "requestId": "monitoring-001",
+  "type": "GET_EXAM_MONITORING",
+  "payload": {
+    "examId": 10
+  }
+}
+```
+
+Payload không được chứa `studentId`, `teacherId`, role, severity hoặc server timestamp.
+
+### 4.5. Files được sở hữu
+
+```text
+server/src/main/java/vn/edu/hanu/exam/domain/monitoring/**
+server/src/main/java/vn/edu/hanu/exam/repository/MonitoringRepository.java
+server/src/main/java/vn/edu/hanu/exam/repository/JdbcMonitoringRepository.java
+server/src/main/java/vn/edu/hanu/exam/service/monitoring/**
+server/src/main/java/vn/edu/hanu/exam/exception/MonitoringException.java
+server/src/main/java/vn/edu/hanu/exam/websocket/dto/ReportActivityPayload.java
+server/src/main/java/vn/edu/hanu/exam/websocket/dto/GetExamMonitoringPayload.java
+server/src/main/java/vn/edu/hanu/exam/websocket/handler/MonitoringMessageHandler.java
+server/src/test/java/**/Monitoring*Tests.java
+client/src/pages/ExamMonitoringPage/**
+client/src/pages/ExamRoomPage/**              (chỉ phần report activity)
+```
+
+Các file central sau phải cập nhật từ `main` mới nhất và báo leader trước khi sửa để tránh conflict:
+
+```text
+server/src/main/java/vn/edu/hanu/exam/protocol/MessageType.java
+server/src/main/java/vn/edu/hanu/exam/websocket/ExamWebSocketHandler.java
+server/src/main/resources/schema.sql
+client/src/websocket/protocol.ts
+```
+
+### 4.6. Phạm vi không được sửa
+
+Hoàng Yến không sửa các phần Student History/Result leader đang triển khai:
+
+```text
+server/src/main/java/vn/edu/hanu/exam/domain/attempt/AttemptHistoryEntry.java
+server/src/main/java/vn/edu/hanu/exam/service/attempt/AttemptHistoryResult.java
+server/src/main/java/vn/edu/hanu/exam/service/attempt/StudentAttemptResult.java
+server/src/main/java/vn/edu/hanu/exam/websocket/dto/GetAttemptResultPayload.java
+client/src/pages/ExamHistoryPage/**
+client/src/pages/ExamResultPage/**
+```
+
+Không thay đổi logic randomization, save answer, grading, submit exam, exam lifecycle hoặc Question Management. Nếu cần dữ liệu attempt để authorize monitoring thì ưu tiên dùng `MonitoringRepository`, không tự sửa `AttemptRepository` khi chưa thống nhất với leader.
+
+### 4.7. Test bắt buộc
+
+1. Lưu `TAB_HIDDEN` đúng attempt của student sở hữu.
+2. Student không report activity cho attempt của student khác.
+3. Teacher không report student activity; student không đọc teacher monitoring.
+4. Teacher không xem monitoring của exam thuộc teacher khác.
+5. Warning count chính xác; warning thứ ba tạo đúng một `MULTIPLE_WARNING_THRESHOLD`.
+6. Warning thứ tư không tạo threshold record thứ hai.
+7. Invalid/missing `attemptId`, `examId`, `activityType` trả `INVALID_PAYLOAD`.
+8. Chưa login trả `AUTHENTICATION_REQUIRED`; sai role trả `FORBIDDEN`.
+9. `DISCONNECTED`/`RECONNECTED` không làm thay đổi attempt active.
+10. Request thành công giữ đúng `requestId`; response không lộ đáp án đúng, password, session ID hoặc SQL detail.
+11. PostgreSQL integration test chứng minh activity được persist và transaction rollback đúng khi có lỗi.
+12. Client listener không đăng ký trùng, được cleanup và không report sau khi submit.
+13. `mvn test`, `npm run lint`, `npm run build` và `git diff --check` đều pass.
+
+### 4.8. Tiêu chí hoàn thành và bàn giao
+
+Chỉ báo hoàn thành khi activity được lưu thật trong PostgreSQL, teacher page đọc dữ liệu thật, authorization/threshold rule đã được test và phần monitoring không còn phụ thuộc mock.
 
 Branch đề xuất:
 
 ```text
-feature/hoang-yen-monitoring-anti-cheating
+feature/hoang-yen-monitoring-end-to-end
 ```
+
+Commit đề xuất:
+
+```text
+feat(server): persist suspicious activity records
+feat(server): expose exam monitoring over websocket
+feat(client): report exam room activity
+feat(client): connect teacher monitoring dashboard
+test: cover monitoring authorization and warning threshold
+```
+
+Khi bàn giao phải gửi: tên branch, danh sách commit/file sửa, request/response mẫu, thay đổi schema, kết quả test và hướng dẫn manual test.
 
 ## 5. Nhiệm vụ của Linh — Question Management end-to-end
 
@@ -344,8 +485,10 @@ Thứ tự khuyến nghị:
 1. Merge phần Linh; chạy backend/client quality gate.
 2. Merge phần Hải Yến; chạy backend/client quality gate.
 3. Review contract attempt, merge phần Phanh; chạy full backend test.
-4. Merge phần Hoàng Yến và nối với attempt; chạy full backend test.
-5. Leader test thủ công end-to-end và cập nhật README.
+4. Leader hoàn thiện/commit Student History & Result và đẩy `main` để chốt các file protocol central.
+5. Hoàng Yến rebase/merge `main` mới nhất, hoàn thiện Monitoring & Anti-cheating end-to-end rồi bàn giao.
+6. Merge phần Hoàng Yến; chạy full backend test, frontend lint/build và manual flow student → monitoring → teacher.
+7. Leader cập nhật README và lưu bằng chứng kiểm thử cuối milestone.
 
 Mỗi người trước khi gửi PR chạy:
 
