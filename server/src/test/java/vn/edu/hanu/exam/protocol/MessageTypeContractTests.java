@@ -105,6 +105,12 @@ class MessageTypeContractTests {
                 "GET_ATTEMPT_RESULT",
                 "ATTEMPT_RESULT",
 
+                "GET_EXAM_SUBMISSIONS",
+                "EXAM_SUBMISSIONS",
+
+                "GET_SUBMISSION_RESULT",
+                "SUBMISSION_RESULT",
+
                 "ERROR");
 
         assertEquals(
@@ -215,6 +221,18 @@ class MessageTypeContractTests {
                         MessageType.GET_ATTEMPT_RESULT,
                         MessageType.fromWireValue(
                                 "get_attempt_result")
+                                .orElseThrow()),
+
+                () -> assertEquals(
+                        MessageType.GET_EXAM_SUBMISSIONS,
+                        MessageType.fromWireValue(
+                                " get_exam_submissions ")
+                                .orElseThrow()),
+
+                () -> assertEquals(
+                        MessageType.GET_SUBMISSION_RESULT,
+                        MessageType.fromWireValue(
+                                "get_submission_result")
                                 .orElseThrow()));
     }
 
@@ -279,7 +297,10 @@ class MessageTypeContractTests {
                 MessageType.SUBMIT_EXAM,
 
                 MessageType.GET_ATTEMPT_HISTORY,
-                MessageType.GET_ATTEMPT_RESULT);
+                MessageType.GET_ATTEMPT_RESULT,
+
+                MessageType.GET_EXAM_SUBMISSIONS,
+                MessageType.GET_SUBMISSION_RESULT);
 
         assertEquals(
                 expectedClientCommandTypes,
@@ -335,6 +356,9 @@ class MessageTypeContractTests {
 
                 MessageType.ATTEMPT_HISTORY,
                 MessageType.ATTEMPT_RESULT,
+
+                MessageType.EXAM_SUBMISSIONS,
+                MessageType.SUBMISSION_RESULT,
 
                 MessageType.ERROR);
 

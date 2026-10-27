@@ -26,7 +26,9 @@ export type ClientMessageType =
   | 'SAVE_ANSWER'
   | 'SUBMIT_EXAM'
   | 'GET_ATTEMPT_HISTORY'
-  | 'GET_ATTEMPT_RESULT';
+  | 'GET_ATTEMPT_RESULT'
+  | 'GET_EXAM_SUBMISSIONS'
+  | 'GET_SUBMISSION_RESULT';
 
 export type ServerMessageType =
   | 'CONNECTED'
@@ -58,6 +60,8 @@ export type ServerMessageType =
   | 'EXAM_SUBMITTED'
   | 'ATTEMPT_HISTORY'
   | 'ATTEMPT_RESULT'
+  | 'EXAM_SUBMISSIONS'
+  | 'SUBMISSION_RESULT'
   | 'ERROR';
 
 export type UserRole =
@@ -279,12 +283,16 @@ export interface ServerMessageData {
 
   exams?: unknown[];
   attempts?: unknown[];
+  submissions?: unknown[];
   examId?: number;
   examTitle?: string;
   content?: string;
   points?: number;
   displayOrder?: number;
   attemptId?: number;
+  studentId?: number;
+  studentFullName?: string;
+  deadline?: string;
   questionId?: number;
   choiceId?: number;
   savedAt?: string;

@@ -21,6 +21,8 @@ import ProtectedRoute from "./components/routing/ProtectedRoute";
 import HomeRedirect from "./components/routing/HomeRedirect";
 import StudentProfilePage from "./pages/ProfilePage/StudentProfilePage";
 import TeacherProfilePage from "./pages/ProfilePage/TeacherProfilePage";
+import TeacherSubmissionPage from "./pages/TeacherSubmissionPage/TeacherSubmissionPage";
+import TeacherSubmissionResultPage from "./pages/TeacherSubmissionResultPage/TeacherSubmissionResultPage";
 
 function App() {
   return (
@@ -66,6 +68,10 @@ function App() {
           />
 
           <Route path="exams/:examId" element={<ExamOverviewPage />} />
+
+          <Route path="exams/:examId/submissions" element={<TeacherSubmissionPage />} />
+
+          <Route path="submissions/:attemptId" element={<TeacherSubmissionResultPage />} />
 
           <Route path="students/new" element={<RegisterPage />} />
 
