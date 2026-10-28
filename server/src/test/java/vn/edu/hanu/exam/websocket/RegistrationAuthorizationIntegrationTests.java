@@ -86,6 +86,27 @@ class RegistrationAuthorizationIntegrationTests {
         verifyRegistration(null, "AUTHENTICATION_REQUIRED");
     }
 
+    @Test void anonymousCannotRegisterTeacher() throws Exception {
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        String username = "teacher_" + suffix;
+        var socket = mock(WebSocketSession.class);
+        when(socket.getId()).thenReturn("teacher_registration_" + suffix);
+        when(socket.isOpen()).thenReturn(true);
+
+        ServerMessage response = command(socket, "REGISTER", Map.of(
+                "username", username,
+                "password", "TeacherTest123!",
+                "fullName", "New Teacher",
+                "email", username + "@example.com",
+                "role", "TEACHER",
+                "acceptedPolicy", true));
+
+        assertEquals("ERROR", response.type());
+        assertEquals("AUTHENTICATION_REQUIRED", response.error().code());
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE username=:name",
+                Map.of("name", username), Integer.class));
+    }
+
     @Test void studentCannotCreateStudent() throws Exception {
         verifyRegistration("STUDENT", "FORBIDDEN");
     }

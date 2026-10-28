@@ -35,6 +35,36 @@ public enum MessageType {
     GET_STUDENT(true),
     STUDENT_DETAILS(false),
 
+    CREATE_STUDENT(true),
+    STUDENT_CREATED(false),
+
+    IMPORT_STUDENTS(true),
+    STUDENTS_IMPORTED(false),
+
+    UPDATE_STUDENT(true),
+    STUDENT_UPDATED(false),
+    DELETE_STUDENT(true),
+    STUDENT_DELETED(false),
+
+    CREATE_COURSE(true),
+    COURSE_CREATED(false),
+    UPDATE_COURSE(true),
+    COURSE_UPDATED(false),
+    ARCHIVE_COURSE(true),
+    COURSE_ARCHIVED(false),
+    RESTORE_COURSE(true),
+    COURSE_RESTORED(false),
+    GET_COURSES(true),
+    COURSES(false),
+    GET_COURSE(true),
+    COURSE_DETAILS(false),
+    ENROLL_STUDENT(true),
+    STUDENT_ENROLLED(false),
+    CREATE_COURSE_STUDENT(true),
+    COURSE_STUDENT_CREATED(false),
+    IMPORT_COURSE_STUDENTS(true),
+    COURSE_STUDENTS_IMPORTED(false),
+
     GET_TEACHER_DASHBOARD(true),
     TEACHER_DASHBOARD(false),
 

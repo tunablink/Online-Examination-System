@@ -31,7 +31,7 @@ function QuestionEditorForm({ initialQuestion, isSaving = false, onCancel, onSav
     const nextErrors: string[] = [];
     const score = Number(points);
     if (content.trim().length < 5) nextErrors.push('Question content must contain at least 5 characters.');
-    if (!Number.isFinite(score) || score <= 0 || score > 100) nextErrors.push('Points must be between 0 and 100.');
+    if (!Number.isInteger(score) || score <= 0 || score > 100) nextErrors.push('Points must be a whole number between 1 and 100.');
     if (choices.length < 2 || choices.length > 6) nextErrors.push('Use between 2 and 6 answer choices.');
     if (choices.some((choice) => !choice.content.trim())) nextErrors.push('Every choice must have content.');
     if (choices.filter((choice) => choice.correct).length !== 1) nextErrors.push('Select exactly one correct answer.');
@@ -64,7 +64,7 @@ function QuestionEditorForm({ initialQuestion, isSaving = false, onCancel, onSav
 
       <label className="mt-3 grid max-w-[160px] gap-2">
         <span className="text-[10px] font-semibold text-[#46565c]">Points</span>
-        <input aria-invalid={Boolean(pointsError)} className={`h-10 rounded-lg border px-3 text-[11px] outline-none ${pointsError ? 'border-[#d84a50]' : 'border-[#d6e1e4] focus:border-[#70b2be]'}`} disabled={isSaving} max="100" min="0.1" onChange={(event) => { setPoints(event.target.value); setErrors([]); }} step="0.1" type="number" value={points} />
+        <input aria-invalid={Boolean(pointsError)} className={`h-10 rounded-lg border px-3 text-[11px] outline-none ${pointsError ? 'border-[#d84a50]' : 'border-[#d6e1e4] focus:border-[#70b2be]'}`} disabled={isSaving} max="100" min="1" onChange={(event) => { setPoints(event.target.value); setErrors([]); }} step="1" type="number" value={points} />
         {pointsError && <span className="text-[9px] font-medium leading-4 text-[#bd2f35]">{pointsError}</span>}
       </label>
 

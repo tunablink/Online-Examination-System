@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Optional;
 
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 
@@ -22,6 +23,7 @@ public class JdbcStudentDirectoryRepository implements StudentDirectoryRepositor
                    username,
                    full_name,
                    email,
+                   department,
                    active,
                    created_at
             FROM users
@@ -38,7 +40,7 @@ public class JdbcStudentDirectoryRepository implements StudentDirectoryRepositor
     @Override
     public List<StudentDetails> findAllStudents() {
         String sql = SELECT_STUDENT_COLUMNS + """
-                WHERE role = :studentRole
+                WHERE role = :studentRole AND active = TRUE
                 ORDER BY created_at DESC, id DESC
                 """;
 
@@ -62,12 +64,37 @@ public class JdbcStudentDirectoryRepository implements StudentDirectoryRepositor
         return students.stream().findFirst();
     }
 
+    @Override
+    public Optional<StudentDetails> updateStudent(long studentId, String username, String fullName, String email,
+            String department, String passwordHash) {
+        int changed = jdbcTemplate.update("""
+                UPDATE users SET username = :username, full_name = :fullName, email = :email,
+                    department = :department, password_hash = COALESCE(:passwordHash, password_hash),
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :studentId AND role = :studentRole AND active = TRUE
+                """, new MapSqlParameterSource()
+                .addValue("studentId", studentId).addValue("studentRole", STUDENT_ROLE)
+                .addValue("username", username).addValue("fullName", fullName)
+                .addValue("email", email).addValue("department", department)
+                .addValue("passwordHash", passwordHash));
+        return changed == 1 ? findStudentById(studentId) : Optional.empty();
+    }
+
+    @Override
+    public boolean deactivateStudent(long studentId) {
+        return jdbcTemplate.update("""
+                UPDATE users SET active = FALSE, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :studentId AND role = :studentRole AND active = TRUE
+                """, Map.of("studentId", studentId, "studentRole", STUDENT_ROLE)) == 1;
+    }
+
     private static StudentDetails mapStudent(ResultSet resultSet, int rowNumber) throws SQLException {
         return new StudentDetails(
                 resultSet.getLong("id"),
                 resultSet.getString("username"),
                 resultSet.getString("full_name"),
                 resultSet.getString("email"),
+                resultSet.getString("department"),
                 resultSet.getBoolean("active"),
                 resultSet.getObject("created_at", OffsetDateTime.class));
     }

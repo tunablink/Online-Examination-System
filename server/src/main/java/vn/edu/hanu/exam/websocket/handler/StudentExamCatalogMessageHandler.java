@@ -56,7 +56,7 @@ public class StudentExamCatalogMessageHandler {
         return withStudent(sessionId, requestId, student -> ServerMessage.success(
                 requestId,
                 TYPE_AVAILABLE_EXAMS,
-                catalogService.findAllAvailable()));
+                catalogService.findAllAvailable(student.id())));
     }
 
     public ServerMessage handleGet(String sessionId, String requestId, Map<String, Object> payload) {
@@ -65,7 +65,7 @@ public class StudentExamCatalogMessageHandler {
             return ServerMessage.success(
                     requestId,
                     TYPE_AVAILABLE_EXAM_DETAILS,
-                    catalogService.findAvailableById(input.examId()));
+                    catalogService.findAvailableById(input.examId(), student.id()));
         });
     }
 

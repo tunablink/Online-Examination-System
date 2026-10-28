@@ -28,6 +28,7 @@ export interface WebSocketContextValue {
     >,
     onResponse?:
       ServerMessageHandler,
+    timeoutMs?: number,
   ) => string | null;
 
   subscribe: (

@@ -25,6 +25,7 @@ import vn.edu.hanu.exam.service.LoginCommand;
 import vn.edu.hanu.exam.service.LoginService;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.websocket.handler.AttemptMessageHandler;
+import vn.edu.hanu.exam.websocket.handler.CourseMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.ExamManagementMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.MonitoringMessageHandler;
 import vn.edu.hanu.exam.websocket.handler.ProfileManagementMessageHandler;
@@ -72,6 +73,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
     private final MonitoringMessageHandler monitoringMessageHandler;
 
     private final TeacherSubmissionMessageHandler teacherSubmissionMessageHandler;
+    private final CourseMessageHandler courseMessageHandler;
 
     private final LoginService loginService;
 
@@ -90,6 +92,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             ProfileManagementMessageHandler profileManagementMessageHandler,
             MonitoringMessageHandler monitoringMessageHandler,
             TeacherSubmissionMessageHandler teacherSubmissionMessageHandler,
+            CourseMessageHandler courseMessageHandler,
             LoginService loginService,
             AuthenticatedSessionRegistry authenticatedSessionRegistry) {
 
@@ -104,20 +107,13 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
         this.profileManagementMessageHandler = profileManagementMessageHandler;
         this.monitoringMessageHandler = monitoringMessageHandler;
         this.teacherSubmissionMessageHandler = teacherSubmissionMessageHandler;
+        this.courseMessageHandler = courseMessageHandler;
         this.loginService = loginService;
         this.authenticatedSessionRegistry = authenticatedSessionRegistry;
     }
 
-    /*
-     * Constructor rút gọn được giữ lại cho các test cũ.
-     *
-     * Các handler không cần thiết cho nhóm test đó được truyền null.
-     * MonitoringMessageHandler cũng phải có một vị trí null riêng để
-     * khớp với constructor chính.
-     */
     public ExamWebSocketHandler(
-            JsonMapper jsonMapper,
-            RegistrationMessageHandler registrationMessageHandler,
+            JsonMapper jsonMapper, RegistrationMessageHandler registrationMessageHandler,
             ExamManagementMessageHandler examManagementMessageHandler,
             QuestionManagementMessageHandler questionManagementMessageHandler,
             StudentExamCatalogMessageHandler studentExamCatalogMessageHandler,
@@ -126,23 +122,11 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             TeacherDashboardMessageHandler teacherDashboardMessageHandler,
             ProfileManagementMessageHandler profileManagementMessageHandler,
             MonitoringMessageHandler monitoringMessageHandler,
-            LoginService loginService,
-            AuthenticatedSessionRegistry authenticatedSessionRegistry) {
-
-        this(
-                jsonMapper,
-                registrationMessageHandler,
-                examManagementMessageHandler,
-                questionManagementMessageHandler,
-                studentExamCatalogMessageHandler,
-                attemptMessageHandler,
-                studentManagementMessageHandler,
-                teacherDashboardMessageHandler,
-                profileManagementMessageHandler,
-                monitoringMessageHandler,
-                null,
-                loginService,
-                authenticatedSessionRegistry);
+            LoginService loginService, AuthenticatedSessionRegistry authenticatedSessionRegistry) {
+        this(jsonMapper, registrationMessageHandler, examManagementMessageHandler,
+                questionManagementMessageHandler, studentExamCatalogMessageHandler, attemptMessageHandler,
+                studentManagementMessageHandler, teacherDashboardMessageHandler, profileManagementMessageHandler,
+                monitoringMessageHandler, null, null, loginService, authenticatedSessionRegistry);
     }
 
     public ExamWebSocketHandler(
@@ -160,6 +144,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                 examManagementMessageHandler,
                 questionManagementMessageHandler,
                 studentExamCatalogMessageHandler,
+                null,
                 null,
                 null,
                 null,
@@ -173,6 +158,8 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session)
             throws Exception {
+
+        session.setTextMessageSizeLimit(2 * 1024 * 1024);
 
         LOGGER.info(
                 "WebSocket connected: sessionId={}",
@@ -364,6 +351,23 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                             studentManagementMessageHandler.handleGet(
                                     session,
                                     clientMessage));
+
+            case CREATE_STUDENT ->
+                    sendMessage(session, studentManagementMessageHandler.handleCreate(session, clientMessage));
+
+            case IMPORT_STUDENTS ->
+                    sendMessage(session, studentManagementMessageHandler.handleImport(session, clientMessage));
+
+            case UPDATE_STUDENT ->
+                    sendMessage(session, studentManagementMessageHandler.handleUpdate(session, clientMessage));
+
+            case DELETE_STUDENT ->
+                    sendMessage(session, studentManagementMessageHandler.handleDelete(session, clientMessage));
+
+            case CREATE_COURSE, UPDATE_COURSE, ARCHIVE_COURSE, RESTORE_COURSE,
+                    GET_COURSES, GET_COURSE, ENROLL_STUDENT,
+                    CREATE_COURSE_STUDENT, IMPORT_COURSE_STUDENTS ->
+                    sendMessage(session, courseMessageHandler.handle(session, clientMessage));
 
             case GET_TEACHER_DASHBOARD ->
                     sendMessage(

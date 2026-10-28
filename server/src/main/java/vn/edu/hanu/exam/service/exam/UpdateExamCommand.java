@@ -6,9 +6,13 @@ public record UpdateExamCommand(
         String title,
         String description,
         int durationMinutes,
-        OffsetDateTime scheduledAt
+        OffsetDateTime scheduledAt,
+        String assessmentType
 ) {
     public UpdateExamCommand(String title, String description, int durationMinutes) {
-        this(title, description, durationMinutes, null);
+        this(title, description, durationMinutes, null, null);
+    }
+    public UpdateExamCommand(String title, String description, int durationMinutes, OffsetDateTime scheduledAt) {
+        this(title, description, durationMinutes, scheduledAt, null);
     }
 }

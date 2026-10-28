@@ -9,4 +9,9 @@ public interface StudentDirectoryRepository {
     List<StudentDetails> findAllStudents();
 
     Optional<StudentDetails> findStudentById(long studentId);
+
+    Optional<StudentDetails> updateStudent(long studentId, String username, String fullName, String email,
+            String department, String passwordHash);
+
+    boolean deactivateStudent(long studentId);
 }

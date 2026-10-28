@@ -1,6 +1,7 @@
 package vn.edu.hanu.exam.websocket.handler;
 
 import java.util.Map;
+import java.util.List;
 import java.util.function.Function;
 
 import org.slf4j.Logger;
@@ -12,12 +13,15 @@ import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 import vn.edu.hanu.exam.domain.UserRole;
 import vn.edu.hanu.exam.exception.ExamManagementException;
+import vn.edu.hanu.exam.exception.QuestionManagementException;
 import vn.edu.hanu.exam.protocol.ClientMessage;
 import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.exam.CreateExamCommand;
 import vn.edu.hanu.exam.service.exam.ExamManagementService;
 import vn.edu.hanu.exam.service.exam.UpdateExamCommand;
+import vn.edu.hanu.exam.service.question.CreateQuestionCommand;
+import vn.edu.hanu.exam.service.course.CourseException;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.websocket.dto.CloseExamPayload;
 import vn.edu.hanu.exam.websocket.dto.CreateExamPayload;
@@ -70,13 +74,26 @@ public class ExamManagementMessageHandler {
     public ServerMessage handleCreate(String sessionId, String requestId, Map<String, Object> payload) {
         return withTeacher(sessionId, requestId, teacher -> {
             CreateExamPayload input = convertPayload(payload, CreateExamPayload.class);
-            return ServerMessage.success(requestId, TYPE_EXAM_CREATED, examService.createExam(
+            List<CreateQuestionCommand> questions = input.questions() == null ? List.of() : input.questions().stream()
+                    .map(question -> {
+                        if (question == null) throw new InvalidPayloadException();
+                        List<CreateQuestionCommand.ChoiceCommand> choices = question.choices() == null ? List.of()
+                                : question.choices().stream().map(choice -> {
+                                    if (choice == null) throw new InvalidPayloadException();
+                                    return new CreateQuestionCommand.ChoiceCommand(
+                                            choice.content(), choice.correct(), choice.displayOrder());
+                                }).toList();
+                        return new CreateQuestionCommand(0, question.content(), question.points(),
+                                question.displayOrder(), choices);
+                    }).toList();
+            return ServerMessage.success(requestId, TYPE_EXAM_CREATED, examService.createExamWithQuestions(
                     teacher.id(),
+                    input.courseId(),
                     new CreateExamCommand(
                             input.title(),
                             input.description(),
                             input.durationMinutes(),
-                            input.scheduledAt())));
+                            input.scheduledAt()), input.assessmentType(), questions));
         });
     }
 
@@ -126,7 +143,8 @@ public class ExamManagementMessageHandler {
                                             input.title(),
                                             input.description(),
                                             input.durationMinutes(),
-                                            input.scheduledAt())));
+                                            input.scheduledAt(),
+                                            input.assessmentType())));
                 });
     }
 
@@ -213,6 +231,10 @@ public class ExamManagementMessageHandler {
             return ServerMessage.error(requestId, CODE_INVALID_PAYLOAD, "The request payload is invalid.");
         } catch (ExamManagementException exception) {
             LOGGER.info("Exam operation rejected: requestId={}, code={}", requestId, exception.code());
+            return ServerMessage.error(requestId, exception.code(), exception.getMessage());
+        } catch (CourseException exception) {
+            return ServerMessage.error(requestId, exception.code(), exception.getMessage());
+        } catch (QuestionManagementException exception) {
             return ServerMessage.error(requestId, exception.code(), exception.getMessage());
         } catch (RuntimeException exception) {
             LOGGER.error("Unexpected exam operation error: requestId={}", requestId, exception);

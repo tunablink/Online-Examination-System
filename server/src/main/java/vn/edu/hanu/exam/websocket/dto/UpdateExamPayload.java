@@ -7,5 +7,6 @@ public record UpdateExamPayload(
         String title,
         String description,
         int durationMinutes,
-        OffsetDateTime scheduledAt
+        OffsetDateTime scheduledAt,
+        String assessmentType
 ) {}

@@ -31,6 +31,7 @@ function ExamCard({ exam }: { exam: AvailableExamDetailsData }) {
       </div>
       <p className="mt-3 text-[10px] font-bold uppercase tracking-[.09em] text-[#71868d]">EX-{String(exam.id).padStart(4, '0')} · Published examination</p>
       <h2 className="mt-1.5 text-[17px] font-bold leading-6 tracking-[-.025em] text-[#243238]">{exam.title}</h2>
+      {exam.courseName && <p className="mt-1 text-[11px] font-semibold text-[#00778b]">{exam.courseName}</p>}
       <p className="mt-1 text-[11px] leading-5 text-[#687b82]">{exam.description?.trim() || 'No description was provided.'}</p>
       <div className="mt-3 grid grid-cols-3 gap-2 border-y border-[#edf1f2] py-3 text-[11px] leading-5 text-[#64787f]">
         <span><Icon className="mb-1 text-[#00778b]" name="clock" size={14} />{exam.durationMinutes} mins</span>

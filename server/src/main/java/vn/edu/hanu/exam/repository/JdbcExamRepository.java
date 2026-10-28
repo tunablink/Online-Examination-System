@@ -20,8 +20,9 @@ import vn.edu.hanu.exam.domain.ExamStatus;
 @Repository
 public class JdbcExamRepository implements ExamRepository {
     private static final String SELECT_COLUMNS = """
-            SELECT id, title, description, duration_minutes, scheduled_at,
-                   status, created_by, created_at, updated_at
+            SELECT id, title, description, assessment_type, duration_minutes, scheduled_at,
+                   status, created_by, created_at, updated_at, course_id,
+                   (SELECT name FROM courses WHERE courses.id = exams.course_id) AS course_name
             FROM exams
             """;
     private static final RowMapper<Exam> EXAM_ROW_MAPPER = JdbcExamRepository::mapExam;
@@ -44,21 +45,45 @@ public class JdbcExamRepository implements ExamRepository {
             int durationMinutes,
             OffsetDateTime scheduledAt,
             long createdBy) {
+        return insert(title, description, durationMinutes, scheduledAt, createdBy, null);
+    }
+
+    @Override
+    public Exam createInCourse(String title, String description, int durationMinutes,
+            OffsetDateTime scheduledAt, long createdBy, long courseId) {
+        return insert(title, description, durationMinutes, scheduledAt, createdBy, courseId);
+    }
+
+    @Override
+    public Exam createInCourse(String title, String description, int durationMinutes,
+            OffsetDateTime scheduledAt, long createdBy, long courseId, String assessmentType) {
+        return insert(title, description, durationMinutes, scheduledAt, createdBy, courseId, assessmentType);
+    }
+
+    private Exam insert(String title, String description, int durationMinutes,
+            OffsetDateTime scheduledAt, long createdBy, Long courseId) {
+        return insert(title, description, durationMinutes, scheduledAt, createdBy, courseId, "Examination");
+    }
+
+    private Exam insert(String title, String description, int durationMinutes,
+            OffsetDateTime scheduledAt, long createdBy, Long courseId, String assessmentType) {
         String sql = """
                 INSERT INTO exams (
-                    title, description, duration_minutes, scheduled_at, status, created_by
+                    title, description, assessment_type, duration_minutes, scheduled_at, status, created_by, course_id
                 )
                 VALUES (
-                    :title, :description, :durationMinutes, :scheduledAt, :status, :createdBy
+                    :title, :description, :assessmentType, :durationMinutes, :scheduledAt, :status, :createdBy, :courseId
                 )
                 """;
         MapSqlParameterSource parameters = new MapSqlParameterSource()
                 .addValue("title", title)
                 .addValue("description", description)
+                .addValue("assessmentType", assessmentType)
                 .addValue("durationMinutes", durationMinutes)
                 .addValue("scheduledAt", scheduledAt)
                 .addValue("status", ExamStatus.DRAFT.name())
-                .addValue("createdBy", createdBy);
+                .addValue("createdBy", createdBy)
+                .addValue("courseId", courseId);
         KeyHolder keyHolder = new GeneratedKeyHolder();
 
         int affectedRows = jdbcTemplate.update(sql, parameters, keyHolder, new String[] {"id"});
@@ -130,6 +155,14 @@ public class JdbcExamRepository implements ExamRepository {
                     "Expected one updated exam, but affected " + affectedRows + " rows.");
         }
         return findByIdAndCreatedBy(examId, teacherId);
+    }
+
+    @Override
+    public boolean updateDraftAssessmentType(long examId, long teacherId, String assessmentType) {
+        return jdbcTemplate.update("""
+                UPDATE exams SET assessment_type = :assessmentType, updated_at = CURRENT_TIMESTAMP
+                WHERE id = :examId AND created_by = :teacherId AND status = 'DRAFT'
+                """, Map.of("examId", examId, "teacherId", teacherId, "assessmentType", assessmentType)) == 1;
     }
 
     @Override
@@ -333,6 +366,9 @@ public class JdbcExamRepository implements ExamRepository {
                 ExamStatus.valueOf(resultSet.getString("status")),
                 resultSet.getLong("created_by"),
                 resultSet.getObject("created_at", OffsetDateTime.class),
-                resultSet.getObject("updated_at", OffsetDateTime.class));
+                resultSet.getObject("updated_at", OffsetDateTime.class),
+                resultSet.getObject("course_id", Long.class),
+                resultSet.getString("course_name"),
+                resultSet.getString("assessment_type"));
     }
 }

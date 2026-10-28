@@ -20,6 +20,7 @@ export type SendExamMessage = (
   type: ClientMessageType,
   payload?: Record<string, unknown>,
   onResponse?: ServerMessageHandler,
+  timeoutMs?: number,
 ) => string | null;
 
 export type Unsubscribe = () => void;
@@ -289,6 +290,7 @@ export function useExamWebSocket({
       type: ClientMessageType,
       payload: Record<string, unknown> = {},
       onResponse?: ServerMessageHandler,
+      timeoutMs?: number,
     ): string | null => {
       const socket = socketRef.current;
 
@@ -316,7 +318,7 @@ export function useExamWebSocket({
             responseHandlersRef.current.delete(requestId);
 
             pendingRequest.handler(createRequestTimeoutMessage(requestId));
-          }, REQUEST_TIMEOUT_MS);
+          }, timeoutMs ?? REQUEST_TIMEOUT_MS);
 
           responseHandlersRef.current.set(requestId, {
             handler: onResponse,

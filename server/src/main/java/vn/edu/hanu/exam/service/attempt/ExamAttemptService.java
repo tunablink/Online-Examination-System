@@ -28,6 +28,7 @@ import vn.edu.hanu.exam.domain.attempt.SavedAnswer;
 import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 import vn.edu.hanu.exam.exception.AttemptException;
 import vn.edu.hanu.exam.repository.AttemptRepository;
+import vn.edu.hanu.exam.repository.CourseRepository;
 
 @Service
 public class ExamAttemptService {
@@ -41,6 +42,7 @@ public class ExamAttemptService {
     public static final String DATABASE_ERROR = "DATABASE_ERROR";
 
     private final AttemptRepository attemptRepository;
+    private final CourseRepository courseRepository;
     private ApplicationEventPublisher events;
 
     @Autowired
@@ -51,8 +53,14 @@ public class ExamAttemptService {
                 new vn.edu.hanu.exam.service.monitoring.MonitoringChanged(examId));
     }
 
-    public ExamAttemptService(AttemptRepository attemptRepository) {
+    @Autowired
+    public ExamAttemptService(AttemptRepository attemptRepository, CourseRepository courseRepository) {
         this.attemptRepository = attemptRepository;
+        this.courseRepository = courseRepository;
+    }
+
+    public ExamAttemptService(AttemptRepository attemptRepository) {
+        this(attemptRepository, null);
     }
 
     @Transactional
@@ -65,6 +73,9 @@ public class ExamAttemptService {
             Exam exam = attemptRepository.findExamByIdForUpdate(examId)
                     .orElseThrow(ExamAttemptService::examNotAvailable);
             if (exam.status() != ExamStatus.PUBLISHED) {
+                throw examNotAvailable();
+            }
+            if (exam.courseId() != null && (courseRepository == null || !courseRepository.isEnrolled(exam.courseId(), studentId))) {
                 throw examNotAvailable();
             }
 

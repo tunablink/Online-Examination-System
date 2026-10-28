@@ -44,6 +44,35 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_lower
 ALTER TABLE users
     ADD COLUMN IF NOT EXISTS department VARCHAR(120);
 
+CREATE TABLE IF NOT EXISTS courses (
+    id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    teacher_id BIGINT NOT NULL REFERENCES users(id),
+    code VARCHAR(50) NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT ck_courses_code_not_blank CHECK (BTRIM(code) <> ''),
+    CONSTRAINT ck_courses_name_not_blank CHECK (BTRIM(name) <> '')
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_courses_teacher_code
+    ON courses (teacher_id, LOWER(code));
+
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS subject VARCHAR(120);
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS department VARCHAR(120);
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS academic_year VARCHAR(9);
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS semester VARCHAR(20);
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS description TEXT;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS archived BOOLEAN NOT NULL DEFAULT FALSE;
+
+CREATE TABLE IF NOT EXISTS course_students (
+    course_id BIGINT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    student_id BIGINT NOT NULL REFERENCES users(id),
+    enrolled_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (course_id, student_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_course_students_student_id ON course_students (student_id);
+
 -- ============================================================
 -- Bảng exams
 -- ============================================================
@@ -51,6 +80,7 @@ CREATE TABLE IF NOT EXISTS exams (
     id               BIGINT GENERATED ALWAYS AS IDENTITY,
     title            VARCHAR(255) NOT NULL,
     description      TEXT,
+    assessment_type  VARCHAR(60) NOT NULL DEFAULT 'Examination',
     duration_minutes INT          NOT NULL,
     scheduled_at     TIMESTAMP WITH TIME ZONE,
     status           VARCHAR(20)  NOT NULL DEFAULT 'DRAFT',
@@ -80,8 +110,14 @@ CREATE TABLE IF NOT EXISTS exams (
 CREATE INDEX IF NOT EXISTS idx_exams_created_by
     ON exams (created_by);
 
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS course_id BIGINT REFERENCES courses(id);
+CREATE INDEX IF NOT EXISTS idx_exams_course_id ON exams (course_id);
+
 ALTER TABLE exams
     ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP WITH TIME ZONE;
+
+ALTER TABLE exams
+    ADD COLUMN IF NOT EXISTS assessment_type VARCHAR(60) NOT NULL DEFAULT 'Examination';
 
 CREATE INDEX IF NOT EXISTS idx_exams_status_scheduled_at
     ON exams (status, scheduled_at);
@@ -185,6 +221,13 @@ CREATE TABLE IF NOT EXISTS exam_attempts (
 );
 
 -- Keep existing development databases compatible with the current schema.
+ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS deadline_at TIMESTAMP WITH TIME ZONE;
+UPDATE exam_attempts SET deadline_at = (to_jsonb(exam_attempts)->>'deadline')::timestamptz
+    WHERE deadline_at IS NULL;
+ALTER TABLE exam_attempts ALTER COLUMN deadline_at SET NOT NULL;
+ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS deadline TIMESTAMP WITH TIME ZONE;
+ALTER TABLE exam_attempts ALTER COLUMN deadline DROP NOT NULL;
+
 ALTER TABLE exam_attempts
     ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP WITH TIME ZONE;
 
@@ -238,6 +281,11 @@ CREATE TABLE IF NOT EXISTS attempt_questions (
     CONSTRAINT ck_attempt_questions_points_positive
         CHECK (points_snapshot > 0)
 );
+
+ALTER TABLE attempt_questions ADD COLUMN IF NOT EXISTS points_snapshot INT;
+UPDATE attempt_questions aq SET points_snapshot = q.points
+    FROM questions q WHERE aq.question_id = q.id AND aq.points_snapshot IS NULL;
+ALTER TABLE attempt_questions ALTER COLUMN points_snapshot SET NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_attempt_questions_question_id
     ON attempt_questions (question_id);

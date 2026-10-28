@@ -4,6 +4,8 @@ import DevelopmentPage from "./components/common/DevelopmentPage";
 
 import LoginPage from "./pages/LoginPage/LoginPage";
 import RegisterPage from "./pages/RegisterPage/RegisterPage";
+import CoursesPage from "./pages/CoursesPage/CoursesPage";
+import CourseDetailPage from "./pages/CoursesPage/CourseDetailPage";
 import StudentDashboardPage from "./pages/StudentDashboardPage/StudentDashboardPage";
 import ExamDetailPage from "./pages/ExamDetailPage/ExamDetailPage";
 import ExamRoomPage from "./pages/ExamRoomPage/ExamRoomPage";
@@ -56,6 +58,8 @@ function App() {
           <Route index element={<TeacherDashboardPage />} />
 
           <Route path="exams" element={<ExamManagementPage />} />
+          <Route path="courses" element={<CoursesPage />} />
+          <Route path="courses/:courseId" element={<CourseDetailPage />} />
 
           <Route path="exams/new" element={<CreateExamPage />} />
 
