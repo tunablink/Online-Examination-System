@@ -3,7 +3,13 @@
 ## Implementation update — 2026-10-28
 
 This section supersedes the historical progress snapshots below. It describes
-the current source, including uncommitted deadline/reliability work.
+the current source and its verification status.
+
+- Student account creation is teacher-managed at the WebSocket boundary:
+  anonymous `REGISTER` requests return `AUTHENTICATION_REQUIRED`, student
+  requests return `FORBIDDEN`, and teachers can create only `STUDENT` accounts.
+  Integration tests exercise real login, routing, database writes and password
+  hashing; client-supplied roles cannot elevate the created account.
 
 - Teacher submission review is integrated: `GET_EXAM_SUBMISSIONS` and
   `GET_SUBMISSION_RESULT`, teacher ownership checks, list/result pages and tests.
@@ -31,7 +37,7 @@ the current source, including uncommitted deadline/reliability work.
   The script must be run on the same database used by the application.
 - See [deadline behavior, migration and manual checks](docs/deadline-and-recovery.md).
 
-Verified on 2026-10-28: full Maven suite **258 tests, 0 failures, 0 errors**;
+Verified on 2026-10-28: full Maven suite **261 tests, 0 failures, 0 errors, 0 skipped**;
 frontend ESLint and production build passed (**141 modules**). The focused
 attempt integration class passed 9 tests, including real concurrent submit versus
 deadline finalization. Monitoring tests verify owner-only push after commit and no

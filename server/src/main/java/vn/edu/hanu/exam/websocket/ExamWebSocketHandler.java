@@ -576,6 +576,18 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             ClientMessage clientMessage)
             throws Exception {
 
+        var actor = authenticatedSessionRegistry.findUser(session.getId());
+        if (actor.isEmpty()) {
+            sendMessage(session, ServerMessage.error(clientMessage.requestId(),
+                    "AUTHENTICATION_REQUIRED", "Please sign in to create a student account."));
+            return;
+        }
+        if (actor.orElseThrow().role() != vn.edu.hanu.exam.domain.UserRole.TEACHER) {
+            sendMessage(session, ServerMessage.error(clientMessage.requestId(),
+                    "FORBIDDEN", "Only teachers can create student accounts."));
+            return;
+        }
+
         ServerMessage response =
                 registrationMessageHandler.handle(
                         clientMessage.requestId(),
