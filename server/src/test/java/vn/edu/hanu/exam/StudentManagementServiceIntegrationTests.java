@@ -14,9 +14,13 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.transaction.annotation.Transactional;
 
 import vn.edu.hanu.exam.exception.StudentManagementException;
+import vn.edu.hanu.exam.service.RegisterUserCommand;
+import vn.edu.hanu.exam.service.RegisteredUser;
+import vn.edu.hanu.exam.service.student.StudentAccountService;
 import vn.edu.hanu.exam.service.student.StudentDetails;
 import vn.edu.hanu.exam.service.student.StudentManagementService;
 
@@ -27,7 +31,13 @@ class StudentManagementServiceIntegrationTests {
     private StudentManagementService studentService;
 
     @Autowired
+    private StudentAccountService studentAccounts;
+
+    @Autowired
     private NamedParameterJdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
 
     @Test
     void listReturnsOnlyStudentsInStableCreatedAtAndIdOrder() {
@@ -41,11 +51,10 @@ class StudentManagementServiceIntegrationTests {
         List<Long> ids = students.stream().map(StudentDetails::id).toList();
 
         assertTrue(ids.contains(olderStudent));
-        assertTrue(ids.contains(newerStudent));
+        assertFalse(ids.contains(newerStudent));
         assertTrue(ids.contains(sameTimeStudent));
         assertFalse(ids.contains(teacher));
-        assertTrue(ids.indexOf(sameTimeStudent) < ids.indexOf(newerStudent));
-        assertTrue(ids.indexOf(newerStudent) < ids.indexOf(olderStudent));
+        assertTrue(ids.indexOf(sameTimeStudent) < ids.indexOf(olderStudent));
     }
 
     @Test
@@ -66,6 +75,62 @@ class StudentManagementServiceIntegrationTests {
         assertNotFound(Long.MAX_VALUE);
         assertNotFound(0);
         assertNotFound(-1);
+    }
+
+    @Test
+    void departmentEnteredWhenCreatingStudentIsReturnedForEdit() {
+        String suffix = UUID.randomUUID().toString().replace("-", "");
+        RegisteredUser created = studentAccounts.create(new RegisterUserCommand(
+                "dept_" + suffix, "StrongPassword123", "Department Student",
+                suffix + "@directory.example.com"), "IT");
+
+        StudentDetails details = studentService.findStudentById(created.id());
+        assertEquals("IT", details.department());
+    }
+
+    @Test
+    void teacherCanUpdateStudentDetailsAndDeactivateAccountWithoutDeletingHistory() {
+        OffsetDateTime createdAt = OffsetDateTime.parse("2026-10-26T12:00:00+07:00");
+        long studentId = insertUser("STUDENT", "editable_student", true, createdAt);
+        long teacherId = insertUser("TEACHER", "protected_teacher", true, createdAt);
+
+        String originalUsername = studentService.findStudentById(studentId).username();
+        StudentManagementException missingDepartment = assertThrows(StudentManagementException.class,
+                () -> studentService.updateStudent(studentId, originalUsername, "Updated Student",
+                        "updated@example.com", "", "", ""));
+        assertEquals("INVALID_DEPARTMENT", missingDepartment.code());
+        assertEquals("Directory Test User", studentService.findStudentById(studentId).fullName());
+
+        String newUsername = "edited_" + studentId;
+        StudentDetails updated = studentService.updateStudent(studentId, newUsername, "Updated Student",
+                "UPDATED@EXAMPLE.COM", "Computer Science", "NewPassword123", "NewPassword123");
+        assertEquals(newUsername, updated.username());
+        assertEquals("Updated Student", updated.fullName());
+        assertEquals("updated@example.com", updated.email());
+        assertEquals("Computer Science", updated.department());
+        assertEquals(createdAt.toInstant(), updated.createdAt().toInstant());
+        String passwordHash = jdbcTemplate.queryForObject("SELECT password_hash FROM users WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", studentId), String.class);
+        assertTrue(passwordEncoder.matches("NewPassword123", passwordHash));
+
+        StudentDetails renamed = studentService.updateStudent(studentId, newUsername, "Renamed Student",
+                "updated@example.com", "Computer Science", "", "");
+        assertEquals("Renamed Student", renamed.fullName());
+        assertEquals(passwordHash, jdbcTemplate.queryForObject("SELECT password_hash FROM users WHERE id = :id",
+                new MapSqlParameterSource().addValue("id", studentId), String.class));
+
+        StudentManagementException teacherUpdate = assertThrows(StudentManagementException.class,
+                () -> studentService.updateStudent(teacherId, "wrong_student", "Wrong Name",
+                        "wrong@example.com", "Science", "", ""));
+        assertEquals("STUDENT_NOT_FOUND", teacherUpdate.code());
+
+        studentService.deactivateStudent(studentId);
+        assertFalse(studentService.findStudentById(studentId).active());
+        assertFalse(studentService.findAllStudents().students().stream().anyMatch(student -> student.id() == studentId));
+        StudentManagementException repeatedDelete = assertThrows(StudentManagementException.class,
+                () -> studentService.deactivateStudent(studentId));
+        assertEquals("STUDENT_NOT_FOUND", repeatedDelete.code());
+        assertNotFound(teacherId);
     }
 
     private long insertUser(String role, String prefix, boolean active, OffsetDateTime createdAt) {

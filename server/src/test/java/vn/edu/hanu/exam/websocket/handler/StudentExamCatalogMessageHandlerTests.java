@@ -47,7 +47,7 @@ class StudentExamCatalogMessageHandlerTests {
     void authenticatedStudentCanListPublishedExamsAndRequestIdIsPreserved() {
         authenticate(UserRole.STUDENT);
         AvailableExamList list = new AvailableExamList(List.of(sampleExam()));
-        when(catalogService.findAllAvailable()).thenReturn(list);
+        when(catalogService.findAllAvailable(20L)).thenReturn(list);
 
         ServerMessage response = handler.handleList(SESSION_ID, REQUEST_ID);
 
@@ -58,7 +58,7 @@ class StudentExamCatalogMessageHandlerTests {
     void authenticatedStudentCanGetPublishedExamDetails() {
         authenticate(UserRole.STUDENT);
         AvailableExamDetails details = sampleExam();
-        when(catalogService.findAvailableById(12L)).thenReturn(details);
+        when(catalogService.findAvailableById(12L, 20L)).thenReturn(details);
 
         ServerMessage response = handler.handleGet(
                 SESSION_ID,
@@ -66,13 +66,13 @@ class StudentExamCatalogMessageHandlerTests {
                 Map.of("examId", 12L));
 
         assertSuccess(response, "AVAILABLE_EXAM_DETAILS", details);
-        verify(catalogService).findAvailableById(12L);
+        verify(catalogService).findAvailableById(12L, 20L);
     }
 
     @Test
     void unauthenticatedSessionIsRejectedBeforeCallingService() {
         assertError(handler.handleList("missing-session", REQUEST_ID), "AUTHENTICATION_REQUIRED");
-        verify(catalogService, never()).findAllAvailable();
+        verify(catalogService, never()).findAllAvailable(20L);
     }
 
     @Test
@@ -80,7 +80,7 @@ class StudentExamCatalogMessageHandlerTests {
         authenticate(UserRole.TEACHER);
 
         assertError(handler.handleList(SESSION_ID, REQUEST_ID), "FORBIDDEN");
-        verify(catalogService, never()).findAllAvailable();
+        verify(catalogService, never()).findAllAvailable(20L);
     }
 
     @Test
@@ -93,13 +93,13 @@ class StudentExamCatalogMessageHandlerTests {
                 SESSION_ID, REQUEST_ID, Map.of("examId", "12")), "INVALID_PAYLOAD");
         assertError(handler.handleGet(
                 SESSION_ID, REQUEST_ID, Map.of("examId", 12.5)), "INVALID_PAYLOAD");
-        verify(catalogService, never()).findAvailableById(anyLong());
+        verify(catalogService, never()).findAvailableById(anyLong(), anyLong());
     }
 
     @Test
     void unavailableExamKeepsBusinessErrorCode() {
         authenticate(UserRole.STUDENT);
-        when(catalogService.findAvailableById(12L)).thenThrow(
+        when(catalogService.findAvailableById(12L, 20L)).thenThrow(
                 new StudentExamCatalogException("EXAM_NOT_AVAILABLE", "Exam is not available."));
 
         assertError(handler.handleGet(
@@ -109,7 +109,7 @@ class StudentExamCatalogMessageHandlerTests {
     @Test
     void databaseErrorKeepsSafeBusinessErrorCode() {
         authenticate(UserRole.STUDENT);
-        when(catalogService.findAllAvailable()).thenThrow(
+        when(catalogService.findAllAvailable(20L)).thenThrow(
                 new StudentExamCatalogException("DATABASE_ERROR", "The exam catalog could not be read."));
 
         assertError(handler.handleList(SESSION_ID, REQUEST_ID), "DATABASE_ERROR");
@@ -118,7 +118,7 @@ class StudentExamCatalogMessageHandlerTests {
     @Test
     void unexpectedExceptionReturnsInternalServerError() {
         authenticate(UserRole.STUDENT);
-        when(catalogService.findAllAvailable()).thenThrow(new RuntimeException("internal secret"));
+        when(catalogService.findAllAvailable(20L)).thenThrow(new RuntimeException("internal secret"));
 
         ServerMessage response = handler.handleList(SESSION_ID, REQUEST_ID);
 

@@ -9,4 +9,8 @@ public interface StudentExamCatalogRepository {
     List<AvailableExamDetails> findAllPublished();
 
     Optional<AvailableExamDetails> findPublishedById(long examId);
+
+    List<AvailableExamDetails> findAllPublishedForStudent(long studentId);
+
+    Optional<AvailableExamDetails> findPublishedByIdForStudent(long examId, long studentId);
 }

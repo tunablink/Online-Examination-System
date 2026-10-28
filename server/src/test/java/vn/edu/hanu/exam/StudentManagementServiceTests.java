@@ -87,6 +87,7 @@ class StudentManagementServiceTests {
                 "username",
                 "fullName",
                 "email",
+                "department",
                 "active",
                 "createdAt"), componentNames);
         assertFalse(componentNames.contains("password"));

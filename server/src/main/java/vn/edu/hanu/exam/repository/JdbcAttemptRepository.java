@@ -31,7 +31,7 @@ import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 public class JdbcAttemptRepository implements AttemptRepository {
         private static final String EXAM_COLUMNS = """
                         SELECT id, title, description, duration_minutes, status,
-                               created_by, created_at, updated_at
+                               created_by, created_at, updated_at, course_id
                         FROM exams
                         """;
 
@@ -522,10 +522,12 @@ public class JdbcAttemptRepository implements AttemptRepository {
                                 resultSet.getString("title"),
                                 resultSet.getString("description"),
                                 resultSet.getInt("duration_minutes"),
+                                null,
                                 ExamStatus.valueOf(resultSet.getString("status")),
                                 resultSet.getLong("created_by"),
                                 resultSet.getObject("created_at", OffsetDateTime.class),
-                                resultSet.getObject("updated_at", OffsetDateTime.class));
+                                resultSet.getObject("updated_at", OffsetDateTime.class),
+                                resultSet.getObject("course_id", Long.class), null);
         }
 
         private static ExamAttempt mapAttempt(ResultSet resultSet, int rowNumber) throws SQLException {

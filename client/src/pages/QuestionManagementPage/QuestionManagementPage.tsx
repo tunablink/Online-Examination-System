@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
@@ -48,6 +48,8 @@ function questionPayload(question: QuestionEditorQuestion, displayOrder: number)
 
 function QuestionManagementPage() {
   const { examId } = useParams();
+  const [searchParams] = useSearchParams();
+  const requestedQuestionId = searchParams.get('questionId');
   const navigate = useNavigate();
   const { status: connectionStatus, sendMessage } = useWebSocket();
   const parsedExamId = Number(examId);
@@ -87,6 +89,9 @@ function QuestionManagementPage() {
       const received = message.data?.questions;
       if (message.type === 'EXAM_QUESTIONS' && Array.isArray(received) && received.every(isQuestion)) {
         setQuestions([...received].sort((a, b) => a.displayOrder - b.displayOrder).map(toEditorQuestion));
+        if (requestedQuestionId && received.some((question) => String(question.id) === requestedQuestionId)) {
+          setEditingId(requestedQuestionId);
+        }
         return;
       }
       setFeedback({ type: 'error', title: 'Unable to load questions', message: message.error?.message ?? 'The server returned an invalid question list.' });
@@ -95,7 +100,7 @@ function QuestionManagementPage() {
       setLoading(false);
       setFeedback({ type: 'error', message: 'The question request could not be sent.' });
     }
-  }, [connectionStatus, numericExamId, sendMessage]);
+  }, [connectionStatus, numericExamId, requestedQuestionId, sendMessage]);
 
   useEffect(() => {
     if (connectionStatus !== 'connected') return;
@@ -104,6 +109,12 @@ function QuestionManagementPage() {
   }, [connectionStatus, loadQuestions]);
 
   const editing = questions.find((question) => question.id === editingId) ?? null;
+
+  useEffect(() => {
+    if (!requestedQuestionId || editingId !== requestedQuestionId || loading || examStatus !== 'DRAFT') return;
+    const timer = window.setTimeout(() => document.getElementById('question-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+    return () => window.clearTimeout(timer);
+  }, [editingId, examStatus, loading, requestedQuestionId]);
 
   const saveExamDetails = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -207,7 +218,7 @@ function QuestionManagementPage() {
       </div>
     </form>
     <div className="mt-5 grid gap-5">
-      {examStatus === 'DRAFT' && <QuestionEditorForm isSaving={saving} key={editing?.id ?? `new-${formVersion}`} initialQuestion={editing} onCancel={() => setEditingId(null)} onSave={save} />}
+      {examStatus === 'DRAFT' && <div id="question-editor"><QuestionEditorForm isSaving={saving} key={editing?.id ?? `new-${formVersion}`} initialQuestion={editing} onCancel={() => setEditingId(null)} onSave={save} /></div>}
       <section>
         <div className="mb-3 flex items-end justify-between"><div><h2 className="text-base font-bold">Examination questions</h2><p className="mt-1 text-xs text-[#7c898e]">{questions.length} persisted questions</p></div></div>
         {loading ? <div className="rounded-xl border border-[#dce7ea] bg-white py-12 text-center text-sm text-[#7a888d]">Loading questions through WebSocket…</div> : <div className="grid gap-3">{questions.map((question,index) => <QuestionListItem actionsEnabled={examStatus === 'DRAFT' && !saving} index={index} isFirst={index === 0} isLast={index === questions.length - 1} key={question.id} onDelete={setPendingDelete} onEdit={(selected) => { setEditingId(selected.id); window.scrollTo({ top: 0, behavior: 'smooth' }); }} onMoveDown={(id) => move(id, 1)} onMoveUp={(id) => move(id, -1)} question={question} />)}{questions.length === 0 && <div className="rounded-xl border border-dashed border-[#cad9dd] bg-white py-12 text-center text-sm text-[#7a888d]">Add the first question using the editor above.</div>}</div>}

@@ -9,7 +9,21 @@ public record AvailableExamDetails(
         int durationMinutes,
         long questionCount,
         long totalPoints,
-        OffsetDateTime scheduledAt) {
+        OffsetDateTime scheduledAt,
+        String courseName,
+        String assessmentType) {
+
+    public AvailableExamDetails(long id, String title, String description, int durationMinutes,
+            long questionCount, long totalPoints, OffsetDateTime scheduledAt, String courseName) {
+        this(id, title, description, durationMinutes, questionCount, totalPoints, scheduledAt, courseName,
+                "Examination");
+    }
+
+    public AvailableExamDetails(long id, String title, String description, int durationMinutes,
+            long questionCount, long totalPoints, OffsetDateTime scheduledAt) {
+        this(id, title, description, durationMinutes, questionCount, totalPoints, scheduledAt, null,
+                "Examination");
+    }
 
     public AvailableExamDetails(
             long id,
@@ -18,6 +32,7 @@ public record AvailableExamDetails(
             int durationMinutes,
             long questionCount,
             long totalPoints) {
-        this(id, title, description, durationMinutes, questionCount, totalPoints, null);
+        this(id, title, description, durationMinutes, questionCount, totalPoints, null, null,
+                "Examination");
     }
 }

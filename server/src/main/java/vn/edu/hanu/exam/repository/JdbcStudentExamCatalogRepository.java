@@ -23,6 +23,8 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                    e.description,
                    e.duration_minutes,
                    e.scheduled_at,
+                   e.assessment_type,
+                   (SELECT name FROM courses WHERE courses.id = e.course_id) AS course_name,
                    COUNT(q.id) AS question_count,
                    COALESCE(SUM(q.points), 0) AS total_points
             FROM exams e
@@ -34,6 +36,7 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                      e.description,
                      e.duration_minutes,
                      e.scheduled_at,
+                     e.assessment_type,
                      e.created_at
             """;
     private static final RowMapper<AvailableExamDetails> AVAILABLE_EXAM_ROW_MAPPER =
@@ -73,6 +76,34 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
         return exams.stream().findFirst();
     }
 
+    @Override
+    public List<AvailableExamDetails> findAllPublishedForStudent(long studentId) {
+        String sql = SELECT_PUBLISHED_EXAM_METADATA + """
+                WHERE e.status = :publishedStatus
+                  AND e.course_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM course_students cs WHERE cs.course_id = e.course_id AND cs.student_id = :studentId)
+                """ + GROUP_BY_EXAM_METADATA + """
+                HAVING COUNT(q.id) > 0
+                ORDER BY e.created_at DESC, e.id DESC
+                """;
+        return jdbcTemplate.query(sql, Map.of("publishedStatus", PUBLISHED_STATUS, "studentId", studentId), AVAILABLE_EXAM_ROW_MAPPER);
+    }
+
+    @Override
+    public Optional<AvailableExamDetails> findPublishedByIdForStudent(long examId, long studentId) {
+        String sql = SELECT_PUBLISHED_EXAM_METADATA + """
+                WHERE e.id = :examId AND e.status = :publishedStatus
+                  AND e.course_id IS NOT NULL
+                  AND EXISTS (
+                    SELECT 1 FROM course_students cs WHERE cs.course_id = e.course_id AND cs.student_id = :studentId)
+                """ + GROUP_BY_EXAM_METADATA + """
+                HAVING COUNT(q.id) > 0
+                """;
+        return jdbcTemplate.query(sql, Map.of("examId", examId, "studentId", studentId, "publishedStatus", PUBLISHED_STATUS),
+                AVAILABLE_EXAM_ROW_MAPPER).stream().findFirst();
+    }
+
     private static AvailableExamDetails mapAvailableExam(ResultSet resultSet, int rowNumber)
             throws SQLException {
         return new AvailableExamDetails(
@@ -82,6 +113,8 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                 resultSet.getInt("duration_minutes"),
                 resultSet.getLong("question_count"),
                 resultSet.getLong("total_points"),
-                resultSet.getObject("scheduled_at", OffsetDateTime.class));
+                resultSet.getObject("scheduled_at", OffsetDateTime.class),
+                resultSet.getString("course_name"),
+                resultSet.getString("assessment_type"));
     }
 }

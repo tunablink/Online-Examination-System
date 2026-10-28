@@ -20,6 +20,12 @@ public interface ExamRepository {
             OffsetDateTime scheduledAt,
             long createdBy);
 
+    Exam createInCourse(String title, String description, int durationMinutes,
+            OffsetDateTime scheduledAt, long createdBy, long courseId);
+
+    Exam createInCourse(String title, String description, int durationMinutes,
+            OffsetDateTime scheduledAt, long createdBy, long courseId, String assessmentType);
+
     List<Exam> findAllByCreatedBy(long createdBy);
 
     Optional<Exam> findByIdAndCreatedBy(
@@ -40,6 +46,8 @@ public interface ExamRepository {
             String description,
             int durationMinutes,
             OffsetDateTime scheduledAt);
+
+    boolean updateDraftAssessmentType(long examId, long teacherId, String assessmentType);
 
     ExamPublishReadiness getPublishReadiness(long examId);
 

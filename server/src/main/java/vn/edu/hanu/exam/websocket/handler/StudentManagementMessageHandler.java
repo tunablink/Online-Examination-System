@@ -7,15 +7,19 @@ import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.socket.WebSocketSession;
 
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 import vn.edu.hanu.exam.domain.UserRole;
 import vn.edu.hanu.exam.exception.StudentManagementException;
+import vn.edu.hanu.exam.exception.RegistrationException;
 import vn.edu.hanu.exam.protocol.ClientMessage;
 import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
+import vn.edu.hanu.exam.service.RegisterUserCommand;
+import vn.edu.hanu.exam.service.student.StudentAccountService;
 import vn.edu.hanu.exam.service.student.StudentManagementService;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.websocket.dto.GetStudentPayload;
@@ -34,14 +38,23 @@ public class StudentManagementMessageHandler {
     private final StudentManagementService studentService;
     private final AuthenticatedSessionRegistry sessionRegistry;
     private final JsonMapper jsonMapper;
+    private final StudentAccountService accountService;
 
+    @Autowired
     public StudentManagementMessageHandler(
             StudentManagementService studentService,
             AuthenticatedSessionRegistry sessionRegistry,
-            JsonMapper jsonMapper) {
+            JsonMapper jsonMapper,
+            StudentAccountService accountService) {
         this.studentService = studentService;
         this.sessionRegistry = sessionRegistry;
         this.jsonMapper = jsonMapper;
+        this.accountService = accountService;
+    }
+
+    public StudentManagementMessageHandler(StudentManagementService studentService,
+            AuthenticatedSessionRegistry sessionRegistry, JsonMapper jsonMapper) {
+        this(studentService, sessionRegistry, jsonMapper, null);
     }
 
     public ServerMessage handleList(WebSocketSession session, ClientMessage message) {
@@ -50,6 +63,72 @@ public class StudentManagementMessageHandler {
 
     public ServerMessage handleGet(WebSocketSession session, ClientMessage message) {
         return handleGet(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleCreate(WebSocketSession session, ClientMessage message) {
+        return handleCreate(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleImport(WebSocketSession session, ClientMessage message) {
+        return handleImport(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleUpdate(WebSocketSession session, ClientMessage message) {
+        return handleUpdate(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleDelete(WebSocketSession session, ClientMessage message) {
+        return handleDelete(session.getId(), message.requestId(), message.payload());
+    }
+
+    public ServerMessage handleCreate(String sessionId, String requestId, Map<String, Object> payload) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            if (payload == null) throw new InvalidPayloadException();
+            String username = stringField(payload, "username");
+            String fullName = stringField(payload, "fullName");
+            String email = stringField(payload, "email");
+            String password = stringField(payload, "password");
+            String confirmPassword = stringField(payload, "confirmPassword");
+            if (!password.equals(confirmPassword)) throw new RegistrationException("PASSWORD_MISMATCH", "Password confirmation does not match.");
+            String department = stringField(payload, "department");
+            if (department.isBlank()) throw new RegistrationException("INVALID_DEPARTMENT", "Department is required.");
+            return ServerMessage.success(requestId, "STUDENT_CREATED", accountService.create(
+                    new RegisterUserCommand(username, password, fullName, email), department));
+        });
+    }
+
+    public ServerMessage handleImport(String sessionId, String requestId, Map<String, Object> payload) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            if (payload == null) throw new InvalidPayloadException();
+            return ServerMessage.success(requestId, "STUDENTS_IMPORTED",
+                    accountService.importXlsx(stringField(payload, "contentBase64")));
+        });
+    }
+
+    public ServerMessage handleUpdate(String sessionId, String requestId, Map<String, Object> payload) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            if (payload == null || !isIntegralNumber(payload.get("studentId"))) throw new InvalidPayloadException();
+            long studentId = ((Number) payload.get("studentId")).longValue();
+            String department = stringField(payload, "department");
+            return ServerMessage.success(requestId, "STUDENT_UPDATED", studentService.updateStudent(studentId,
+                    stringField(payload, "username"), stringField(payload, "fullName"), stringField(payload, "email"),
+                    department, stringField(payload, "password"), stringField(payload, "confirmPassword")));
+        });
+    }
+
+    public ServerMessage handleDelete(String sessionId, String requestId, Map<String, Object> payload) {
+        return withTeacher(sessionId, requestId, teacher -> {
+            if (payload == null || !isIntegralNumber(payload.get("studentId"))) throw new InvalidPayloadException();
+            long studentId = ((Number) payload.get("studentId")).longValue();
+            studentService.deactivateStudent(studentId);
+            return ServerMessage.success(requestId, "STUDENT_DELETED", Map.of("studentId", studentId));
+        });
+    }
+
+    private static String stringField(Map<String, Object> payload, String name) {
+        Object value = payload.get(name);
+        if (!(value instanceof String text)) throw new InvalidPayloadException();
+        return text;
     }
 
     public ServerMessage handleList(String sessionId, String requestId) {
@@ -97,6 +176,8 @@ public class StudentManagementMessageHandler {
         } catch (StudentManagementException exception) {
             LOGGER.info("Student directory operation rejected: requestId={}, code={}",
                     requestId, exception.code());
+            return ServerMessage.error(requestId, exception.code(), exception.getMessage());
+        } catch (RegistrationException exception) {
             return ServerMessage.error(requestId, exception.code(), exception.getMessage());
         } catch (RuntimeException exception) {
             LOGGER.error("Unexpected student directory error: requestId={}", requestId, exception);

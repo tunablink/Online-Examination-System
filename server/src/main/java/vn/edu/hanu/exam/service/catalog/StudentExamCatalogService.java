@@ -25,6 +25,14 @@ public class StudentExamCatalogService {
         }
     }
 
+    public AvailableExamList findAllAvailable(long studentId) {
+        try {
+            return new AvailableExamList(catalogRepository.findAllPublishedForStudent(studentId));
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw databaseError(exception);
+        }
+    }
+
     public AvailableExamDetails findAvailableById(long examId) {
         if (examId <= 0) {
             throw notAvailable();
@@ -32,6 +40,16 @@ public class StudentExamCatalogService {
 
         try {
             return catalogRepository.findPublishedById(examId)
+                    .orElseThrow(StudentExamCatalogService::notAvailable);
+        } catch (DataAccessException | IllegalStateException exception) {
+            throw databaseError(exception);
+        }
+    }
+
+    public AvailableExamDetails findAvailableById(long examId, long studentId) {
+        if (examId <= 0) throw notAvailable();
+        try {
+            return catalogRepository.findPublishedByIdForStudent(examId, studentId)
                     .orElseThrow(StudentExamCatalogService::notAvailable);
         } catch (DataAccessException | IllegalStateException exception) {
             throw databaseError(exception);

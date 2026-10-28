@@ -20,6 +20,7 @@ function isAvailableExam(value: unknown): value is AvailableExamDetailsData {
     typeof exam.id === "number" &&
     typeof exam.title === "string" &&
     (typeof exam.description === "string" || exam.description === null) &&
+    typeof exam.assessmentType === "string" &&
     typeof exam.durationMinutes === "number" &&
     typeof exam.questionCount === "number" &&
     typeof exam.totalPoints === "number"
@@ -225,6 +226,7 @@ function ExamDetailPage() {
                 <h1 className="mt-3 text-[27px] font-bold tracking-[-.04em] max-sm:text-[23px]">
                   {exam.title}
                 </h1>
+                {exam.courseName && <p className="mt-1 text-sm font-semibold text-[#00778b]">Course: {exam.courseName}</p>}
                 <p className="mt-1 text-base text-[#6e7d83]">
                   {exam.description?.trim() || "No description was provided."}
                 </p>

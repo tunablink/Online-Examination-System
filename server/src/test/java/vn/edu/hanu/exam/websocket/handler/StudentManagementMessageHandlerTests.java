@@ -72,6 +72,34 @@ class StudentManagementMessageHandlerTests {
     }
 
     @Test
+    void teacherCanUpdateAndDeactivateStudentThroughWebSocketHandler() {
+        authenticate(UserRole.TEACHER);
+        StudentDetails updated = sampleStudent();
+        when(studentService.updateStudent(12L, "student01", "Nguyen Van A", "student01@hanu.edu.vn",
+                "Computer Science", "", ""))
+                .thenReturn(updated);
+
+        ServerMessage update = handler.handleUpdate(SESSION_ID, REQUEST_ID, Map.of(
+                "studentId", 12L, "username", "student01", "fullName", "Nguyen Van A",
+                "email", "student01@hanu.edu.vn", "department", "Computer Science",
+                "password", "", "confirmPassword", ""));
+        assertSuccess(update, "STUDENT_UPDATED", updated);
+
+        ServerMessage delete = handler.handleDelete(SESSION_ID, REQUEST_ID, Map.of("studentId", 12L));
+        assertSuccess(delete, "STUDENT_DELETED", Map.of("studentId", 12L));
+        verify(studentService).deactivateStudent(12L);
+    }
+
+    @Test
+    void studentCannotUpdateOrDeactivateAnotherStudent() {
+        authenticate(UserRole.STUDENT);
+        assertError(handler.handleUpdate(SESSION_ID, REQUEST_ID, Map.of(
+                "studentId", 12L, "fullName", "Changed", "email", "changed@example.com")), "FORBIDDEN");
+        assertError(handler.handleDelete(SESSION_ID, REQUEST_ID, Map.of("studentId", 12L)), "FORBIDDEN");
+        verify(studentService, never()).deactivateStudent(anyLong());
+    }
+
+    @Test
     void unauthenticatedSessionIsRejectedBeforeCallingService() {
         assertError(handler.handleList("missing-session", REQUEST_ID), "AUTHENTICATION_REQUIRED");
         verify(studentService, never()).findAllStudents();

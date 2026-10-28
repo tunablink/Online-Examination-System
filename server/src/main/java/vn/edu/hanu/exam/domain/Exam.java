@@ -11,8 +11,21 @@ public record Exam(
     ExamStatus status,
     long createdBy,           // FK → users.id
     OffsetDateTime createdAt,
-    OffsetDateTime updatedAt
+    OffsetDateTime updatedAt,
+    Long courseId,
+    String courseName,
+    String assessmentType
 ) {
+    public Exam(long id, String title, String description, int durationMinutes, OffsetDateTime scheduledAt,
+            ExamStatus status, long createdBy, OffsetDateTime createdAt, OffsetDateTime updatedAt,
+            Long courseId, String courseName) {
+        this(id, title, description, durationMinutes, scheduledAt, status, createdBy, createdAt,
+                updatedAt, courseId, courseName, "Examination");
+    }
+    public Exam(long id, String title, String description, int durationMinutes, OffsetDateTime scheduledAt,
+            ExamStatus status, long createdBy, OffsetDateTime createdAt, OffsetDateTime updatedAt) {
+        this(id, title, description, durationMinutes, scheduledAt, status, createdBy, createdAt, updatedAt, null, null, "Examination");
+    }
     public Exam(
             long id,
             String title,
@@ -22,6 +35,6 @@ public record Exam(
             long createdBy,
             OffsetDateTime createdAt,
             OffsetDateTime updatedAt) {
-        this(id, title, description, durationMinutes, null, status, createdBy, createdAt, updatedAt);
+        this(id, title, description, durationMinutes, null, status, createdBy, createdAt, updatedAt, null, null, "Examination");
     }
 }

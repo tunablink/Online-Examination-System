@@ -32,6 +32,7 @@ import vn.edu.hanu.exam.service.exam.ExamManagementService;
 import vn.edu.hanu.exam.service.exam.TeacherExamList;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.service.exam.UpdateExamCommand;
+import vn.edu.hanu.exam.service.question.CreateQuestionCommand;
 
 class ExamManagementMessageHandlerTests {
     private static final String SESSION_ID = "session-1";
@@ -53,45 +54,61 @@ class ExamManagementMessageHandlerTests {
         authenticate(UserRole.TEACHER);
         ExamDetails exam = sampleExam();
         OffsetDateTime scheduledAt = OffsetDateTime.parse("2026-12-26T17:30:00+07:00");
-        when(examService.createExam(eq(10L), any(CreateExamCommand.class))).thenReturn(exam);
+        when(examService.createExamWithQuestions(eq(10L), eq(3L), any(CreateExamCommand.class),
+                eq("Midterm examination"), any())).thenReturn(exam);
 
         ServerMessage response = handler.handleCreate(SESSION_ID, REQUEST_ID, Map.of(
                 "title", "Java Midterm",
                 "description", "Core Java",
                 "durationMinutes", 60,
-                "scheduledAt", scheduledAt.toString()));
+                "courseId", 3L,
+                "scheduledAt", scheduledAt.toString(),
+                "assessmentType", "Midterm examination",
+                "questions", List.of(Map.of("content", "Which is Java?", "points", 1,
+                        "displayOrder", 0, "choices", List.of(
+                                Map.of("content", "A language", "correct", true, "displayOrder", 0),
+                                Map.of("content", "A database", "correct", false, "displayOrder", 1))))));
 
         assertEquals(REQUEST_ID, response.requestId());
         assertEquals("EXAM_CREATED", response.type());
         assertEquals(exam, response.data());
         assertNull(response.error());
-        verify(examService).createExam(
+        verify(examService).createExamWithQuestions(
                 10L,
+                3L,
                 new CreateExamCommand(
                         "Java Midterm",
                         "Core Java",
                         60,
-                        scheduledAt.withOffsetSameInstant(ZoneOffset.UTC)));
+                        scheduledAt.withOffsetSameInstant(ZoneOffset.UTC)),
+                "Midterm examination",
+                List.of(new CreateQuestionCommand(0, "Which is Java?", 1, 0,
+                        List.of(new CreateQuestionCommand.ChoiceCommand("A language", true, 0),
+                                new CreateQuestionCommand.ChoiceCommand("A database", false, 1)))));
     }
 
     @Test
     void missingTitleReturnsServiceValidationCode() {
         authenticate(UserRole.TEACHER);
-        when(examService.createExam(eq(10L), any(CreateExamCommand.class)))
+        when(examService.createExamWithQuestions(eq(10L), eq(3L), any(CreateExamCommand.class),
+                eq("Quiz"), any()))
                 .thenThrow(new ExamManagementException("INVALID_EXAM_TITLE", "Exam title is required."));
 
         assertError(handler.handleCreate(
-                SESSION_ID, REQUEST_ID, Map.of("durationMinutes", 60)), "INVALID_EXAM_TITLE");
+                SESSION_ID, REQUEST_ID, Map.of("durationMinutes", 60, "courseId", 3L,
+                        "assessmentType", "Quiz", "questions", List.of())), "INVALID_EXAM_TITLE");
     }
 
     @Test
     void invalidDurationReturnsExpectedCode() {
         authenticate(UserRole.TEACHER);
-        when(examService.createExam(eq(10L), any(CreateExamCommand.class)))
+        when(examService.createExamWithQuestions(eq(10L), eq(3L), any(CreateExamCommand.class),
+                eq("Quiz"), any()))
                 .thenThrow(new ExamManagementException("INVALID_EXAM_DURATION", "Invalid duration."));
 
         assertError(handler.handleCreate(SESSION_ID, REQUEST_ID, Map.of(
-                "title", "Exam", "durationMinutes", 0)), "INVALID_EXAM_DURATION");
+                "title", "Exam", "durationMinutes", 0, "courseId", 3L,
+                "assessmentType", "Quiz", "questions", List.of())), "INVALID_EXAM_DURATION");
     }
 
     @Test

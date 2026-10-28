@@ -51,6 +51,26 @@ class MessageTypeContractTests {
                 "GET_STUDENT",
                 "STUDENT_DETAILS",
 
+                "CREATE_STUDENT",
+                "STUDENT_CREATED",
+
+                "IMPORT_STUDENTS",
+                "STUDENTS_IMPORTED",
+                "UPDATE_STUDENT",
+                "STUDENT_UPDATED",
+                "DELETE_STUDENT",
+                "STUDENT_DELETED",
+
+                "CREATE_COURSE", "COURSE_CREATED",
+                "UPDATE_COURSE", "COURSE_UPDATED",
+                "ARCHIVE_COURSE", "COURSE_ARCHIVED",
+                "RESTORE_COURSE", "COURSE_RESTORED",
+                "GET_COURSES", "COURSES",
+                "GET_COURSE", "COURSE_DETAILS",
+                "ENROLL_STUDENT", "STUDENT_ENROLLED",
+                "CREATE_COURSE_STUDENT", "COURSE_STUDENT_CREATED",
+                "IMPORT_COURSE_STUDENTS", "COURSE_STUDENTS_IMPORTED",
+
                 "GET_TEACHER_DASHBOARD",
                 "TEACHER_DASHBOARD",
 
@@ -302,6 +322,19 @@ class MessageTypeContractTests {
 
                 MessageType.GET_STUDENTS,
                 MessageType.GET_STUDENT,
+                MessageType.CREATE_STUDENT,
+                MessageType.IMPORT_STUDENTS,
+                MessageType.UPDATE_STUDENT,
+                MessageType.DELETE_STUDENT,
+                MessageType.CREATE_COURSE,
+                MessageType.UPDATE_COURSE,
+                MessageType.ARCHIVE_COURSE,
+                MessageType.RESTORE_COURSE,
+                MessageType.GET_COURSES,
+                MessageType.GET_COURSE,
+                MessageType.ENROLL_STUDENT,
+                MessageType.CREATE_COURSE_STUDENT,
+                MessageType.IMPORT_COURSE_STUDENTS,
 
                 MessageType.GET_TEACHER_DASHBOARD,
 
@@ -367,6 +400,19 @@ class MessageTypeContractTests {
 
                 MessageType.STUDENTS,
                 MessageType.STUDENT_DETAILS,
+                MessageType.STUDENT_CREATED,
+                MessageType.STUDENTS_IMPORTED,
+                MessageType.STUDENT_UPDATED,
+                MessageType.STUDENT_DELETED,
+                MessageType.COURSE_CREATED,
+                MessageType.COURSE_UPDATED,
+                MessageType.COURSE_ARCHIVED,
+                MessageType.COURSE_RESTORED,
+                MessageType.COURSES,
+                MessageType.COURSE_DETAILS,
+                MessageType.STUDENT_ENROLLED,
+                MessageType.COURSE_STUDENT_CREATED,
+                MessageType.COURSE_STUDENTS_IMPORTED,
 
                 MessageType.TEACHER_DASHBOARD,
 

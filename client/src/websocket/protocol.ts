@@ -9,6 +9,19 @@ export type ClientMessageType =
   | 'CHANGE_PASSWORD'
   | 'GET_STUDENTS'
   | 'GET_STUDENT'
+  | 'CREATE_STUDENT'
+  | 'IMPORT_STUDENTS'
+  | 'UPDATE_STUDENT'
+  | 'DELETE_STUDENT'
+  | 'CREATE_COURSE'
+  | 'UPDATE_COURSE'
+  | 'ARCHIVE_COURSE'
+  | 'RESTORE_COURSE'
+  | 'GET_COURSES'
+  | 'GET_COURSE'
+  | 'ENROLL_STUDENT'
+  | 'CREATE_COURSE_STUDENT'
+  | 'IMPORT_COURSE_STUDENTS'
   | 'GET_TEACHER_DASHBOARD'
   | 'CREATE_EXAM'
   | 'GET_TEACHER_EXAMS'
@@ -47,6 +60,19 @@ export type ServerMessageType =
   | 'PASSWORD_CHANGED'
   | 'STUDENTS'
   | 'STUDENT_DETAILS'
+  | 'STUDENT_CREATED'
+  | 'STUDENTS_IMPORTED'
+  | 'STUDENT_UPDATED'
+  | 'STUDENT_DELETED'
+  | 'COURSE_CREATED'
+  | 'COURSE_UPDATED'
+  | 'COURSE_ARCHIVED'
+  | 'COURSE_RESTORED'
+  | 'COURSES'
+  | 'COURSE_DETAILS'
+  | 'STUDENT_ENROLLED'
+  | 'COURSE_STUDENT_CREATED'
+  | 'COURSE_STUDENTS_IMPORTED'
   | 'TEACHER_DASHBOARD'
   | 'EXAM_CREATED'
   | 'TEACHER_EXAMS'
@@ -100,6 +126,35 @@ export interface CreateExamPayload {
   description: string;
   durationMinutes: number;
   scheduledAt: string;
+  courseId: number;
+  assessmentType: string;
+  questions: Array<{
+    content: string;
+    points: number;
+    displayOrder: number;
+    choices: Array<{ content: string; correct: boolean; displayOrder: number }>;
+  }>;
+}
+
+export interface CourseData {
+  id: number;
+  teacherId: number;
+  code: string;
+  name: string;
+  subject?: string | null;
+  department?: string | null;
+  academicYear?: string | null;
+  semester?: string | null;
+  description?: string | null;
+  archived?: boolean;
+  studentCount?: number;
+  examCount?: number;
+  createdAt: string;
+}
+
+export interface CourseStatisticsData {
+  averageScorePercent: number | null;
+  exams: Array<{ examId: number; questionCount: number; submissionCount: number }>;
 }
 
 export interface GetExamPayload {
@@ -250,6 +305,9 @@ export interface ExamDetailsData {
   createdBy: number;
   createdAt: string;
   updatedAt: string;
+  courseId: number | null;
+  courseName: string | null;
+  assessmentType: string;
 }
 
 export interface ProfileData {
@@ -269,6 +327,7 @@ export interface StudentDirectoryData {
   username: string;
   fullName: string;
   email: string;
+  department?: string | null;
   active: boolean;
   createdAt: string;
 }
@@ -298,10 +357,12 @@ export interface AvailableExamDetailsData {
   id: number;
   title: string;
   description: string | null;
+  assessmentType: string;
   durationMinutes: number;
   questionCount: number;
   totalPoints: number;
   scheduledAt: string | null;
+  courseName: string | null;
 }
 
 export interface ClientMessage {
@@ -330,6 +391,17 @@ export interface ServerMessageData {
   role?: UserRole;
   active?: boolean;
   students?: StudentDirectoryData[];
+  courses?: CourseData[];
+  course?: CourseData;
+  statistics?: CourseStatisticsData;
+  enrolled?: boolean;
+  createdCount?: number;
+  enrolledCount?: number;
+  courseId?: number | null;
+  courseName?: string | null;
+  assessmentType?: string;
+  importedCount?: number;
+  skippedCount?: number;
 
   title?: string;
   description?: string | null;
