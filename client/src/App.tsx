@@ -21,6 +21,8 @@ import ProtectedRoute from "./components/routing/ProtectedRoute";
 import HomeRedirect from "./components/routing/HomeRedirect";
 import StudentProfilePage from "./pages/ProfilePage/StudentProfilePage";
 import TeacherProfilePage from "./pages/ProfilePage/TeacherProfilePage";
+import TeacherSubmissionPage from "./pages/TeacherSubmissionPage/TeacherSubmissionPage";
+import TeacherSubmissionResultPage from "./pages/TeacherSubmissionResultPage/TeacherSubmissionResultPage";
 
 function App() {
   return (
@@ -50,10 +52,7 @@ function App() {
       </Route>
 
       <Route element={<ProtectedRoute allowedRoles={["TEACHER"]} />}>
-        <Route
-          path="/teacher"
-          element={<TeacherPortalLayout />}
-        >
+        <Route path="/teacher" element={<TeacherPortalLayout />}>
           <Route index element={<TeacherDashboardPage />} />
 
           <Route path="exams" element={<ExamManagementPage />} />
@@ -67,6 +66,16 @@ function App() {
 
           <Route path="exams/:examId" element={<ExamOverviewPage />} />
 
+          <Route
+            path="exams/:examId/submissions"
+            element={<TeacherSubmissionPage />}
+          />
+
+          <Route
+            path="submissions/:attemptId"
+            element={<TeacherSubmissionResultPage />}
+          />
+
           <Route path="students/new" element={<RegisterPage />} />
 
           <Route path="monitoring" element={<ExamMonitoringPage />} />
@@ -77,7 +86,6 @@ function App() {
 
           <Route path="profile" element={<TeacherProfilePage />} />
         </Route>
-
       </Route>
       <Route
         path="*"
