@@ -7,7 +7,9 @@ import {
 } from '../../auth/useAuth';
 
 function HomeRedirect() {
-  const { user } = useAuth();
+  const { user, recovering } = useAuth();
+
+  if (recovering) return <p className="p-8 text-center" role="status">Restoring your session…</p>;
 
   if (user === null) {
     return (

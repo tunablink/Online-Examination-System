@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 import java.util.Map;
 
@@ -32,6 +33,7 @@ class MonitoringWebSocketRoutingTests {
     private ExamWebSocketHandler webSocketHandler;
     private MonitoringMessageHandler monitoringHandler;
     private WebSocketSession session;
+    private MonitoringPushHub pushHub;
 
     @BeforeEach
     void setUp() {
@@ -51,6 +53,40 @@ class MonitoringWebSocketRoutingTests {
                 monitoringHandler,
                 mock(LoginService.class),
                 new AuthenticatedSessionRegistry());
+        pushHub = mock(MonitoringPushHub.class);
+        webSocketHandler.setMonitoringPushHub(pushHub);
+    }
+
+    @Test
+    void teacherOverviewIsRoutedToAuthenticatedHub() throws Exception {
+        when(pushHub.overview(eq(session), any(ClientMessage.class)))
+                .thenReturn(ServerMessage.success("overview", "TEACHER_MONITORING", Map.of()));
+        webSocketHandler.handleTextMessage(session, new TextMessage("""
+                {"requestId":"overview","type":"GET_TEACHER_MONITORING","payload":{"live":true}}
+                """));
+        verify(pushHub).overview(eq(session), any(ClientMessage.class));
+        verify(session).sendMessage(any(TextMessage.class));
+    }
+
+    @Test
+    void liveExamSubscriptionIsRegisteredOnlyAfterSuccessfulOwnershipCheck() throws Exception {
+        when(monitoringHandler.handleGetExamMonitoring(eq(session), any(ClientMessage.class)))
+                .thenReturn(ServerMessage.success("live", "EXAM_MONITORING",
+                        new vn.edu.hanu.exam.service.monitoring.ExamMonitoringSummary(10, java.util.List.of(), "Review")));
+        webSocketHandler.handleTextMessage(session, new TextMessage("""
+                {"requestId":"live","type":"GET_EXAM_MONITORING","payload":{"examId":10,"live":true}}
+                """));
+        verify(pushHub).watch(session, 10L, Map.of("examId", 10, "live", true));
+    }
+
+    @Test
+    void rejectedExamRequestDoesNotRegisterSubscription() throws Exception {
+        when(monitoringHandler.handleGetExamMonitoring(eq(session), any(ClientMessage.class)))
+                .thenReturn(ServerMessage.error("live", "EXAM_NOT_ACCESSIBLE", "Unavailable"));
+        webSocketHandler.handleTextMessage(session, new TextMessage("""
+                {"requestId":"live","type":"GET_EXAM_MONITORING","payload":{"examId":10,"live":true}}
+                """));
+        verify(pushHub, never()).watch(any(), any(), any());
     }
 
     @Test

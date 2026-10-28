@@ -7,6 +7,9 @@ import type {
 } from '../types/auth';
 
 export interface AuthContextValue {
+  recovering: boolean;
+  beginRecovery: () => void;
+  finishRecovery: () => void;
   user:
     AuthenticatedUser | null;
 
@@ -15,6 +18,7 @@ export interface AuthContextValue {
   login: (
     authenticatedUser:
       AuthenticatedUser,
+    sessionToken?: string,
   ) => void;
 
   logout: (

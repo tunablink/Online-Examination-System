@@ -12,5 +12,7 @@ class MonitoringProtocolTests {
         assertTrue(MessageType.GET_EXAM_MONITORING.isAcceptedFromClient());
         assertFalse(MessageType.ACTIVITY_RECORDED.isAcceptedFromClient());
         assertFalse(MessageType.EXAM_MONITORING.isAcceptedFromClient());
+        assertTrue(MessageType.GET_TEACHER_MONITORING.isAcceptedFromClient());
+        assertFalse(MessageType.TEACHER_MONITORING.isAcceptedFromClient());
     }
 }

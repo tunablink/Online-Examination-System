@@ -52,6 +52,19 @@ public class JdbcAttemptRepository implements AttemptRepository {
         }
 
         @Override
+        public List<ExamAttempt> findDueAttempts(int limit) {
+                return jdbcTemplate.query(
+                                ATTEMPT_COLUMNS + """
+                                    WHERE status = 'IN_PROGRESS'
+                                      AND deadline_at <= CURRENT_TIMESTAMP
+                                    ORDER BY deadline_at, id
+                                    LIMIT :limit
+                                    """,
+                                Map.of("limit", limit),
+                                ATTEMPT_ROW_MAPPER);
+        }
+
+        @Override
         public Optional<Exam> findExamById(long examId) {
                 return queryExam(examId, false);
         }

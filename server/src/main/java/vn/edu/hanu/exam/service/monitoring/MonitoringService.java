@@ -4,6 +4,8 @@ import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,10 @@ public class MonitoringService {
             "Monitoring signals require teacher review and do not prove cheating.";
 
     private final MonitoringRepository monitoringRepository;
+    private ApplicationEventPublisher events;
+
+    @Autowired
+    void setEventPublisher(ApplicationEventPublisher events) { this.events = events; }
 
     public MonitoringService(MonitoringRepository monitoringRepository) {
         this.monitoringRepository = monitoringRepository;
@@ -72,6 +78,7 @@ public class MonitoringService {
                                 "The attempt reached the configured warning threshold.",
                                 serverTime));
             }
+            if (events != null) events.publishEvent(new MonitoringChanged(attempt.examId()));
             return new ActivityRecorded(recorded, thresholdActivity, warningCount, INTERPRETATION);
         } catch (MonitoringException exception) {
             throw exception;

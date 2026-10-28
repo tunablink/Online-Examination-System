@@ -85,7 +85,7 @@ function StatCard({ label, value, tone = 'teal' }: { label: string; value: numbe
 
 function ExamMonitoringPage() {
   const { examId } = useParams();
-  const { status: connectionStatus, sendMessage } = useWebSocket();
+  const { status: connectionStatus, sendMessage, subscribe } = useWebSocket();
   const numericExamId = useMemo(() => {
     const value = Number(examId);
     return Number.isSafeInteger(value) && value > 0 ? value : null;
@@ -104,7 +104,7 @@ function ExamMonitoringPage() {
     }
     setLoading(true);
     setError(null);
-    const requestId = sendMessage('GET_EXAM_MONITORING', { examId: numericExamId }, (message) => {
+    const requestId = sendMessage('GET_EXAM_MONITORING', { examId: numericExamId, live: true }, (message) => {
       setLoading(false);
       if (message.type !== 'EXAM_MONITORING') {
         setError(message.error?.message ?? 'Monitoring data could not be loaded.');
@@ -125,9 +125,21 @@ function ExamMonitoringPage() {
 
   useEffect(() => {
     if (numericExamId === null || connectionStatus !== 'connected') return;
+    const unsubscribe = subscribe('EXAM_MONITORING', (message) => {
+      if (message.requestId !== null) return;
+      const result = readMonitoring(message.data);
+      if (result === null || result.examId !== numericExamId) return;
+      setMonitoring(result);
+      setLoading(false);
+      setError(null);
+    });
     const timer = window.setTimeout(loadMonitoring, 0);
-    return () => window.clearTimeout(timer);
-  }, [connectionStatus, loadMonitoring, numericExamId]);
+    return () => {
+      window.clearTimeout(timer);
+      unsubscribe();
+      sendMessage('GET_EXAM_MONITORING', { examId: numericExamId, live: false });
+    };
+  }, [connectionStatus, loadMonitoring, numericExamId, sendMessage, subscribe]);
 
   const attempts = monitoring?.attempts ?? [];
   const filteredAttempts = attempts.filter((attempt) => {

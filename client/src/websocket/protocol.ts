@@ -2,6 +2,8 @@ export type ClientMessageType =
   | 'PING'
   | 'REGISTER'
   | 'LOGIN'
+  | 'RESUME_SESSION'
+  | 'LOGOUT'
   | 'GET_PROFILE'
   | 'UPDATE_PROFILE'
   | 'CHANGE_PASSWORD'
@@ -30,13 +32,16 @@ export type ClientMessageType =
   | 'GET_EXAM_SUBMISSIONS'
   | 'GET_SUBMISSION_RESULT'
   | 'REPORT_ACTIVITY'
-  | 'GET_EXAM_MONITORING';
+  | 'GET_EXAM_MONITORING'
+  | 'GET_TEACHER_MONITORING';
 
 export type ServerMessageType =
   | 'CONNECTED'
   | 'PONG'
   | 'REGISTERED'
   | 'LOGGED_IN'
+  | 'SESSION_RESUMED'
+  | 'LOGGED_OUT'
   | 'PROFILE_DETAILS'
   | 'PROFILE_UPDATED'
   | 'PASSWORD_CHANGED'
@@ -66,6 +71,7 @@ export type ServerMessageType =
   | 'SUBMISSION_RESULT'
   | 'ACTIVITY_RECORDED'
   | 'EXAM_MONITORING'
+  | 'TEACHER_MONITORING'
   | 'ERROR';
 
 export type UserRole =
@@ -310,6 +316,8 @@ export interface ProtocolError {
 }
 
 export interface ServerMessageData {
+  sessionToken?: string;
+  sessionExpiresAt?: string;
   message?: string;
   sessionId?: string;
   serverTime?: string;

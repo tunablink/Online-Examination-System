@@ -10,6 +10,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,9 +20,11 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.annotation.Propagation;
 
 import tools.jackson.databind.json.JsonMapper;
 import vn.edu.hanu.exam.exception.AttemptException;
+import vn.edu.hanu.exam.repository.AttemptRepository;
 import vn.edu.hanu.exam.service.attempt.AttemptQuestionDetails;
 import vn.edu.hanu.exam.service.attempt.AttemptHistoryResult;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptDetails;
@@ -28,11 +33,14 @@ import vn.edu.hanu.exam.service.attempt.ExamSubmissionResult;
 import vn.edu.hanu.exam.service.attempt.SavedAnswerDetails;
 import vn.edu.hanu.exam.service.attempt.StudentAttemptResult;
 
-@SpringBootTest
+@SpringBootTest(properties = "exam.deadline.enabled=false")
 @Transactional
 class AttemptServiceIntegrationTests {
     @Autowired
     private ExamAttemptService attemptService;
+
+    @Autowired
+    private AttemptRepository attemptRepository;
 
     @Autowired
     private NamedParameterJdbcTemplate jdbcTemplate;
@@ -173,6 +181,113 @@ class AttemptServiceIntegrationTests {
         assertAttemptError(
                 "ATTEMPT_RESULT_NOT_FOUND",
                 () -> attemptService.getAttemptResult(started.attemptId(), otherStudentId));
+    }
+
+    @Test
+    void deadlineFinalizesSavedAnswersWithoutClientSubmitAndRemainsIdempotent() {
+        long teacherId = insertUser("TEACHER");
+        long studentId = insertUser("STUDENT");
+        long examId = insertExam(teacherId, "PUBLISHED", 60);
+        List<Long> choices = insertQuestionWithChoices(examId, "Deadline question", 4, 0);
+        ExamAttemptDetails started = attemptService.startExam(examId, studentId);
+        attemptService.saveAnswer(started.attemptId(), started.questions().getFirst().id(),
+                choices.getFirst(), studentId);
+
+        jdbcTemplate.update("""
+                UPDATE exam_attempts
+                SET started_at = CURRENT_TIMESTAMP - INTERVAL '2 hours',
+                    deadline_at = CURRENT_TIMESTAMP - INTERVAL '1 hour'
+                WHERE id = :id
+                """, Map.of("id", started.attemptId()));
+
+        assertTrue(attemptRepository.findDueAttempts(100_000).stream()
+                .anyMatch(candidate -> candidate.id() == started.attemptId()));
+        assertTrue(attemptService.expireAttempt(started.attemptId(), studentId));
+        StudentAttemptResult result = attemptService.getAttemptResult(started.attemptId(), studentId);
+        assertEquals("EXPIRED", result.status().name());
+        assertEquals(4, result.score());
+        assertEquals(4, result.maxScore());
+        assertEquals(1, result.correctAnswers());
+        assertFalse(attemptService.expireAttempt(started.attemptId(), studentId));
+        assertEquals(result.submittedAt(), attemptService.submitExam(started.attemptId(), studentId).submittedAt());
+        assertEquals(result, attemptService.getAttemptResult(started.attemptId(), studentId));
+        assertEquals(result.score(), attemptService.getAttempt(started.attemptId(), studentId).result().score());
+        assertAttemptError("ATTEMPT_NOT_ACTIVE", () -> attemptService.saveAnswer(
+                started.attemptId(), started.questions().getFirst().id(), choices.getLast(), studentId));
+    }
+
+    @Test
+    void deadlineDoesNotFinalizeFutureOrAlreadySubmittedAttempts() {
+        long teacherId = insertUser("TEACHER");
+        long studentId = insertUser("STUDENT");
+        long examId = insertExam(teacherId, "PUBLISHED", 60);
+        insertQuestionWithChoices(examId, "Future question", 2, 0);
+        ExamAttemptDetails started = attemptService.startExam(examId, studentId);
+        assertFalse(attemptService.expireAttempt(started.attemptId(), studentId));
+        assertFalse(attemptService.expireAttempt(started.attemptId(), insertUser("STUDENT")));
+        assertEquals("IN_PROGRESS", attemptService.getAttempt(started.attemptId(), studentId).status().name());
+        ExamSubmissionResult result = attemptService.submitExam(started.attemptId(), studentId);
+        assertFalse(attemptService.expireAttempt(started.attemptId(), studentId));
+        assertEquals(result, attemptService.submitExam(started.attemptId(), studentId));
+    }
+
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    void concurrentSubmitAndDeadlineKeepOneStoredResult() throws Exception {
+        long teacherId = insertUser("TEACHER");
+        long studentId = insertUser("STUDENT");
+        long examId = insertExam(teacherId, "PUBLISHED", 60);
+        var executor = Executors.newFixedThreadPool(2);
+        try {
+            List<Long> choices = insertQuestionWithChoices(examId, "Concurrent deadline", 3, 0);
+            ExamAttemptDetails attempt = attemptService.startExam(examId, studentId);
+            attemptService.saveAnswer(attempt.attemptId(), attempt.questions().getFirst().id(),
+                    choices.getFirst(), studentId);
+            jdbcTemplate.update("""
+                    UPDATE exam_attempts
+                    SET started_at = CURRENT_TIMESTAMP - INTERVAL '2 hours',
+                        deadline_at = CURRENT_TIMESTAMP - INTERVAL '1 hour'
+                    WHERE id = :id
+                    """, Map.of("id", attempt.attemptId()));
+
+            CountDownLatch ready = new CountDownLatch(2);
+            CountDownLatch start = new CountDownLatch(1);
+            var manual = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Start timeout");
+                return attemptService.submitExam(attempt.attemptId(), studentId);
+            });
+            var automatic = executor.submit(() -> {
+                ready.countDown();
+                if (!start.await(10, TimeUnit.SECONDS)) throw new IllegalStateException("Start timeout");
+                return attemptService.expireAttempt(attempt.attemptId(), studentId);
+            });
+            assertTrue(ready.await(10, TimeUnit.SECONDS));
+            start.countDown();
+            ExamSubmissionResult submitted = manual.get(15, TimeUnit.SECONDS);
+            automatic.get(15, TimeUnit.SECONDS);
+
+            assertEquals("EXPIRED", submitted.status().name());
+            assertEquals(3, submitted.score());
+            assertEquals(submitted, attemptService.submitExam(attempt.attemptId(), studentId));
+            assertEquals(submitted.submittedAt(),
+                    attemptService.getAttemptResult(attempt.attemptId(), studentId).submittedAt());
+            assertEquals(1, count("exam_attempts", "exam_id", examId));
+        } finally {
+            executor.shutdownNow();
+            assertTrue(executor.awaitTermination(20, TimeUnit.SECONDS));
+            // This test needs committed rows visible to both transactions.
+            // Remove only its own UUID-backed fixture after both workers exit.
+            jdbcTemplate.update("DELETE FROM suspicious_activities WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id = :id)", Map.of("id", examId));
+            jdbcTemplate.update("DELETE FROM attempt_answers WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id = :id)", Map.of("id", examId));
+            jdbcTemplate.update("DELETE FROM attempt_choices WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id = :id)", Map.of("id", examId));
+            jdbcTemplate.update("DELETE FROM attempt_questions WHERE attempt_id IN (SELECT id FROM exam_attempts WHERE exam_id = :id)", Map.of("id", examId));
+            jdbcTemplate.update("DELETE FROM exam_attempts WHERE exam_id = :id", Map.of("id", examId));
+            jdbcTemplate.update("DELETE FROM choices WHERE question_id IN (SELECT id FROM questions WHERE exam_id = :id)", Map.of("id", examId));
+            jdbcTemplate.update("DELETE FROM questions WHERE exam_id = :id", Map.of("id", examId));
+            jdbcTemplate.update("DELETE FROM exams WHERE id = :id", Map.of("id", examId));
+            jdbcTemplate.update("DELETE FROM users WHERE id IN (:ids)", Map.of("ids", List.of(teacherId, studentId)));
+        }
     }
 
     private long insertUser(String role) {

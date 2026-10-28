@@ -1,18 +1,79 @@
 import { useMemo, useState } from 'react';
-import Icon from '../../components/common/Icon';
-import { MOCK_SUSPICIOUS_ACTIVITIES } from '../../mocks/monitoring';
-import { MOCK_TEACHER_EXAMS } from '../../mocks/teacher';
-import type { SuspiciousSeverity } from '../../types/monitoring';
-
-type SeverityFilter = 'ALL' | SuspiciousSeverity;
+import { Link } from 'react-router';
+import { useTeacherMonitoring } from '../../websocket/useTeacherMonitoring';
 
 function SuspiciousActivityPage() {
-  const [examId,setExamId] = useState('ALL'); const [severity,setSeverity] = useState<SeverityFilter>('ALL'); const [query,setQuery] = useState(''); const [selectedId,setSelectedId] = useState<string | null>(null);
-  const events = useMemo(() => MOCK_SUSPICIOUS_ACTIVITIES.filter((event) => (examId === 'ALL' || event.examId === examId) && (severity === 'ALL' || event.severity === severity) && `${event.studentName} ${event.studentId} ${event.type}`.toLowerCase().includes(query.toLowerCase())), [examId,severity,query]);
-  const selected = MOCK_SUSPICIOUS_ACTIVITIES.find((event) => event.id === selectedId) ?? null;
-  const count = (value: SuspiciousSeverity) => MOCK_SUSPICIOUS_ACTIVITIES.filter((event) => event.severity === value).length;
-  return <div><section className="flex items-start justify-between gap-5 max-md:flex-col"><div><p className="text-[9px] font-bold uppercase tracking-[.13em] text-[#00778b]">Integrity intelligence</p><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">Suspicious activity reports</h1><p className="mt-1 text-[11px] text-[#718087]">Review deterministic client signals captured during proctored attempts.</p></div><span className="inline-flex items-center gap-2 rounded-full border border-[#ead7b8] bg-[#fff8ed] px-3 py-1.5 text-[9px] font-semibold text-[#986313]"><Icon name="alert" size={13} />Frontend monitoring dataset</span></section><section className="mt-5 grid grid-cols-4 gap-3 max-lg:grid-cols-2 max-sm:grid-cols-1">{[['All events',MOCK_SUSPICIOUS_ACTIVITIES.length,'shield','text-[#00778b]'],['High risk',count('HIGH'),'alert','text-[#bd2f35]'],['Medium',count('MEDIUM'),'flag','text-[#a36a12]'],['Low',count('LOW'),'activity','text-[#64747a]']].map(([label,value,icon,color]) => <article className="rounded-xl border border-[#dce7ea] bg-white p-4" key={String(label)}><span className={`grid h-8 w-8 place-items-center rounded-full bg-[#f1f5f6] ${color}`}><Icon name={icon as 'shield'} size={15} /></span><p className="mt-4 text-[9px] font-bold uppercase tracking-[.07em] text-[#849197]">{label}</p><p className="mt-1 text-[23px] font-bold">{value}</p></article>)}</section><section className="mt-5 overflow-hidden rounded-xl border border-[#dce7ea] bg-white"><div className="grid grid-cols-[minmax(0,1fr)_220px_220px] gap-2 border-b border-[#e6edef] p-5 max-lg:grid-cols-1"><label className="relative"><Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7c898e]" name="search" size={14} /><input className="h-10 w-full rounded-lg bg-[#f1f5f6] pl-9 pr-3 text-[10px] outline-none" onChange={(event) => setQuery(event.target.value)} placeholder="Search candidate, ID, or signal…" value={query} /></label><select className="h-10 rounded-lg border border-[#dbe5e8] bg-white px-3 text-[10px]" onChange={(event) => setExamId(event.target.value)} value={examId}><option value="ALL">All examinations</option>{MOCK_TEACHER_EXAMS.map((exam) => <option key={exam.id} value={exam.id}>{exam.examCode}</option>)}</select><select className="h-10 rounded-lg border border-[#dbe5e8] bg-white px-3 text-[10px]" onChange={(event) => setSeverity(event.target.value as SeverityFilter)} value={severity}><option value="ALL">All severities</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></select></div><div className="overflow-x-auto"><table className="w-full min-w-[950px] text-left"><thead className="bg-[#f0f4f5] text-[9px] font-bold uppercase tracking-[.07em] text-[#68777d]"><tr><th className="px-5 py-3">Candidate</th><th className="px-4 py-3">Signal</th><th className="px-4 py-3">Severity</th><th className="px-4 py-3">Occurred</th><th className="px-4 py-3">Description</th><th className="px-5 py-3 text-right">Action</th></tr></thead><tbody>{events.map((event) => <tr className="border-t border-[#edf1f2]" key={event.id}><td className="px-5 py-4"><p className="text-[11px] font-semibold">{event.studentName}</p><p className="mt-1 text-[8px] text-[#879399]">{event.studentId}</p></td><td className="px-4 py-4 text-[10px] font-semibold text-[#42545a]">{event.type.replaceAll('_',' ')}</td><td className="px-4 py-4"><span className={`rounded-full px-2.5 py-1 text-[8px] font-bold ${event.severity === 'HIGH' ? 'bg-[#ffe8e9] text-[#bd2f35]' : event.severity === 'MEDIUM' ? 'bg-[#fff3dd] text-[#95610e]' : 'bg-[#eef2f3] text-[#64747a]'}`}>{event.severity}</span></td><td className="px-4 py-4 text-[9px] text-[#607178]">{new Date(event.occurredAt).toLocaleString('en-GB')}</td><td className="max-w-[320px] px-4 py-4 text-[9px] leading-4 text-[#718087]">{event.description}</td><td className="px-5 py-4 text-right"><button className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#d5e0e3] px-3 text-[9px] font-semibold text-[#00778b]" onClick={() => setSelectedId(event.id)} type="button"><Icon name="eye" size={12} />Inspect</button></td></tr>)}{events.length === 0 && <tr><td className="py-14 text-center text-[10px] text-[#7b898e]" colSpan={6}>No events match these filters.</td></tr>}</tbody></table></div></section>
-    {selected && <div className="fixed inset-0 z-50 grid place-items-center bg-[#10272e]/55 p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}><section className="w-full max-w-lg rounded-xl bg-white p-6"><div className="flex items-start justify-between"><span className={`grid h-10 w-10 place-items-center rounded-full ${selected.severity === 'HIGH' ? 'bg-[#ffe8e9] text-[#bd2f35]' : 'bg-[#fff3dd] text-[#986313]'}`}><Icon name="alert" size={18} /></span><button className="text-lg text-[#7b898e]" onClick={() => setSelectedId(null)} type="button">×</button></div><p className="mt-5 text-[9px] font-bold uppercase tracking-[.1em] text-[#00778b]">Integrity event detail</p><h2 className="mt-2 text-[18px] font-bold">{selected.type.replaceAll('_',' ')}</h2><p className="mt-2 text-[10px] text-[#65757b]">{selected.studentName} · {selected.studentId}</p><p className="mt-5 rounded-lg bg-[#f3f6f7] p-4 text-[10px] leading-5 text-[#53646a]">{selected.description}</p><div className="mt-5 grid grid-cols-2 gap-3 text-[9px]"><div><p className="text-[#879399]">Severity</p><p className="mt-1 font-bold">{selected.severity}</p></div><div><p className="text-[#879399]">Recorded</p><p className="mt-1 font-bold">{new Date(selected.occurredAt).toLocaleString('en-GB')}</p></div></div></section></div>}
+  const { data, loading, error, refresh } = useTeacherMonitoring();
+  const [examId, setExamId] = useState('ALL');
+  const [severity, setSeverity] = useState('ALL');
+  const [query, setQuery] = useState('');
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const activities = data?.activities;
+  const events = useMemo(() => (activities ?? []).filter((event) =>
+    (examId === 'ALL' || String(event.examId) === examId)
+    && (severity === 'ALL' || event.severity === severity)
+    && `${event.studentName} ${event.username} ${event.studentId} ${event.rule}`
+      .toLowerCase().includes(query.trim().toLowerCase())), [activities, examId, severity, query]);
+  const exams = [...new Map((activities ?? []).map((event) => [event.examId, event.examTitle])).entries()];
+  const selected = activities?.find((event) => event.id === selectedId);
+
+  return <div>
+    <section className="flex flex-wrap items-start justify-between gap-4">
+      <div><p className="text-xs font-bold uppercase tracking-widest text-[#00778b]">Integrity review</p>
+        <h1 className="mt-2 text-2xl font-bold">Activity reports</h1>
+        <p className="mt-2 text-sm text-[#718087]">Latest recorded signals across your examinations.</p></div>
+      <button className="rounded-lg border border-[#bdd9df] bg-white px-4 py-2 text-sm text-[#00778b] disabled:opacity-50"
+        disabled={loading} onClick={refresh} type="button">Refresh</button>
+    </section>
+    <p className="mt-5 rounded-xl border border-[#b8dbe1] bg-[#eff9fa] p-4 text-sm text-[#31555d]">
+      {data?.interpretation ?? 'Monitoring signals require teacher review and do not prove cheating.'}</p>
+    {error && <p className="mt-4 rounded-lg bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</p>}
+    {data?.truncated && <p className="mt-4 text-sm text-amber-700">Showing the latest 500 events. Filters apply to this loaded window.</p>}
+    <section className="mt-5 grid grid-cols-3 gap-3 max-sm:grid-cols-1">
+      {[
+        ['Loaded events', activities?.length], ['Warning signals across your exams', data?.warningEvents],
+        ['Active attempts', data?.activeAttempts],
+      ].map(([label, value]) => <article key={label} className="rounded-xl border border-[#dce7ea] bg-white p-5">
+        <p className="text-xs text-[#718087]">{label}</p><p className="mt-2 text-2xl font-bold">{value ?? '—'}</p>
+      </article>)}
+    </section>
+    <section className="mt-5 overflow-hidden rounded-xl border border-[#dce7ea] bg-white">
+      <div className="grid grid-cols-3 gap-3 border-b border-[#e6edef] p-5 max-md:grid-cols-1">
+        <input aria-label="Search signals" className="rounded-lg bg-[#f1f5f6] px-3 py-2 text-sm"
+          placeholder="Search student or signal" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <select aria-label="Filter exam" className="rounded-lg border border-[#dce7ea] px-3 py-2 text-sm"
+          value={examId} onChange={(event) => setExamId(event.target.value)}>
+          <option value="ALL">All exams in loaded events</option>
+          {exams.map(([id, title]) => <option key={id} value={id}>{title}</option>)}
+        </select>
+        <select aria-label="Filter severity" className="rounded-lg border border-[#dce7ea] px-3 py-2 text-sm"
+          value={severity} onChange={(event) => setSeverity(event.target.value)}>
+          <option value="ALL">All severities</option><option value="WARNING">Warning</option><option value="INFO">Info</option>
+        </select>
+      </div>
+      <div className="overflow-x-auto"><table className="w-full min-w-[850px] text-left text-sm">
+        <thead className="bg-[#f0f4f5] text-xs text-[#68777d]"><tr>{['Student / exam', 'Signal', 'Severity', 'Server time', 'Action']
+          .map((label) => <th key={label} className="px-5 py-3">{label}</th>)}</tr></thead>
+        <tbody>{events.map((event) => <tr key={event.id} className="border-t border-[#edf1f2]">
+          <td className="px-5 py-4"><p className="font-semibold">{event.studentName}</p><p className="mt-1 text-xs text-[#718087]">@{event.username} · {event.examTitle}</p></td>
+          <td className="px-5 py-4">{event.rule.replaceAll('_', ' ')}</td>
+          <td className={`px-5 py-4 font-semibold ${event.severity === 'WARNING' ? 'text-amber-700' : 'text-[#00778b]'}`}>{event.severity}</td>
+          <td className="px-5 py-4 text-xs">{new Date(event.recordedAt).toLocaleString('en-GB')}</td>
+          <td className="px-5 py-4"><button className="text-[#00778b]" type="button" onClick={() => setSelectedId(event.id)}>Inspect</button></td>
+        </tr>)}
+        {events.length === 0 && <tr><td colSpan={5} className="p-10 text-center text-[#718087]">{loading ? 'Loading recorded signals…' : error ? 'Signals are unavailable. Refresh after reconnecting.' : 'No recorded signals match these filters.'}</td></tr>}
+        </tbody></table></div>
+    </section>
+    {selected && <div className="fixed inset-0 z-50 grid place-items-center bg-[#10272e]/55 p-5" onMouseDown={(event) => { if (event.target === event.currentTarget) setSelectedId(null); }}>
+      <section role="dialog" aria-modal="true" aria-labelledby="signal-title" className="w-full max-w-lg rounded-xl bg-white p-6">
+        <button type="button" className="float-right text-sm" aria-label="Close details" onClick={() => setSelectedId(null)}>Close</button>
+        <h2 id="signal-title" className="mt-4 text-lg font-bold">{selected.rule.replaceAll('_', ' ')}</h2>
+        <p className="mt-2 text-sm">{selected.studentName} · {selected.examTitle}</p>
+        <p className="mt-4 rounded-lg bg-[#f3f6f7] p-4 text-sm">{selected.description}</p>
+        <p className="mt-3 text-xs text-[#718087]">Attempt #{selected.attemptId} · {new Date(selected.recordedAt).toLocaleString('en-GB')}</p>
+        <Link className="mt-5 inline-block text-sm font-semibold text-[#00778b]" to={`/teacher/monitoring/${selected.examId}`}>Open exam monitoring</Link>
+      </section>
+    </div>}
   </div>;
 }
 export default SuspiciousActivityPage;

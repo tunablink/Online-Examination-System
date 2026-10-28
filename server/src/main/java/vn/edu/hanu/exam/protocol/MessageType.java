@@ -15,6 +15,11 @@ public enum MessageType {
     LOGIN(true),
     LOGGED_IN(false),
 
+    RESUME_SESSION(true),
+    SESSION_RESUMED(false),
+    LOGOUT(true),
+    LOGGED_OUT(false),
+
     GET_PROFILE(true),
     PROFILE_DETAILS(false),
 
@@ -101,6 +106,9 @@ public enum MessageType {
 
     GET_EXAM_MONITORING(true),
     EXAM_MONITORING(false),
+
+    GET_TEACHER_MONITORING(true),
+    TEACHER_MONITORING(false),
 
     ERROR(false);
 

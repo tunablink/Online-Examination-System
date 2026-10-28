@@ -19,10 +19,12 @@ interface ProtectedRouteProps {
 function ProtectedRoute({
   allowedRoles,
 }: ProtectedRouteProps) {
-  const { user } = useAuth();
+  const { user, recovering } = useAuth();
 
   const location =
     useLocation();
+
+  if (recovering && user === null) return <main className="grid min-h-screen place-items-center bg-[#f5f9fb] p-6" role="status"><p className="text-sm text-[#607178]">Restoring your examination session…</p></main>;
 
   if (user === null) {
     return (

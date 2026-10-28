@@ -3,6 +3,8 @@ package vn.edu.hanu.exam;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.Mockito.*;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
@@ -13,6 +15,11 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
+import org.springframework.web.socket.WebSocketSession;
+import org.springframework.web.socket.TextMessage;
+import org.mockito.ArgumentCaptor;
 
 import vn.edu.hanu.exam.domain.monitoring.ActivityType;
 import vn.edu.hanu.exam.exception.MonitoringException;
@@ -20,6 +27,11 @@ import vn.edu.hanu.exam.service.monitoring.ActivityRecorded;
 import vn.edu.hanu.exam.service.monitoring.ExamMonitoringSummary;
 import vn.edu.hanu.exam.service.monitoring.MonitoringService;
 import vn.edu.hanu.exam.service.monitoring.ReportActivityCommand;
+import vn.edu.hanu.exam.service.monitoring.TeacherMonitoringQuery;
+import vn.edu.hanu.exam.websocket.MonitoringPushHub;
+import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
+import vn.edu.hanu.exam.domain.UserRole;
+import vn.edu.hanu.exam.service.LoggedInUser;
 
 @SpringBootTest
 class MonitoringIntegrationTests {
@@ -28,6 +40,57 @@ class MonitoringIntegrationTests {
 
     @Autowired
     private NamedParameterJdbcTemplate jdbcTemplate;
+
+    @Autowired private MonitoringPushHub pushHub;
+    @Autowired private AuthenticatedSessionRegistry sessions;
+    @Autowired private PlatformTransactionManager transactions;
+    @Autowired private TeacherMonitoringQuery overview;
+    @Autowired private vn.edu.hanu.exam.session.SessionResumeService resumeService;
+
+    @Test
+    void pushOccursAfterCommitOnlyAndOverviewFiltersTeacherOwnership() throws Exception {
+        Fixture fixture = createFixture();
+        WebSocketSession owner = mock(WebSocketSession.class);
+        String sessionId = UUID.randomUUID().toString();
+        when(owner.getId()).thenReturn(sessionId);
+        when(owner.isOpen()).thenReturn(true);
+        sessions.authenticate(sessionId, new LoggedInUser(fixture.teacherId(), "owner", "Owner", "o@example.com", UserRole.TEACHER));
+        resumeService.issue(sessionId, new LoggedInUser(fixture.teacherId(), "owner", "Owner", "o@example.com", UserRole.TEACHER));
+        pushHub.watch(owner, fixture.examId(), Map.of("live", true));
+        try {
+            var transaction = new TransactionTemplate(transactions);
+            transaction.executeWithoutResult(status -> {
+                monitoringService.reportActivity(fixture.studentId(),
+                        new ReportActivityCommand(fixture.attemptId(), ActivityType.TAB_HIDDEN));
+                try { verify(owner, never()).sendMessage(any()); }
+                catch (java.io.IOException exception) { throw new IllegalStateException(exception); }
+            });
+            ArgumentCaptor<TextMessage> message = ArgumentCaptor.forClass(TextMessage.class);
+            verify(owner).sendMessage(message.capture());
+            assertTrue(message.getValue().getPayload().contains("EXAM_MONITORING"));
+            assertTrue(message.getValue().getPayload().contains("TAB_HIDDEN"));
+            assertEquals(1, overview.read(fixture.teacherId()).warningEvents());
+            assertEquals(fixture.examId(), overview.read(fixture.teacherId()).activities().getFirst().examId());
+            assertEquals(0, overview.read(-1).activities().size());
+
+            clearInvocations(owner);
+            transaction.executeWithoutResult(status -> {
+                monitoringService.reportActivity(fixture.studentId(),
+                        new ReportActivityCommand(fixture.attemptId(), ActivityType.WINDOW_BLUR));
+                status.setRollbackOnly();
+            });
+            verify(owner, never()).sendMessage(any());
+            assertEquals(1, activityCount(fixture.attemptId()));
+        } finally {
+            pushHub.remove(sessionId);
+            sessions.remove(sessionId);
+            resumeService.revoke(sessionId);
+            jdbcTemplate.update("DELETE FROM suspicious_activities WHERE attempt_id=:id", Map.of("id", fixture.attemptId()));
+            jdbcTemplate.update("DELETE FROM exam_attempts WHERE id=:id", Map.of("id", fixture.attemptId()));
+            jdbcTemplate.update("DELETE FROM exams WHERE id=:id", Map.of("id", fixture.examId()));
+            jdbcTemplate.update("DELETE FROM users WHERE id IN (:ids)", Map.of("ids", java.util.List.of(fixture.teacherId(), fixture.studentId())));
+        }
+    }
 
     @Test
     void activityIsPersistedAndVisibleToOwningTeacher() {

@@ -210,6 +210,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_exam_attempts_active_student_exam
     ON exam_attempts (exam_id, student_id)
     WHERE status = 'IN_PROGRESS';
 
+CREATE INDEX IF NOT EXISTS idx_exam_attempts_active_deadline
+    ON exam_attempts (deadline_at, id)
+    WHERE status = 'IN_PROGRESS';
+
 CREATE TABLE IF NOT EXISTS attempt_questions (
     attempt_id     BIGINT NOT NULL,
     question_id    BIGINT NOT NULL,

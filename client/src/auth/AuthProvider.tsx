@@ -11,6 +11,7 @@ import type {
 import {
   AuthContext,
 } from './authContext';
+import { readSessionToken, storeSessionToken } from './sessionToken';
 
 interface AuthState {
   user:
@@ -32,8 +33,13 @@ interface AuthProviderProps {
 function AuthProvider({children}: AuthProviderProps) {
   const [authState, setAuthState] =
     useState<AuthState>(INITIAL_AUTH_STATE);
+  const [recovering, setRecovering] = useState(() => readSessionToken() !== null);
+  const beginRecovery = useCallback(() => setRecovering(true), []);
+  const finishRecovery = useCallback(() => setRecovering(false), []);
 
-  const login = useCallback((authenticatedUser: AuthenticatedUser) => {
+  const login = useCallback((authenticatedUser: AuthenticatedUser, sessionToken?: string) => {
+      storeSessionToken(sessionToken ?? null);
+      setRecovering(false);
       setAuthState({
         user: authenticatedUser,
         sessionNotice: null,
@@ -46,12 +52,14 @@ function AuthProvider({children}: AuthProviderProps) {
     (
       notice?: string,
     ) => {
+      storeSessionToken(null);
+      setRecovering(false);
       setAuthState(
         (currentState) => {
           if (
             currentState.user === null
           ) {
-            return currentState;
+            return { ...currentState, sessionNotice: notice ?? null };
           }
 
           return {
@@ -87,6 +95,9 @@ function AuthProvider({children}: AuthProviderProps) {
   return (
     <AuthContext.Provider
       value={{
+        recovering,
+        beginRecovery,
+        finishRecovery,
         user: authState.user,
         sessionNotice: authState.sessionNotice,
         login,

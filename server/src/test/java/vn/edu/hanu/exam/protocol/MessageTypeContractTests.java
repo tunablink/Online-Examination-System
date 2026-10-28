@@ -31,6 +31,11 @@ class MessageTypeContractTests {
                 "LOGIN",
                 "LOGGED_IN",
 
+                "RESUME_SESSION",
+                "SESSION_RESUMED",
+                "LOGOUT",
+                "LOGGED_OUT",
+
                 "GET_PROFILE",
                 "PROFILE_DETAILS",
 
@@ -117,6 +122,9 @@ class MessageTypeContractTests {
 
                 "GET_EXAM_MONITORING",
                 "EXAM_MONITORING",
+
+                "GET_TEACHER_MONITORING",
+                "TEACHER_MONITORING",
 
                 "ERROR");
 
@@ -285,6 +293,9 @@ class MessageTypeContractTests {
 
                 MessageType.LOGIN,
 
+                MessageType.RESUME_SESSION,
+                MessageType.LOGOUT,
+
                 MessageType.GET_PROFILE,
                 MessageType.UPDATE_PROFILE,
                 MessageType.CHANGE_PASSWORD,
@@ -322,7 +333,8 @@ class MessageTypeContractTests {
                 MessageType.GET_SUBMISSION_RESULT,
 
                 MessageType.REPORT_ACTIVITY,
-                MessageType.GET_EXAM_MONITORING);
+                MessageType.GET_EXAM_MONITORING,
+                MessageType.GET_TEACHER_MONITORING);
 
         assertEquals(
                 expectedClientCommandTypes,
@@ -345,6 +357,9 @@ class MessageTypeContractTests {
                 MessageType.REGISTERED,
 
                 MessageType.LOGGED_IN,
+
+                MessageType.SESSION_RESUMED,
+                MessageType.LOGGED_OUT,
 
                 MessageType.PROFILE_DETAILS,
                 MessageType.PROFILE_UPDATED,
@@ -384,6 +399,7 @@ class MessageTypeContractTests {
 
                 MessageType.ACTIVITY_RECORDED,
                 MessageType.EXAM_MONITORING,
+                MessageType.TEACHER_MONITORING,
 
                 MessageType.ERROR);
 

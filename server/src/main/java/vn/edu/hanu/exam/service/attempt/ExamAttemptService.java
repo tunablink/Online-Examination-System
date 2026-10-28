@@ -9,6 +9,8 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,15 @@ public class ExamAttemptService {
     public static final String DATABASE_ERROR = "DATABASE_ERROR";
 
     private final AttemptRepository attemptRepository;
+    private ApplicationEventPublisher events;
+
+    @Autowired
+    void setEventPublisher(ApplicationEventPublisher events) { this.events = events; }
+
+    private void notifyMonitoring(long examId) {
+        if (events != null) events.publishEvent(
+                new vn.edu.hanu.exam.service.monitoring.MonitoringChanged(examId));
+    }
 
     public ExamAttemptService(AttemptRepository attemptRepository) {
         this.attemptRepository = attemptRepository;
@@ -91,6 +102,7 @@ public class ExamAttemptService {
                         shuffledChoices.stream().map(Choice::id).toList());
             }
 
+            notifyMonitoring(examId);
             return buildDetails(attempt, exam);
         } catch (DataAccessException | IllegalStateException exception) {
             throw databaseError(exception);
@@ -186,6 +198,7 @@ public class ExamAttemptService {
                 throw new IllegalStateException("The active attempt could not be finalized.");
             }
 
+            notifyMonitoring(attempt.examId());
             return attemptRepository.findSubmissionResult(attemptId, studentId)
                     .map(ExamAttemptService::toResult)
                     .orElseThrow(() -> new IllegalStateException(
@@ -193,6 +206,23 @@ public class ExamAttemptService {
         } catch (DataAccessException | IllegalStateException exception) {
             throw databaseError(exception);
         }
+    }
+
+    /** Called by the deadline worker, never from a client-supplied student ID. */
+    @Transactional
+    public boolean expireAttempt(long attemptId, long studentId) {
+        ExamAttempt attempt = attemptRepository
+                .findByIdAndStudentForUpdate(attemptId, studentId)
+                .orElse(null);
+        if (attempt == null || attempt.status() != AttemptStatus.IN_PROGRESS
+                || OffsetDateTime.now(ZoneOffset.UTC).isBefore(attempt.deadline())) {
+            return false;
+        }
+
+        // The transaction above owns the row lock. Reuse the same grading and
+        // conditional update path as manual submit while retaining that lock.
+        submitExam(attemptId, studentId);
+        return true;
     }
 
     @Transactional(readOnly = true)

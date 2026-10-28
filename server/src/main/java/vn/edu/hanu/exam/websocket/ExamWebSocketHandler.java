@@ -38,6 +38,16 @@ import vn.edu.hanu.exam.websocket.handler.TeacherSubmissionMessageHandler;
 @Component
 public final class ExamWebSocketHandler extends TextWebSocketHandler {
 
+    private MonitoringPushHub monitoringPushHub;
+
+    @Autowired
+    void setMonitoringPushHub(MonitoringPushHub hub) { this.monitoringPushHub = hub; }
+
+    private vn.edu.hanu.exam.session.SessionResumeService resumeService;
+
+    @Autowired
+    void setSessionResumeService(vn.edu.hanu.exam.session.SessionResumeService service) { this.resumeService = service; }
+
     private static final Logger LOGGER =
             LoggerFactory.getLogger(ExamWebSocketHandler.class);
 
@@ -272,7 +282,39 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             MessageType messageType)
             throws Exception {
 
+        synchronized (session) {
+        if (resumeService != null && authenticatedSessionRegistry.isAuthenticated(session.getId())
+                && !resumeService.isLive(session.getId())
+                && messageType != MessageType.LOGIN && messageType != MessageType.RESUME_SESSION
+                && messageType != MessageType.LOGOUT && messageType != MessageType.PING) {
+            authenticatedSessionRegistry.remove(session.getId());
+            if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
+            sendMessage(session, ServerMessage.error(clientMessage.requestId(), "SESSION_INVALID", "Your session expired. Please sign in again."));
+            return;
+        }
         switch (messageType) {
+            case RESUME_SESSION -> {
+                try {
+                    var details = resumeService.resume(session.getId(), readString(clientMessage.payload(), "sessionToken"));
+                    authenticatedSessionRegistry.authenticate(session.getId(), new LoggedInUser(
+                            details.id(), details.username(), details.fullName(), details.email(), details.role()));
+                    if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
+                    sendMessage(session, ServerMessage.success(clientMessage.requestId(), "SESSION_RESUMED", details));
+                } catch (IllegalArgumentException exception) {
+                    resumeService.revoke(session.getId());
+                    authenticatedSessionRegistry.remove(session.getId());
+                    if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
+                    sendMessage(session, ServerMessage.error(clientMessage.requestId(), "SESSION_INVALID", "Your session expired. Please sign in again."));
+                }
+            }
+            case LOGOUT -> {
+                if (resumeService != null) resumeService.revoke(session.getId());
+                authenticatedSessionRegistry.remove(session.getId());
+                if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
+                sendMessage(session, ServerMessage.success(clientMessage.requestId(), "LOGGED_OUT", Map.of()));
+            }
+            case GET_TEACHER_MONITORING -> sendMessage(
+                    session, monitoringPushHub.overview(session, clientMessage));
             case PING ->
                     handlePing(
                             session,
@@ -491,17 +533,20 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                                     session,
                                     clientMessage));
 
-            case GET_EXAM_MONITORING ->
-                    sendMessage(
-                            session,
-                            monitoringMessageHandler.handleGetExamMonitoring(
-                                    session,
-                                    clientMessage));
+            case GET_EXAM_MONITORING -> {
+                ServerMessage response = monitoringMessageHandler.handleGetExamMonitoring(session, clientMessage);
+                if (response.error() == null && monitoringPushHub != null
+                        && response.data() instanceof vn.edu.hanu.exam.service.monitoring.ExamMonitoringSummary summary) {
+                    monitoringPushHub.watch(session, summary.examId(), clientMessage.payload());
+                }
+                sendMessage(session, response);
+            }
 
             default ->
                     sendUnsupportedMessageType(
                             session,
                             clientMessage);
+        }
         }
     }
 
@@ -568,6 +613,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             LoggedInUser loggedInUser =
                     loginService.login(command);
 
+            Object loginDetails = resumeService == null ? loggedInUser : resumeService.issue(session.getId(), loggedInUser);
             authenticatedSessionRegistry.authenticate(
                     session.getId(),
                     loggedInUser);
@@ -584,7 +630,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                     ServerMessage.success(
                             clientMessage.requestId(),
                             MessageType.LOGGED_IN.name(),
-                            loggedInUser));
+                            loginDetails));
         } catch (IllegalArgumentException exception) {
             LOGGER.info(
                     "Login rejected because payload is invalid: "
@@ -660,7 +706,9 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
         String json =
                 jsonMapper.writeValueAsString(serverMessage);
 
-        session.sendMessage(new TextMessage(json));
+        synchronized (session) {
+            session.sendMessage(new TextMessage(json));
+        }
     }
 
     @Override
@@ -669,6 +717,8 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             CloseStatus status) {
 
         authenticatedSessionRegistry.remove(session.getId());
+        if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
+        if (resumeService != null) resumeService.detach(session.getId());
 
         LOGGER.info(
                 "WebSocket disconnected: "

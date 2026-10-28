@@ -17,6 +17,8 @@ import vn.edu.hanu.exam.domain.attempt.SavedAnswer;
 import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 
 public interface AttemptRepository {
+    List<ExamAttempt> findDueAttempts(int limit);
+
     Optional<Exam> findExamById(long examId);
 
     Optional<Exam> findExamByIdForUpdate(long examId);

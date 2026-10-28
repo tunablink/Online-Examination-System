@@ -3,7 +3,7 @@ import { Link } from 'react-router';
 
 import { useAuth } from '../../auth/useAuth';
 import Icon, { type IconName } from '../../components/common/Icon';
-import { MOCK_MONITORED_SESSIONS, MOCK_SUSPICIOUS_ACTIVITIES } from '../../mocks/monitoring';
+import { useTeacherMonitoring } from '../../websocket/useTeacherMonitoring';
 import type { TeacherDashboardData } from '../../websocket/protocol';
 import { useWebSocket } from '../../websocket/useWebSocket';
 
@@ -31,6 +31,7 @@ function MetricCard({ icon, label, value, note, tone = 'teal' }: { icon: IconNam
 
 function TeacherDashboardPage() {
   const { user } = useAuth();
+  const monitoring = useTeacherMonitoring();
   const { status: connectionStatus, sendMessage } = useWebSocket();
   const [dashboard, setDashboard] = useState<TeacherDashboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,8 +62,8 @@ function TeacherDashboardPage() {
   const exams = dashboard?.recentExams ?? [];
   const totals = { published: dashboard?.publishedExamCount ?? 0, draft: dashboard?.draftExamCount ?? 0, closed: dashboard?.closedExamCount ?? 0 };
 
-  const activeStudents = MOCK_MONITORED_SESSIONS.filter((session) => session.attemptStatus === 'TAKING').length;
-  const flagged = MOCK_SUSPICIOUS_ACTIVITIES.length;
+  const activeStudents = monitoring.data?.activeAttempts ?? '—';
+  const flagged = monitoring.data?.warningEvents ?? '—';
   const displayName = user?.fullName ?? 'Lecturer';
 
   return (
@@ -82,13 +83,14 @@ function TeacherDashboardPage() {
       </section>
 
       {error && <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#efd8da] bg-[#fff6f6] px-4 py-3 text-[11px] text-[#a82b31]"><Icon name="alert" size={15} />{error}</div>}
+      {monitoring.error && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800" role="status">{monitoring.error}</p>}
 
       <section className="mt-5 grid grid-cols-5 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2 max-sm:grid-cols-1" aria-label="Dashboard metrics">
         <MetricCard icon="document" label="Total exams" value={loading ? '—' : dashboard?.totalExams ?? 0} note={`${totals.draft} draft`} />
         <MetricCard icon="activity" label="Active monitoring" value={totals.published} note="Live now" />
-        <MetricCard icon="users" label="Active students" value={activeStudents} note="Preview" />
+        <MetricCard icon="users" label="Active attempts" value={activeStudents} note="Server data" />
         <MetricCard icon="check" label="Closed exams" value={totals.closed} note="Completed" tone="amber" />
-        <MetricCard icon="alert" label="Flagged reviews" value={flagged} note="Needs action" tone="red" />
+        <MetricCard icon="alert" label="Warning signals" value={flagged} note="Human review" tone="red" />
       </section>
 
       <section className="mt-5 flex items-center justify-between gap-5 rounded-xl border border-[#dce7ea] bg-white p-5 max-lg:flex-col max-lg:items-start">
@@ -98,12 +100,12 @@ function TeacherDashboardPage() {
           </div>
           <div>
             <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[.08em] text-[#76858b]"><span className="h-2 w-2 rounded-full bg-[#00849a]" /> Live monitoring</div>
-            <h2 className="mt-2 text-[17px] font-bold tracking-[-.025em] text-[#1d292e]">Java Concurrency & System Design</h2>
-            <p className="mt-1 text-[11px] text-[#6b7a80]">Real-time proctor preview · {activeStudents} candidates currently active</p>
-            <div className="mt-3 flex flex-wrap gap-4 text-[10px] font-semibold text-[#53636a]"><span><Icon className="mr-1 inline text-[#00778b]" name="users" size={13} />{MOCK_MONITORED_SESSIONS.length} enrolled</span><span><Icon className="mr-1 inline text-[#bf7920]" name="check" size={13} />1 finished</span><span className="text-[#bd2f35]"><Icon className="mr-1 inline" name="flag" size={13} />{flagged} alerts</span></div>
+            <h2 className="mt-2 text-[17px] font-bold tracking-[-.025em] text-[#1d292e]">Your examination activity</h2>
+            <p className="mt-1 text-[11px] text-[#6b7a80]">{activeStudents} active attempts across your examinations</p>
+            <div className="mt-3 flex flex-wrap gap-4 text-[10px] font-semibold text-[#53636a]"><span>{monitoring.data?.completedAttempts ?? '—'} finalized attempts</span><span className="text-[#bd2f35]">{flagged} warning signals</span></div>
           </div>
         </div>
-        <Link className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#bed8dd] bg-white px-4 text-[11px] font-semibold text-[#00778b] hover:bg-[#f0f8f9]" to="/teacher/monitoring"><Icon name="camera" size={15} />Launch Live Proctor Screen</Link>
+        <Link className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#bed8dd] bg-white px-4 text-[11px] font-semibold text-[#00778b] hover:bg-[#f0f8f9]" to="/teacher/monitoring"><Icon name="monitor" size={15} />Open exam monitoring</Link>
       </section>
 
       <div className="mt-5 grid grid-cols-[minmax(0,2fr)_340px] gap-5 max-xl:grid-cols-1">
@@ -133,14 +135,15 @@ function TeacherDashboardPage() {
         </section>
 
         <aside className="rounded-xl border border-[#dce7ea] bg-white p-5">
-          <div className="flex items-center justify-between"><h2 className="text-sm font-bold text-[#27343a]">Live Proctor Feed</h2><span className="h-2 w-2 rounded-full bg-[#c32c34]" /></div>
-          <p className="mt-1 text-[10px] text-[#7a888d]">Recent candidate anomalies & events</p>
+          <div className="flex items-center justify-between"><h2 className="text-sm font-bold text-[#27343a]">Recent integrity signals</h2><span className="h-2 w-2 rounded-full bg-[#00778b]" /></div>
+          <p className="mt-1 text-[10px] text-[#7a888d]">Recorded activity for teacher review</p>
           <div className="mt-4 grid gap-2.5">
-            {MOCK_SUSPICIOUS_ACTIVITIES.slice(0, 3).map((event) => (
+            {(monitoring.data?.activities ?? []).slice(0, 3).map((event) => (
               <article className="rounded-lg bg-[#f2f6f7] p-3" key={event.id}>
-                <div className="flex gap-3"><span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white ${event.severity === 'HIGH' ? 'text-[#bd2f35]' : 'text-[#a36a12]'}`}><Icon name={event.severity === 'HIGH' ? 'alert' : 'monitor'} size={14} /></span><div><p className="text-[10px] font-semibold text-[#39484e]">{event.type.replaceAll('_', ' ')}</p><p className="mt-1 text-[9px] text-[#68777d]">Candidate: <strong>{event.studentName}</strong></p></div></div>
+                <div className="flex gap-3"><span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white ${event.severity === 'WARNING' ? 'text-[#bd2f35]' : 'text-[#00778b]'}`}><Icon name={event.severity === 'WARNING' ? 'alert' : 'monitor'} size={14} /></span><div><p className="text-[10px] font-semibold text-[#39484e]">{event.rule.replaceAll('_', ' ')}</p><p className="mt-1 text-[9px] text-[#68777d]">Candidate: <strong>{event.studentName}</strong></p></div></div>
               </article>
             ))}
+            {!monitoring.loading && monitoring.data?.activities.length === 0 && <p className="text-xs text-[#718087]">No signals have been recorded.</p>}
           </div>
           <Link className="mt-4 inline-flex items-center gap-1 text-[10px] font-semibold text-[#00778b]" to="/teacher/activities">Full security audit <Icon name="arrow-right" size={12} /></Link>
         </aside>

@@ -1,5 +1,49 @@
 # Online Examination System
 
+## Implementation update — 2026-10-28
+
+This section supersedes the historical progress snapshots below. It describes
+the current source, including uncommitted deadline/reliability work.
+
+- Teacher submission review is integrated: `GET_EXAM_SUBMISSIONS` and
+  `GET_SUBMISSION_RESULT`, teacher ownership checks, list/result pages and tests.
+- Teacher monitoring now supports server-push snapshots after committed attempt
+  starts, activity reports and finalizations. `GET_TEACHER_MONITORING` supplies
+  real dashboard metrics and the latest 500 integrity records; no page imports
+  the mock monitoring datasets anymore. Ownership is checked before subscription
+  and delivery. See [live monitoring and verification](docs/monitoring-live-review.md).
+- Login now issues an opaque eight-hour credential for tab-scoped refresh and
+  WebSocket reconnect recovery. `RESUME_SESSION` revalidates identity on the server;
+  `LOGOUT` revokes the credential. Server restart still requires sign-in again.
+  See [session recovery behavior and limitations](docs/session-resume.md).
+- Camera/microphone checks have been removed from the pre-exam flow. Integrity
+  monitoring uses browser activity signals and server records; it is not camera
+  surveillance or proof of cheating.
+- Deadline finalization now runs on the server: a bounded worker finds overdue
+  attempts even when the student is offline or the server has restarted. Each
+  attempt is locked and graded through the same transaction path as manual submit.
+- The exam room waits for answer saves before allowing submission, opens the
+  result page after a successful manual submission, and checks for the server's
+  finalized result after the timer reaches zero.
+- Existing databases with the legacy all-status attempt uniqueness rule have a
+  manual migration at
+  `server/src/main/resources/db/migrations/001_attempt_active_uniqueness.sql`.
+  The script must be run on the same database used by the application.
+- See [deadline behavior, migration and manual checks](docs/deadline-and-recovery.md).
+
+Verified on 2026-10-28: full Maven suite **258 tests, 0 failures, 0 errors**;
+frontend ESLint and production build passed (**141 modules**). The focused
+attempt integration class passed 9 tests, including real concurrent submit versus
+deadline finalization. Monitoring tests verify owner-only push after commit and no
+push on rollback. Session tests verify expiry/revocation and login/disconnect/
+resume/logout through the Spring router. Browser checks for expired/offline/restarted attempts are
+documented separately and have not yet been executed for this update.
+
+Still unfinished: durable login across server restarts, full load measurements,
+and final browser/demo verification. Tab-scoped refresh/reconnect recovery is
+implemented. Monitoring snapshots are pushed after commit on the current single
+Java server; delivery throughput has not been benchmarked.
+
 ## Cập nhật triển khai hiện tại - 2026-10-27
 
 > Mục này thay thế phần mô tả tiến độ ngày `2026-10-26` ở bên dưới. Các phần thiết kế dài hạn vẫn được giữ để làm tài liệu kiến trúc, nhưng chỉ các chức năng liệt kê tại đây mới được xem là đã có trong source hiện tại.

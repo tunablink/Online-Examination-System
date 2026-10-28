@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router';
 
 import { useAuth } from '../../auth/useAuth';
 import Icon from './Icon';
+import { useWebSocket } from '../../websocket/useWebSocket';
 
 interface AccountMenuProps {
   profilePath: string;
@@ -17,6 +18,7 @@ function getInitials(fullName: string): string {
 function AccountMenu({ profilePath, fallbackName, fallbackAccountLabel }: AccountMenuProps) {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const { sendMessage } = useWebSocket();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const displayName = user?.fullName ?? fallbackName;
@@ -41,6 +43,7 @@ function AccountMenu({ profilePath, fallbackName, fallbackAccountLabel }: Accoun
   }, [open]);
 
   const signOut = () => {
+    sendMessage('LOGOUT');
     setOpen(false);
     logout();
     navigate('/login', { replace: true });
