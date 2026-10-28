@@ -148,20 +148,20 @@ function ExamManagementPage() {
     <div>
       <section className="flex items-start justify-between gap-5 max-md:flex-col">
         <div>
-          <p className="text-[9px] font-bold uppercase tracking-[.13em] text-[#00778b]">Assessment management</p>
+          <p className="text-xs font-bold uppercase tracking-[.13em] text-[#00778b]">Assessment management</p>
           <h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">Examinations</h1>
-          <p className="mt-1 text-[11px] text-[#718087]">Create drafts, review readiness, publish assessments, and close completed sessions.</p>
+          <p className="mt-1 text-sm text-[#718087]">Create drafts, review readiness, publish assessments, and close completed sessions.</p>
         </div>
         <div className="flex gap-2">
           <button
-            className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d4e0e3] px-4 text-[10px] font-semibold text-[#526269] disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#d4e0e3] px-4 text-sm font-semibold text-[#526269] disabled:cursor-not-allowed disabled:opacity-50"
             disabled={actionsDisabled}
             onClick={loadExams}
             type="button"
           >
             <Icon name="activity" size={14} />{loading ? 'Refreshing…' : 'Refresh'}
           </button>
-          <Link className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-[10px] font-semibold text-white" to="/teacher/exams/new">
+          <Link className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white" to="/teacher/exams/new">
             <Icon name="plus" size={14} />Create exam
           </Link>
         </div>
@@ -181,7 +181,7 @@ function ExamManagementPage() {
               <span className="grid h-8 w-8 place-items-center rounded-full bg-[#edf7f8] text-[#00778b]"><Icon name={icon as 'document'} size={15} /></span>
               <span className="text-[22px] font-bold">{loading ? '—' : value}</span>
             </div>
-            <p className="mt-3 text-[9px] font-bold uppercase tracking-[.08em] text-[#7c898e]">{label}</p>
+            <p className="mt-3 text-xs font-bold uppercase tracking-[.08em] text-[#7c898e]">{label}</p>
           </article>
         ))}
       </section>
@@ -190,34 +190,34 @@ function ExamManagementPage() {
         <div className="flex items-center justify-between gap-4 border-b border-[#e6edef] p-5 max-lg:flex-col max-lg:items-stretch">
           <div className="flex rounded-lg bg-[#edf2f3] p-1">
             {(['ALL', 'DRAFT', 'PUBLISHED', 'CLOSED'] as Filter[]).map((value) => (
-              <button className={`rounded-md px-4 py-2 text-[9px] font-semibold ${filter === value ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#66767c]'}`} key={value} onClick={() => setFilter(value)} type="button">
+              <button className={`rounded-md px-4 py-2 text-xs font-semibold ${filter === value ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#66767c]'}`} key={value} onClick={() => setFilter(value)} type="button">
                 {value === 'ALL' ? 'All' : value.charAt(0) + value.slice(1).toLowerCase()}
               </button>
             ))}
           </div>
           <label className="relative block min-w-[260px] max-sm:min-w-0">
             <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7d8b90]" name="search" size={14} />
-            <input className="h-10 w-full rounded-lg bg-[#f2f5f6] pl-9 pr-3 text-[10px] outline-none focus:ring-2 focus:ring-[#00849a]/20" onChange={(event) => setQuery(event.target.value)} placeholder="Search title or exam ID…" value={query} />
+            <input className="h-10 w-full rounded-lg bg-[#f2f5f6] pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-[#00849a]/20" onChange={(event) => setQuery(event.target.value)} placeholder="Search title or exam ID…" value={query} />
           </label>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full min-w-[850px] text-left">
-            <thead className="bg-[#f0f4f5] text-[9px] font-bold uppercase tracking-[.07em] text-[#69787e]">
+            <thead className="bg-[#f0f4f5] text-xs font-bold uppercase tracking-[.07em] text-[#69787e]">
               <tr><th className="px-5 py-3">Exam</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Status</th><th className="px-5 py-3 text-right">Actions</th></tr>
             </thead>
             <tbody>
-              {loading && <tr><td className="px-5 py-12 text-center text-[11px] text-[#7b898e]" colSpan={5}>Loading examinations through WebSocket…</td></tr>}
-              {!loading && filtered.length === 0 && <tr><td className="px-5 py-12 text-center text-[11px] text-[#7b898e]" colSpan={5}>No examinations match the current filter.</td></tr>}
+              {loading && <tr><td className="px-5 py-12 text-center text-sm text-[#7b898e]" colSpan={5}>Loading examinations through WebSocket…</td></tr>}
+              {!loading && filtered.length === 0 && <tr><td className="px-5 py-12 text-center text-sm text-[#7b898e]" colSpan={5}>No examinations match the current filter.</td></tr>}
               {!loading && filtered.map((exam) => (
                 <tr className="border-t border-[#edf1f2]" key={exam.id}>
-                  <td className="px-5 py-4"><p className="text-[13px] font-bold text-[#26353a]">{exam.title}</p><p className="mt-1 text-[10px] text-[#819096]">EX-{String(exam.id).padStart(4, '0')} · {exam.description || 'No description'}</p></td>
-                  <td className="px-4 py-4 text-[10px] text-[#596970]">{formatDate(exam.createdAt)}</td>
-                  <td className="px-4 py-4 text-[11px] font-semibold">{exam.durationMinutes} mins</td>
-                  <td className="px-4 py-4"><span className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold ${exam.status === 'PUBLISHED' ? 'border-[#b9dce2] bg-[#eff9fa] text-[#00778b]' : exam.status === 'DRAFT' ? 'border-[#ead7b8] bg-[#fff8ed] text-[#986313]' : 'border-[#dce3e5] bg-[#f2f5f6] text-[#64747a]'}`}>{exam.status}</span></td>
+                  <td className="px-5 py-4"><p className="text-base font-bold text-[#26353a]">{exam.title}</p><p className="mt-1 text-sm text-[#819096]">EX-{String(exam.id).padStart(4, '0')} · {exam.description || 'No description'}</p></td>
+                  <td className="px-4 py-4 text-sm text-[#596970]">{formatDate(exam.createdAt)}</td>
+                  <td className="px-4 py-4 text-sm font-semibold">{exam.durationMinutes} mins</td>
+                  <td className="px-4 py-4"><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${exam.status === 'PUBLISHED' ? 'border-[#b9dce2] bg-[#eff9fa] text-[#00778b]' : exam.status === 'DRAFT' ? 'border-[#ead7b8] bg-[#fff8ed] text-[#986313]' : 'border-[#dce3e5] bg-[#f2f5f6] text-[#64747a]'}`}>{exam.status}</span></td>
                   <td className="px-5 py-4"><div className="flex justify-end gap-2">
-                    <Link className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#d4e0e3] px-3 text-[9px] font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}`}><Icon name="eye" size={12} />Manage</Link>
-                    {exam.status === 'DRAFT' && <button className="h-8 rounded-lg border border-[#eccacc] px-3 text-[9px] font-semibold text-[#b42b31] disabled:cursor-not-allowed disabled:opacity-50" disabled={actionsDisabled} onClick={() => setPendingDelete(exam)} type="button">Delete</button>}
+                    <Link className="inline-flex h-8 items-center gap-1 rounded-lg border border-[#d4e0e3] px-3 text-xs font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}`}><Icon name="eye" size={12} />Manage</Link>
+                    {exam.status === 'DRAFT' && <button className="h-8 rounded-lg border border-[#eccacc] px-3 text-xs font-semibold text-[#b42b31] disabled:cursor-not-allowed disabled:opacity-50" disabled={actionsDisabled} onClick={() => setPendingDelete(exam)} type="button">Delete</button>}
                   </div></td>
                 </tr>
               ))}

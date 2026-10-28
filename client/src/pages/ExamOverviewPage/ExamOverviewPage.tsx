@@ -27,7 +27,7 @@ interface ExamFormState {
 }
 
 const inputClass =
-  "h-10 w-full rounded-lg border border-[#d6e1e4] px-3 text-[11px] outline-none focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10 disabled:bg-[#f1f4f5] disabled:text-[#8a979c]";
+  "h-10 w-full rounded-lg border border-[#d6e1e4] px-3 text-sm outline-none focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10 disabled:bg-[#f1f4f5] disabled:text-[#8a979c]";
 
 function isExamStatus(value: unknown): value is ExamStatus {
   return value === "DRAFT" || value === "PUBLISHED" || value === "CLOSED";
@@ -377,7 +377,7 @@ function ExamOverviewPage() {
 
   if (loading) {
     return (
-      <div className="rounded-xl border border-[#dce7ea] bg-white py-20 text-center text-[11px] text-[#718087]">
+      <div className="rounded-xl border border-[#dce7ea] bg-white py-20 text-center text-sm text-[#718087]">
         Loading examination through WebSocket…
       </div>
     );
@@ -388,19 +388,19 @@ function ExamOverviewPage() {
       <div className="rounded-xl border border-[#edc9cc] bg-white p-10 text-center">
         <Icon className="mx-auto text-[#bd2f35]" name="alert" size={25} />
         <h1 className="mt-3 text-xl font-bold">Examination unavailable</h1>
-        <p className="mx-auto mt-2 max-w-lg text-[10px] leading-5 text-[#718087]">
+        <p className="mx-auto mt-2 max-w-lg text-sm leading-5 text-[#718087]">
           {feedback?.message ?? "This examination could not be loaded."}
         </p>
         <div className="mt-5 flex justify-center gap-3">
           <Link
-            className="inline-flex h-9 items-center rounded-lg border border-[#d4e0e3] px-4 text-[10px] font-semibold text-[#526269]"
+            className="inline-flex h-9 items-center rounded-lg border border-[#d4e0e3] px-4 text-sm font-semibold text-[#526269]"
             to="/teacher/exams"
           >
             Back to examinations
           </Link>
           {id !== null && (
             <button
-              className="h-9 rounded-lg bg-[#00778b] px-4 text-[10px] font-semibold text-white disabled:opacity-50"
+              className="h-9 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white disabled:opacity-50"
               disabled={connectionStatus !== "connected"}
               onClick={loadExam}
               type="button"
@@ -423,7 +423,7 @@ function ExamOverviewPage() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 text-[9px] font-semibold text-[#75848a]">
+      <div className="flex items-center gap-2 text-xs font-semibold text-[#75848a]">
         <Link to="/teacher/exams">Examinations</Link>
         <Icon name="arrow-right" size={10} />
         <span>EX-{String(exam.id).padStart(4, "0")}</span>
@@ -433,25 +433,25 @@ function ExamOverviewPage() {
         <div>
           <div className="flex items-center gap-2">
             <span
-              className={`rounded-full border px-2.5 py-1 text-[9px] font-semibold ${statusClass}`}
+              className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClass}`}
             >
               {exam.status}
             </span>
-            <span className="text-[9px] text-[#7a888d]">
+            <span className="text-xs text-[#7a888d]">
               Updated {new Date(exam.updatedAt).toLocaleString("en-GB")}
             </span>
           </div>
           <h1 className="mt-3 text-[26px] font-bold tracking-[-.04em]">
             {exam.title}
           </h1>
-          <p className="mt-2 max-w-3xl text-[11px] leading-5 text-[#68777d]">
+          <p className="mt-2 max-w-3xl text-sm leading-5 text-[#68777d]">
             {exam.description || "No description has been provided."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {exam.status !== "DRAFT" && (
             <Link
-              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]"
+              className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-xs font-semibold text-[#00778b]"
               to={`/teacher/exams/${exam.id}/submissions`}
             >
               <Icon name="document" size={13} />
@@ -462,7 +462,7 @@ function ExamOverviewPage() {
           {exam.status === "DRAFT" && (
             <>
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d4e0e3] px-3 text-[9px] font-semibold text-[#526269] disabled:cursor-not-allowed disabled:opacity-50"
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#d4e0e3] px-3 text-xs font-semibold text-[#526269] disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={actionDisabled}
                 onClick={() => {
                   setForm(toForm(exam));
@@ -474,14 +474,14 @@ function ExamOverviewPage() {
                 Edit details
               </button>
               <Link
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]"
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-xs font-semibold text-[#00778b]"
                 to={`/teacher/exams/${exam.id}/questions`}
               >
                 <Icon name="document" size={13} />
                 Manage questions
               </Link>
               <button
-                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#a8bec3]"
+                className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#a8bec3]"
                 disabled={actionDisabled}
                 onClick={publishExam}
                 type="button"
@@ -494,14 +494,14 @@ function ExamOverviewPage() {
           {exam.status === "PUBLISHED" && (
             <>
               <Link
-                className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-[9px] font-semibold text-[#00778b]"
+                className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b7d7dd] px-3 text-xs font-semibold text-[#00778b]"
                 to={`/teacher/monitoring/${exam.id}`}
               >
                 <Icon name="monitor" size={13} />
                 Open monitoring
               </Link>
               <button
-                className="h-9 rounded-lg bg-[#25373d] px-4 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+                className="h-9 rounded-lg bg-[#25373d] px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                 disabled={actionDisabled}
                 onClick={() => setConfirmation("CLOSE_EXAM")}
                 type="button"
@@ -528,9 +528,9 @@ function ExamOverviewPage() {
           onSubmit={save}
         >
           <div className="flex items-center justify-between">
-            <h2 className="text-[12px] font-bold">Edit draft details</h2>
+            <h2 className="text-base font-bold">Edit draft details</h2>
             <button
-              className="text-[9px] text-[#718087] disabled:opacity-50"
+              className="text-xs text-[#718087] disabled:opacity-50"
               disabled={pending !== null}
               onClick={() => {
                 setForm(toForm(exam));
@@ -543,7 +543,7 @@ function ExamOverviewPage() {
           </div>
           <div className="mt-4 grid grid-cols-[minmax(0,1fr)_180px] gap-4 max-md:grid-cols-1">
             <label className="grid gap-2">
-              <span className="text-[9px] font-semibold">Title</span>
+              <span className="text-xs font-semibold">Title</span>
               <input
                 className={inputClass}
                 disabled={pending !== null}
@@ -558,7 +558,7 @@ function ExamOverviewPage() {
               />
             </label>
             <label className="grid gap-2">
-              <span className="text-[9px] font-semibold">Duration</span>
+              <span className="text-xs font-semibold">Duration</span>
               <input
                 className={inputClass}
                 disabled={pending !== null}
@@ -574,9 +574,9 @@ function ExamOverviewPage() {
               />
             </label>
             <label className="col-span-2 grid gap-2 max-md:col-span-1">
-              <span className="text-[9px] font-semibold">Description</span>
+              <span className="text-xs font-semibold">Description</span>
               <textarea
-                className="min-h-24 rounded-lg border border-[#d6e1e4] p-3 text-[11px] outline-none focus:border-[#70b2be] disabled:bg-[#f1f4f5]"
+                className="min-h-24 rounded-lg border border-[#d6e1e4] p-3 text-sm outline-none focus:border-[#70b2be] disabled:bg-[#f1f4f5]"
                 disabled={pending !== null}
                 onChange={(event) =>
                   setForm((current) => ({
@@ -589,7 +589,7 @@ function ExamOverviewPage() {
             </label>
           </div>
           <button
-            className="mt-4 h-9 rounded-lg bg-[#00778b] px-4 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#a8bec3]"
+            className="mt-4 h-9 rounded-lg bg-[#00778b] px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:bg-[#a8bec3]"
             disabled={actionDisabled}
             type="submit"
           >
@@ -601,8 +601,8 @@ function ExamOverviewPage() {
       <div className="mt-5 grid grid-cols-[minmax(0,2fr)_330px] gap-5 max-xl:grid-cols-1">
         <section className="rounded-xl border border-[#dce7ea] bg-white">
           <div className="border-b border-[#e7edef] px-5 py-4">
-            <h2 className="text-[12px] font-bold">Assessment configuration</h2>
-            <p className="mt-1 text-[9px] text-[#819096]">
+            <h2 className="text-base font-bold">Assessment configuration</h2>
+            <p className="mt-1 text-xs text-[#819096]">
               Server-backed lifecycle and core delivery settings
             </p>
           </div>
@@ -622,16 +622,16 @@ function ExamOverviewPage() {
                   name={icon as "clock"}
                   size={16}
                 />
-                <p className="mt-3 text-[9px] font-bold uppercase tracking-[.07em] text-[#879399]">
+                <p className="mt-3 text-xs font-bold uppercase tracking-[.07em] text-[#879399]">
                   {label}
                 </p>
-                <p className="mt-1 text-[12px] font-semibold">{value}</p>
+                <p className="mt-1 text-base font-semibold">{value}</p>
               </div>
             ))}
           </div>
           <div className="border-t border-[#e7edef] p-5">
-            <h3 className="text-[11px] font-bold">Lifecycle controls</h3>
-            <div className="mt-4 flex items-center gap-2 text-[9px] font-semibold">
+            <h3 className="text-sm font-bold">Lifecycle controls</h3>
+            <div className="mt-4 flex items-center gap-2 text-xs font-semibold">
               <span className="rounded-full bg-[#fff3dd] px-3 py-1.5 text-[#95610e]">
                 Draft
               </span>
@@ -649,8 +649,8 @@ function ExamOverviewPage() {
 
         <aside className="grid gap-4">
           <section className="rounded-xl border border-[#dce7ea] bg-white p-5">
-            <h2 className="text-[12px] font-bold">Publish readiness</h2>
-            <div className="mt-4 grid gap-3 text-[10px] text-[#607178]">
+            <h2 className="text-base font-bold">Publish readiness</h2>
+            <div className="mt-4 grid gap-3 text-sm text-[#607178]">
               {[
                 "At least one persisted question",
                 "Each question has 2+ choices",
@@ -662,14 +662,14 @@ function ExamOverviewPage() {
                 </p>
               ))}
             </div>
-            <p className="mt-4 rounded-lg bg-[#fff8ed] p-3 text-[9px] leading-4 text-[#8b641f]">
+            <p className="mt-4 rounded-lg bg-[#fff8ed] p-3 text-xs leading-5 text-[#8b641f]">
               The backend validates these rules when publishing. If the draft is
               incomplete, the exact server reason is shown above.
             </p>
           </section>
           {exam.status === "DRAFT" && (
             <button
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#edc9cc] bg-white text-[9px] font-semibold text-[#b32c33] disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-[#edc9cc] bg-white text-xs font-semibold text-[#b32c33] disabled:cursor-not-allowed disabled:opacity-50"
               disabled={actionDisabled}
               onClick={() => setConfirmation("DELETE_EXAM")}
               type="button"

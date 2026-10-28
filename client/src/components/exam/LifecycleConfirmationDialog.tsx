@@ -40,12 +40,12 @@ function LifecycleConfirmationDialog({
           </span>
           <div>
             <h2 className="text-[16px] font-bold" id="lifecycle-confirmation-title">{title}</h2>
-            <p className="mt-2 text-[10px] leading-5 text-[#68777d]">{description}</p>
+            <p className="mt-2 text-sm leading-5 text-[#68777d]">{description}</p>
           </div>
         </div>
         <div className="mt-6 flex justify-end gap-2">
           <button
-            className="h-9 rounded-lg border border-[#d6e1e4] px-4 text-[9px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+            className="h-9 rounded-lg border border-[#d6e1e4] px-4 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isPending}
             onClick={onCancel}
             type="button"
@@ -53,7 +53,7 @@ function LifecycleConfirmationDialog({
             Cancel
           </button>
           <button
-            className={`h-9 rounded-lg px-4 text-[9px] font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
+            className={`h-9 rounded-lg px-4 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 ${confirmClass}`}
             disabled={isPending}
             onClick={onConfirm}
             type="button"

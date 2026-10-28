@@ -21,9 +21,9 @@ function MetricCard({ icon, label, value, note, tone = 'teal' }: { icon: IconNam
     <article className="rounded-xl border border-[#dde7ea] bg-white p-4 shadow-[0_1px_2px_rgba(15,42,51,.02)]">
       <div className="flex items-start justify-between gap-3">
         <span className={`grid h-9 w-9 place-items-center rounded-full border bg-[#f7fafb] ${tones[tone]}`}><Icon name={icon} size={17} /></span>
-        <span className="rounded-full border border-[#e1e8eb] px-2 py-1 text-[9px] font-semibold text-[#6d7b80]">{note}</span>
+        <span className="rounded-full border border-[#e1e8eb] px-2 py-1 text-xs font-semibold text-[#6d7b80]">{note}</span>
       </div>
-      <p className="mt-5 text-[10px] font-bold uppercase tracking-[.08em] text-[#7d8b90]">{label}</p>
+      <p className="mt-5 text-sm font-bold uppercase tracking-[.08em] text-[#7d8b90]">{label}</p>
       <p className={`mt-1 text-[28px] font-bold tracking-[-.04em] ${tone === 'red' ? 'text-[#bd2f35]' : 'text-[#172126]'}`}>{value}</p>
     </article>
   );
@@ -72,18 +72,18 @@ function TeacherDashboardPage() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-[25px] font-bold tracking-[-.04em] text-[#172126]">Teacher Dashboard</h1>
-            <span className="rounded-full border border-[#dfe7e9] bg-white px-2.5 py-1 text-[9px] font-semibold text-[#617077]"><span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#c77d16]" />Academic Term 2026 / Q4</span>
+            <span className="rounded-full border border-[#dfe7e9] bg-white px-2.5 py-1 text-xs font-semibold text-[#617077]"><span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#c77d16]" />Academic Term 2026 / Q4</span>
           </div>
-          <p className="mt-1 text-[12px] text-[#6d7b80]">Welcome back, <strong className="text-[#425157]">{displayName}</strong> — live oversight & academic analytics</p>
+          <p className="mt-1 text-base text-[#6d7b80]">Welcome back, <strong className="text-[#425157]">{displayName}</strong> — live oversight & academic analytics</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#dbe5e8] bg-white px-3 text-[10px] font-semibold text-[#64747a]"><Icon name="refresh" size={14} /> {connectionStatus === 'connected' ? 'Live data synced' : 'Reconnecting'}</span>
-          <Link className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-[11px] font-semibold text-white hover:bg-[#006273]" to="/teacher/exams/new"><Icon name="plus" size={15} /> Create Exam</Link>
+          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#dbe5e8] bg-white px-3 text-sm font-semibold text-[#64747a]"><Icon name="refresh" size={14} /> {connectionStatus === 'connected' ? 'Live data synced' : 'Reconnecting'}</span>
+          <Link className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white hover:bg-[#006273]" to="/teacher/exams/new"><Icon name="plus" size={15} /> Create Exam</Link>
         </div>
       </section>
 
-      {error && <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#efd8da] bg-[#fff6f6] px-4 py-3 text-[11px] text-[#a82b31]"><Icon name="alert" size={15} />{error}</div>}
-      {monitoring.error && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-800" role="status">{monitoring.error}</p>}
+      {error && <div className="mt-4 flex items-center gap-2 rounded-lg border border-[#efd8da] bg-[#fff6f6] px-4 py-3 text-sm text-[#a82b31]"><Icon name="alert" size={15} />{error}</div>}
+      {monitoring.error && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm text-amber-800" role="status">{monitoring.error}</p>}
 
       <section className="mt-5 grid grid-cols-5 gap-3 max-xl:grid-cols-3 max-md:grid-cols-2 max-sm:grid-cols-1" aria-label="Dashboard metrics">
         <MetricCard icon="document" label="Total exams" value={loading ? '—' : dashboard?.totalExams ?? 0} note={`${totals.draft} draft`} />
@@ -96,37 +96,37 @@ function TeacherDashboardPage() {
       <section className="mt-5 flex items-center justify-between gap-5 rounded-xl border border-[#dce7ea] bg-white p-5 max-lg:flex-col max-lg:items-start">
         <div className="flex items-center gap-5">
           <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-[7px] border-[#cfe8ec] border-r-[#00778b] text-center">
-            <span className="text-sm font-bold text-[#26363c]">LIVE<small className="block text-[8px] font-semibold text-[#a36b16]">SESSION</small></span>
+            <span className="text-base font-bold text-[#26363c]">LIVE<small className="block text-xs font-semibold text-[#a36b16]">SESSION</small></span>
           </div>
           <div>
-            <div className="flex items-center gap-2 text-[9px] font-bold uppercase tracking-[.08em] text-[#76858b]"><span className="h-2 w-2 rounded-full bg-[#00849a]" /> Live monitoring</div>
-            <h2 className="mt-2 text-[17px] font-bold tracking-[-.025em] text-[#1d292e]">Your examination activity</h2>
-            <p className="mt-1 text-[11px] text-[#6b7a80]">{activeStudents} active attempts across your examinations</p>
-            <div className="mt-3 flex flex-wrap gap-4 text-[10px] font-semibold text-[#53636a]"><span>{monitoring.data?.completedAttempts ?? '—'} finalized attempts</span><span className="text-[#bd2f35]">{flagged} warning signals</span></div>
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.08em] text-[#76858b]"><span className="h-2 w-2 rounded-full bg-[#00849a]" /> Live monitoring</div>
+            <h2 className="mt-2 text-xl font-bold tracking-[-.025em] text-[#1d292e]">Your examination activity</h2>
+            <p className="mt-1 text-sm text-[#6b7a80]">{activeStudents} active attempts across your examinations</p>
+            <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-[#53636a]"><span>{monitoring.data?.completedAttempts ?? '—'} finalized attempts</span><span className="text-[#bd2f35]">{flagged} warning signals</span></div>
           </div>
         </div>
-        <Link className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#bed8dd] bg-white px-4 text-[11px] font-semibold text-[#00778b] hover:bg-[#f0f8f9]" to="/teacher/monitoring"><Icon name="monitor" size={15} />Open exam monitoring</Link>
+        <Link className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#bed8dd] bg-white px-4 text-sm font-semibold text-[#00778b] hover:bg-[#f0f8f9]" to="/teacher/monitoring"><Icon name="monitor" size={15} />Open exam monitoring</Link>
       </section>
 
       <div className="mt-5 grid grid-cols-[minmax(0,2fr)_340px] gap-5 max-xl:grid-cols-1">
         <section className="overflow-hidden rounded-xl border border-[#dce7ea] bg-white">
           <div className="flex items-center justify-between border-b border-[#e7edef] px-5 py-4">
-            <div><h2 className="text-sm font-bold text-[#27343a]">Recent examinations</h2><p className="mt-1 text-[10px] text-[#7a888d]">Data loaded through the authenticated WebSocket session</p></div>
-            <Link className="text-[10px] font-semibold text-[#00778b]" to="/teacher/exams">View all schedules <Icon className="inline" name="arrow-right" size={12} /></Link>
+            <div><h2 className="text-base font-bold text-[#27343a]">Recent examinations</h2><p className="mt-1 text-sm text-[#7a888d]">Data loaded through the authenticated WebSocket session</p></div>
+            <Link className="text-sm font-semibold text-[#00778b]" to="/teacher/exams">View all schedules <Icon className="inline" name="arrow-right" size={12} /></Link>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[700px] text-left">
-              <thead className="bg-[#f1f5f6] text-[9px] font-bold uppercase tracking-[.06em] text-[#65747a]"><tr><th className="px-5 py-3">Exam name & code</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead>
+              <thead className="bg-[#f1f5f6] text-xs font-bold uppercase tracking-[.06em] text-[#65747a]"><tr><th className="px-5 py-3">Exam name & code</th><th className="px-4 py-3">Created</th><th className="px-4 py-3">Duration</th><th className="px-4 py-3">Status</th><th className="px-5 py-3 text-right">Action</th></tr></thead>
               <tbody>
-                {loading && <tr><td className="px-5 py-8 text-center text-xs text-[#7a888d]" colSpan={5}>Loading examination schedules…</td></tr>}
-                {!loading && exams.length === 0 && <tr><td className="px-5 py-10 text-center text-xs text-[#7a888d]" colSpan={5}>No examinations yet. Create your first draft to begin.</td></tr>}
+                {loading && <tr><td className="px-5 py-8 text-center text-sm text-[#7a888d]" colSpan={5}>Loading examination schedules…</td></tr>}
+                {!loading && exams.length === 0 && <tr><td className="px-5 py-10 text-center text-sm text-[#7a888d]" colSpan={5}>No examinations yet. Create your first draft to begin.</td></tr>}
                 {exams.slice(0, 5).map((exam) => (
                   <tr className="border-t border-[#edf1f2]" key={exam.id}>
-                    <td className="px-5 py-4"><p className="text-[12px] font-semibold text-[#29363b]">{exam.title}</p><p className="mt-1 text-[9px] text-[#849197]">EX-{String(exam.id).padStart(4, '0')}</p></td>
-                    <td className="px-4 py-4 text-[10px] text-[#596970]">{dateFormatter.format(new Date(exam.createdAt))}</td>
-                    <td className="px-4 py-4 text-[10px] font-semibold text-[#53636a]">{exam.durationMinutes} mins</td>
-                    <td className="px-4 py-4"><span className={`rounded-full border px-2 py-1 text-[9px] font-semibold ${exam.status === 'PUBLISHED' ? 'border-[#b9dce2] bg-[#eff9fa] text-[#00778b]' : exam.status === 'CLOSED' ? 'border-[#dfe5e7] bg-[#f3f5f6] text-[#69787e]' : 'border-[#ead6b8] bg-[#fff8ed] text-[#9a6415]'}`}>{exam.status}</span></td>
-                    <td className="px-5 py-4 text-right"><Link className="text-[10px] font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}`}>Manage <Icon className="inline" name="arrow-right" size={11} /></Link></td>
+                    <td className="px-5 py-4"><p className="text-base font-semibold text-[#29363b]">{exam.title}</p><p className="mt-1 text-xs text-[#849197]">EX-{String(exam.id).padStart(4, '0')}</p></td>
+                    <td className="px-4 py-4 text-sm text-[#596970]">{dateFormatter.format(new Date(exam.createdAt))}</td>
+                    <td className="px-4 py-4 text-sm font-semibold text-[#53636a]">{exam.durationMinutes} mins</td>
+                    <td className="px-4 py-4"><span className={`rounded-full border px-2 py-1 text-xs font-semibold ${exam.status === 'PUBLISHED' ? 'border-[#b9dce2] bg-[#eff9fa] text-[#00778b]' : exam.status === 'CLOSED' ? 'border-[#dfe5e7] bg-[#f3f5f6] text-[#69787e]' : 'border-[#ead6b8] bg-[#fff8ed] text-[#9a6415]'}`}>{exam.status}</span></td>
+                    <td className="px-5 py-4 text-right"><Link className="text-sm font-semibold text-[#00778b]" to={`/teacher/exams/${exam.id}`}>Manage <Icon className="inline" name="arrow-right" size={11} /></Link></td>
                   </tr>
                 ))}
               </tbody>
@@ -135,17 +135,17 @@ function TeacherDashboardPage() {
         </section>
 
         <aside className="rounded-xl border border-[#dce7ea] bg-white p-5">
-          <div className="flex items-center justify-between"><h2 className="text-sm font-bold text-[#27343a]">Recent integrity signals</h2><span className="h-2 w-2 rounded-full bg-[#00778b]" /></div>
-          <p className="mt-1 text-[10px] text-[#7a888d]">Recorded activity for teacher review</p>
+          <div className="flex items-center justify-between"><h2 className="text-base font-bold text-[#27343a]">Recent integrity signals</h2><span className="h-2 w-2 rounded-full bg-[#00778b]" /></div>
+          <p className="mt-1 text-sm text-[#7a888d]">Recorded activity for teacher review</p>
           <div className="mt-4 grid gap-2.5">
             {(monitoring.data?.activities ?? []).slice(0, 3).map((event) => (
               <article className="rounded-lg bg-[#f2f6f7] p-3" key={event.id}>
-                <div className="flex gap-3"><span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white ${event.severity === 'WARNING' ? 'text-[#bd2f35]' : 'text-[#00778b]'}`}><Icon name={event.severity === 'WARNING' ? 'alert' : 'monitor'} size={14} /></span><div><p className="text-[10px] font-semibold text-[#39484e]">{event.rule.replaceAll('_', ' ')}</p><p className="mt-1 text-[9px] text-[#68777d]">Candidate: <strong>{event.studentName}</strong></p></div></div>
+                <div className="flex gap-3"><span className={`mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-full bg-white ${event.severity === 'WARNING' ? 'text-[#bd2f35]' : 'text-[#00778b]'}`}><Icon name={event.severity === 'WARNING' ? 'alert' : 'monitor'} size={14} /></span><div><p className="text-sm font-semibold text-[#39484e]">{event.rule.replaceAll('_', ' ')}</p><p className="mt-1 text-xs text-[#68777d]">Candidate: <strong>{event.studentName}</strong></p></div></div>
               </article>
             ))}
-            {!monitoring.loading && monitoring.data?.activities.length === 0 && <p className="text-xs text-[#718087]">No signals have been recorded.</p>}
+            {!monitoring.loading && monitoring.data?.activities.length === 0 && <p className="text-sm text-[#718087]">No signals have been recorded.</p>}
           </div>
-          <Link className="mt-4 inline-flex items-center gap-1 text-[10px] font-semibold text-[#00778b]" to="/teacher/activities">Full security audit <Icon name="arrow-right" size={12} /></Link>
+          <Link className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-[#00778b]" to="/teacher/activities">Full security audit <Icon name="arrow-right" size={12} /></Link>
         </aside>
       </div>
     </div>

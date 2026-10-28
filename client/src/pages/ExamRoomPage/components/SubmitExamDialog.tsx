@@ -41,7 +41,7 @@ function SubmitExamDialog({
       >
         <p
           className="
-            text-[11px] font-bold uppercase
+            text-sm font-bold uppercase
             tracking-[0.15em] text-[#00778b]
           "
         >
@@ -58,7 +58,7 @@ function SubmitExamDialog({
           Submit this examination?
         </h2>
 
-        <p className="mt-3 text-sm leading-6 text-[#66777d]">
+        <p className="mt-3 text-base leading-6 text-[#66777d]">
           Once submitted, the attempt cannot be reopened or edited.
         </p>
 
@@ -75,7 +75,7 @@ function SubmitExamDialog({
           >
             <p
               className="
-                text-[10px] font-bold uppercase
+                text-sm font-bold uppercase
                 tracking-[0.12em] text-[#00778b]
               "
             >
@@ -95,7 +95,7 @@ function SubmitExamDialog({
           >
             <p
               className="
-                text-[10px] font-bold uppercase
+                text-sm font-bold uppercase
                 tracking-[0.12em] text-[#9a6415]
               "
             >
@@ -114,7 +114,7 @@ function SubmitExamDialog({
               mt-4 rounded-md
               border border-[#ead6b7]
               bg-[#fff8ed] px-3 py-2.5
-              text-xs leading-5 text-[#81591d]
+              text-sm leading-5 text-[#81591d]
             "
           >
             You still have unanswered questions. You may return and
@@ -133,7 +133,7 @@ function SubmitExamDialog({
               min-h-11 rounded-md
               border border-[#cbdadd]
               bg-white px-4
-              text-sm font-semibold text-[#53636a]
+              text-base font-semibold text-[#53636a]
               transition-colors
               hover:border-[#8cbcc5]
               hover:text-[#17343b]
@@ -148,7 +148,7 @@ function SubmitExamDialog({
             className="
               min-h-11 rounded-md
               bg-[#00778b] px-4
-              text-sm font-semibold text-white
+              text-base font-semibold text-white
               transition-colors hover:bg-[#006273]
             "
             type="button"

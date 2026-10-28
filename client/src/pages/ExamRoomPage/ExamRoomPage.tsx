@@ -272,7 +272,7 @@ function ExamRoomPage() {
             Invalid examination attempt
           </h1>
           <Link
-            className="mt-5 inline-flex text-sm font-semibold text-[#00778b]"
+            className="mt-5 inline-flex text-base font-semibold text-[#00778b]"
             to="/student/exams"
           >
             Return to examinations
@@ -292,17 +292,17 @@ function ExamRoomPage() {
               <h1 className="mt-4 text-xl font-bold">
                 Examination attempt unavailable
               </h1>
-              <p className="mt-2 text-sm text-[#718087]">{loadError}</p>
+              <p className="mt-2 text-base text-[#718087]">{loadError}</p>
             </>
           ) : (
-            <p className="text-sm text-[#718087]">
+            <p className="text-base text-[#718087]">
               {connectionStatus === "connected"
                 ? "Recovering your examination attempt…"
                 : "Waiting for the examination server…"}
             </p>
           )}
           <Link
-            className="mt-5 inline-flex text-sm font-semibold text-[#00778b]"
+            className="mt-5 inline-flex text-base font-semibold text-[#00778b]"
             to="/student/exams"
           >
             Return to examinations
@@ -486,14 +486,14 @@ function ExamRoomPage() {
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-[#00778b]" />
-              <h1 className="text-[22px] font-bold tracking-[-.03em] max-sm:text-[19px]">
+              <h1 className="text-[22px] font-bold tracking-[-.03em] max-sm:text-2xl">
                 {examCode}: {attempt.examTitle}
               </h1>
-              <span className="rounded-full bg-[#edf1f2] px-2.5 py-1 text-[11px] font-semibold text-[#53636a]">
+              <span className="rounded-full bg-[#edf1f2] px-2.5 py-1 text-sm font-semibold text-[#53636a]">
                 {attempt.status.replaceAll("_", " ")}
               </span>
             </div>
-            <div className="mt-2 flex flex-wrap gap-3 text-[12px] font-semibold text-[#607178]">
+            <div className="mt-2 flex flex-wrap gap-3 text-base font-semibold text-[#607178]">
               <span className="inline-flex items-center gap-1">
                 <Icon className="text-[#00778b]" name="shield" size={14} />
                 Integrity monitoring active
@@ -532,18 +532,18 @@ function ExamRoomPage() {
               </span>
             </div>
             {saveError && (
-              <p className="mt-1 text-[10px] font-medium text-[#b42b31]">
+              <p className="mt-1 text-sm font-medium text-[#b42b31]">
                 {saveError}
               </p>
             )}
           </div>
           <div className="flex gap-2">
-            <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef3f4] px-3 text-[12px] font-semibold">
+            <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef3f4] px-3 text-base font-semibold">
               <Icon className="text-[#9b6a00]" name="clock" size={15} />
               {formatTime(remainingSeconds)} remaining
             </span>
             <button
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef3f4] px-3 text-[12px] font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef3f4] px-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               disabled={interactionDisabled}
               onClick={() => setSubmissionNotice(true)}
               type="button"
@@ -561,22 +561,22 @@ function ExamRoomPage() {
             className="rounded-lg border border-[#b8d8dd] bg-[#eff9fa] p-4 text-[#31555d]"
             role="alert"
           >
-            <strong className="block text-[12px] font-bold">
+            <strong className="block text-base font-bold">
               Submit this examination?
             </strong>
-            <p className="mt-1 text-[10px] leading-5">
+            <p className="mt-1 text-sm leading-5">
               You answered {answeredCount} of {questions.length} questions.
               Submission is final; your server-saved answers will be graded
               immediately.
             </p>
             {submissionError && (
-              <p className="mt-2 text-[10px] font-semibold text-[#b42b31]">
+              <p className="mt-2 text-sm font-semibold text-[#b42b31]">
                 {submissionError}
               </p>
             )}
             <div className="mt-3 flex gap-2">
               <button
-                className="h-9 rounded-lg border border-[#b8cdd1] bg-white px-4 text-[10px] font-semibold disabled:opacity-50"
+                className="h-9 rounded-lg border border-[#b8cdd1] bg-white px-4 text-sm font-semibold disabled:opacity-50"
                 disabled={submitting}
                 onClick={() => {
                   setSubmissionNotice(false);
@@ -587,7 +587,7 @@ function ExamRoomPage() {
                 Continue exam
               </button>
               <button
-                className="h-9 rounded-lg bg-[#00778b] px-4 text-[10px] font-semibold text-white disabled:bg-[#9ebbc0]"
+                className="h-9 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white disabled:bg-[#9ebbc0]"
                 disabled={submitting || saveState === "saving"}
                 onClick={submitExam}
                 type="button"
@@ -601,7 +601,7 @@ function ExamRoomPage() {
 
       {remainingSeconds <= 0 && attempt.status === "IN_PROGRESS" && !submissionResult && (
         <div className="mx-auto mt-5 max-w-[1412px] px-6 max-sm:px-4" role="status">
-          <p className="rounded-lg border border-[#ead7b8] bg-[#fff8ed] p-4 text-sm text-[#986313]">
+          <p className="rounded-lg border border-[#ead7b8] bg-[#fff8ed] p-4 text-base text-[#986313]">
             Time is up. Your saved answers are being finalized by the server.
             {connectionStatus !== "connected" && " Reconnect and sign in to view your result."}
           </p>
@@ -613,20 +613,20 @@ function ExamRoomPage() {
           <section className="rounded-xl border border-[#acd3da] bg-white p-6 shadow-sm">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[.08em] text-[#00778b]">
+                <p className="text-sm font-bold uppercase tracking-[.08em] text-[#00778b]">
                   Examination finalized
                 </p>
                 <h2 className="mt-2 text-xl font-bold">
                   Score: {submissionResult.score}/{submissionResult.maxScore}
                 </h2>
-                <p className="mt-1 text-[11px] text-[#607178]">
+                <p className="mt-1 text-sm text-[#607178]">
                   {submissionResult.correctAnswers} correct out of{" "}
                   {submissionResult.totalQuestions} questions · status{" "}
                   {submissionResult.status}
                 </p>
               </div>
               <button
-                className="h-10 rounded-lg bg-[#00778b] px-5 text-[11px] font-semibold text-white"
+                className="h-10 rounded-lg bg-[#00778b] px-5 text-sm font-semibold text-white"
                 onClick={() => navigate("/student/exams")}
                 type="button"
               >
@@ -651,7 +651,7 @@ function ExamRoomPage() {
           />
           <div className="mt-4 flex items-center justify-between rounded-xl border border-[#dce7ea] bg-white p-4">
             <button
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef2f3] px-4 text-[12px] font-semibold text-[#4e5f65] disabled:opacity-40"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef2f3] px-4 text-base font-semibold text-[#4e5f65] disabled:opacity-40"
               disabled={currentQuestionIndex === 0}
               onClick={() =>
                 setCurrentQuestionIndex((value) => Math.max(0, value - 1))
@@ -662,7 +662,7 @@ function ExamRoomPage() {
               Previous
             </button>
             <button
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00778b] px-5 text-[12px] font-semibold text-white hover:bg-[#006273] disabled:bg-[#b8c9cd]"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00778b] px-5 text-base font-semibold text-white hover:bg-[#006273] disabled:bg-[#b8c9cd]"
               disabled={currentQuestionIndex === questions.length - 1}
               onClick={() =>
                 setCurrentQuestionIndex((value) =>
@@ -675,7 +675,7 @@ function ExamRoomPage() {
               <Icon name="arrow-right" size={14} />
             </button>
           </div>
-          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-[#dce7ea] bg-white px-5 py-4 text-[11px] text-[#617177] max-sm:flex-col">
+          <div className="mt-4 flex items-center justify-between gap-4 rounded-xl border border-[#dce7ea] bg-white px-5 py-4 text-sm text-[#617177] max-sm:flex-col">
             <span>
               <strong className="text-[#405057]">Navigation:</strong> use
               Previous, Next, or the question navigator
@@ -693,10 +693,10 @@ function ExamRoomPage() {
             questions={questions}
           />
           <section className="rounded-xl border border-[#dce7ea] bg-white p-5">
-            <p className="text-[10px] font-bold uppercase tracking-[.07em] text-[#5c6b71]">
+            <p className="text-sm font-bold uppercase tracking-[.07em] text-[#5c6b71]">
               Attempt details
             </p>
-            <dl className="mt-3 grid gap-2 text-[9px]">
+            <dl className="mt-3 grid gap-2 text-xs">
               <div className="flex justify-between">
                 <dt className="text-[#819096]">Attempt ID</dt>
                 <dd className="font-mono font-semibold">{attempt.attemptId}</dd>

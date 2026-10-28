@@ -1,1265 +1,412 @@
-# Online Examination System
+# EZAM — Online Examination System
 
-## Implementation update — 2026-10-28
+Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java server qua WebSocket → PostgreSQL**. Giáo viên quản lý đề/câu hỏi, cấp tài khoản sinh viên, giám sát và xem bài nộp; sinh viên làm bài, lưu đáp án, nộp bài và xem kết quả server.
 
-This section supersedes the historical progress snapshots below. It describes
-the current source and its verification status.
+**Cập nhật: 28/10/2026.** Đây là hiện trạng source, thay thế các bản tiến độ cũ trong README. Có source hoặc build/test pass không đồng nghĩa đã nghiệm thu đầy đủ.
 
-- Student account creation is teacher-managed at the WebSocket boundary:
-  anonymous `REGISTER` requests return `AUTHENTICATION_REQUIRED`, student
-  requests return `FORBIDDEN`, and teachers can create only `STUDENT` accounts.
-  Integration tests exercise real login, routing, database writes and password
-  hashing; client-supplied roles cannot elevate the created account.
+## 1. Phạm vi và trạng thái
 
-- Teacher submission review is integrated: `GET_EXAM_SUBMISSIONS` and
-  `GET_SUBMISSION_RESULT`, teacher ownership checks, list/result pages and tests.
-- Teacher monitoring now supports server-push snapshots after committed attempt
-  starts, activity reports and finalizations. `GET_TEACHER_MONITORING` supplies
-  real dashboard metrics and the latest 500 integrity records; no page imports
-  the mock monitoring datasets anymore. Ownership is checked before subscription
-  and delivery. See [live monitoring and verification](docs/monitoring-live-review.md).
-- Login now issues an opaque eight-hour credential for tab-scoped refresh and
-  WebSocket reconnect recovery. `RESUME_SESSION` revalidates identity on the server;
-  `LOGOUT` revokes the credential. Server restart still requires sign-in again.
-  See [session recovery behavior and limitations](docs/session-resume.md).
-- Camera/microphone checks have been removed from the pre-exam flow. Integrity
-  monitoring uses browser activity signals and server records; it is not camera
-  surveillance or proof of cheating.
-- Deadline finalization now runs on the server: a bounded worker finds overdue
-  attempts even when the student is offline or the server has restarted. Each
-  attempt is locked and graded through the same transaction path as manual submit.
-- The exam room waits for answer saves before allowing submission, opens the
-  result page after a successful manual submission, and checks for the server's
-  finalized result after the timer reaches zero.
-- Existing databases with the legacy all-status attempt uniqueness rule have a
-  manual migration at
-  `server/src/main/resources/db/migrations/001_attempt_active_uniqueness.sql`.
-  The script must be run on the same database used by the application.
-- See [deadline behavior, migration and manual checks](docs/deadline-and-recovery.md).
+- Hai vai trò: `TEACHER`, `STUDENT`; chưa có role `ADMIN` riêng.
+- Thi trắc nghiệm một lựa chọn. Không chấm tự luận, chạy code thí sinh hoặc dùng camera/microphone.
+- Giáo viên cấp tài khoản sinh viên; **không đăng ký công khai**.
+- Novelty chính: **suspicious-activity detection kết hợp real-time monitoring**, không phải AI kết luận gian lận.
 
-Verified on 2026-10-28: full Maven suite **261 tests, 0 failures, 0 errors, 0 skipped**;
-frontend ESLint and production build passed (**141 modules**). The focused
-attempt integration class passed 9 tests, including real concurrent submit versus
-deadline finalization. Monitoring tests verify owner-only push after commit and no
-push on rollback. Session tests verify expiry/revocation and login/disconnect/
-resume/logout through the Spring router. Browser checks for expired/offline/restarted attempts are
-documented separately and have not yet been executed for this update.
+| Module | Hiện trạng |
+|---|---|
+| Transport | WebSocket JSON, request correlation, timeout, reconnect/backoff và lỗi có cấu trúc |
+| Authentication | BCrypt, active account, identity theo socket, role/ownership checks |
+| Registration | Chỉ teacher gửi được `REGISTER`; payload không thể tạo role teacher |
+| Session recovery | Token tám giờ theo tab, refresh/reconnect, `RESUME_SESSION`, server-side `LOGOUT` |
+| Profile | Xem/cập nhật hồ sơ và đổi mật khẩu |
+| Exam lifecycle | Tạo/xem/sửa draft, publish readiness, publish, close, xoá draft |
+| Questions | Tạo/xem/sửa/xoá câu hỏi và choices; ownership/status validation |
+| Student catalog | Danh sách/chi tiết đề lấy từ server/PostgreSQL |
+| Attempt | Start/recover; snapshot và thứ tự câu hỏi/choices ngẫu nhiên theo attempt |
+| Answers | `SAVE_ANSWER`; UI chỉ báo lưu thành công sau ACK |
+| Submission/grading | Server chấm dữ liệu đã lưu trong transaction; row lock, submit idempotent |
+| Deadline | Worker server hoàn tất attempt quá hạn kể cả khi student offline |
+| Results | Student xem lịch sử/kết quả của mình; teacher review bài nộp của đề mình sở hữu |
+| Monitoring | Snapshot push sau commit start/report/finalize; dashboard/activity reports dùng dữ liệu thật |
+| UI | EZAM, logo dùng chung, Tailwind, typography dễ đọc, font Outfit ở tên thương hiệu student header |
+| Checks | Full backend gần nhất **261 tests pass**; frontend lint/build pass |
+| Acceptance/load | Chưa hoàn tất browser checklist, fresh-install verification hoặc benchmark multi-user |
 
-Still unfinished: durable login across server restarts, full load measurements,
-and final browser/demo verification. Tab-scoped refresh/reconnect recovery is
-implemented. Monitoring snapshots are pushed after commit on the current single
-Java server; delivery throughput has not been benchmarked.
+Một số search/notification/language controls có thể mới là giao diện, chưa phải nghiệp vụ hoàn chỉnh. Protocol có student list/detail, nhưng route `/teacher/students/new` hiện là **tạo sinh viên**, không phải cam kết có màn hình quản trị sinh viên đầy đủ.
 
-## Cập nhật triển khai hiện tại - 2026-10-27
+## 2. Công nghệ và kiến trúc
 
-> Mục này thay thế phần mô tả tiến độ ngày `2026-10-26` ở bên dưới. Các phần thiết kế dài hạn vẫn được giữ để làm tài liệu kiến trúc, nhưng chỉ các chức năng liệt kê tại đây mới được xem là đã có trong source hiện tại.
+| Lớp | Công nghệ trong source |
+|---|---|
+| Client | React 19, TypeScript 6, React Router 8 |
+| UI/build | Tailwind CSS 4, Vite 8, ESLint |
+| Backend | Java 21, Maven, Spring Boot 4.1.1, Spring WebSocket |
+| JSON | Jackson 3, package `tools.jackson.*` |
+| Database | PostgreSQL, Spring JDBC/NamedParameterJdbcTemplate, HikariCP |
+| Password | Spring Security Crypto/BCrypt, không phải full Spring Security HTTP authentication stack |
+| Test | JUnit, Mockito, Spring Boot Test, PostgreSQL integration tests |
 
-### Luồng thi sinh viên đã nối end-to-end
+Máy phát triển đã dùng PostgreSQL 18. Dependency chính xác xem `server/pom.xml`, `client/package.json`, `client/package-lock.json`.
 
-- Student Dashboard và Exam Detail đã dùng Student Exam Catalog thật qua WebSocket/PostgreSQL.
-- `START_EXAM` tạo hoặc phục hồi một attempt đang hoạt động, với deadline do server quyết định.
-- Thứ tự câu hỏi và lựa chọn được xáo một lần rồi lưu theo attempt; response cho sinh viên không chứa trường đáp án đúng.
-- `GET_EXAM_ATTEMPT` phục hồi đúng thứ tự câu hỏi/lựa chọn và các đáp án đã auto-save.
-- `SAVE_ANSWER` kiểm tra authenticated student, ownership, trạng thái attempt, deadline và choice thuộc đúng question snapshot trước khi upsert vào `attempt_answers`.
-- Exam Room chỉ báo `Answer saved to server` sau khi nhận `ANSWER_SAVED`; response cũ của một lựa chọn trước không được ghi đè trạng thái của lựa chọn mới hơn.
-- `SUBMIT_EXAM` khóa hàng attempt, chấm từ dữ liệu server, lưu trạng thái terminal và kết quả trong cùng transaction. Request submit lặp lại trả lại cùng kết quả đã lưu thay vì chấm lần hai.
-- Exam Room có xác nhận nộp, khóa tương tác khi đang submit và hiển thị điểm server trả về ngay sau khi hoàn tất.
-- `GET_ATTEMPT_HISTORY` trả danh sách attempt đã `SUBMITTED`/`EXPIRED` của chính student đang đăng nhập; `GET_ATTEMPT_RESULT` trả một kết quả cụ thể với ownership được áp dụng ngay trong SQL và service.
-- Exam History và Exam Result đã bỏ mock, dùng WebSocket data thật, có loading/error/empty state, filter/search và route kết quả theo `attemptId`.
-
-### Database và protocol mới
-
-- `exam_attempts` có thêm `submitted_at`, `score`, `max_score`, `correct_answers` và `total_questions`.
-- `attempt_answers` lưu một lựa chọn cho mỗi cặp `(attempt_id, question_id)` và dùng upsert để hỗ trợ đổi đáp án.
-- Protocol đã thêm `SAVE_ANSWER` → `ANSWER_SAVED` và `SUBMIT_EXAM` → `EXAM_SUBMITTED` ở cả Java lẫn TypeScript.
-- Protocol History/Result đã thêm `GET_ATTEMPT_HISTORY` → `ATTEMPT_HISTORY` và `GET_ATTEMPT_RESULT` → `ATTEMPT_RESULT` ở cả Java lẫn TypeScript.
-- Repository dùng `points_snapshot` khi đọc/chấm attempt, không phụ thuộc vào điểm hiện tại của câu hỏi gốc.
-
-### Bằng chứng kiểm tra gần nhất
-
-- Milestone save answer → recovery → submit → grading đã được commit tại `3ffcd68` (`feat: implement answer saving and exam submission`).
-- PostgreSQL integration test `AttemptServiceIntegrationTests` đã pass `6/6`, bao gồm save answer, phục hồi đáp án, chấm điểm và duplicate submit idempotent.
-- Backend compile mới nhất: `BUILD SUCCESS` với 133 main source files và 29 test source files.
-- History/Result unit, handler, protocol và WebSocket regression tests pass `34/34` (`0` failures, `0` errors).
-- Client: `npm run lint` pass và `npm run build` pass (`138` modules transformed).
-- `AttemptServiceIntegrationTests` đã được mở rộng để kiểm tra history, result và việc student khác không đọc được kết quả. Cần chạy lại test này và full `mvn test` trong terminal có đúng `DB_PASSWORD` trước khi commit.
-
-### Student Attempt History và Result đã hoàn thiện trong working tree
-
-- Repository query join `exam_attempts` với `exams`, chỉ lấy terminal attempt và sắp xếp ổn định theo thời gian mới nhất.
-- `ExamAttemptService` map domain sang response an toàn và dùng cùng lỗi `ATTEMPT_RESULT_NOT_FOUND` cho kết quả không tồn tại hoặc thuộc student khác.
-- `AttemptMessageHandler` lấy `studentId` từ authenticated session; payload result chỉ chứa `attemptId`.
-- Central WebSocket router đã dispatch hai command mới; Java và TypeScript protocol đã đồng bộ.
-- `ExamHistoryPage` và `ExamResultPage` dùng server data thật; UI không tự suy luận pass/fail vì hệ thống chưa có passing-threshold policy.
-- Source, unit/handler/router regression, frontend lint và build đã pass; PostgreSQL integration/full suite còn là quality gate cuối trước commit.
-
-### Phần core còn lại
-
-- Scheduled deadline finalizer để tự động chuyển attempt hết giờ sang `EXPIRED` ngay cả khi client không gửi submit.
-- Persistent authentication/session resume sau refresh hoặc reconnect WebSocket.
-- Teacher submission/result review.
-- Server-push monitoring đầy đủ, lưu suspicious activity từ client và các rule anti-cheating end-to-end.
-- Concurrency integration/load test cho save sát deadline và submit đồng thời với deadline finalizer.
-
-## Mốc tiến độ trước đó - 2026-10-26
-
-> Đây là mục trạng thái có thẩm quyền của source hiện tại. Các phần kiến trúc, yêu cầu và kế hoạch ở dưới vẫn được giữ làm tài liệu thiết kế; nếu một mô tả tiến độ cũ mâu thuẫn với mục này thì ưu tiên mục cập nhật này.
-
-### Kiến trúc và môi trường đã chốt
-
-- React 19 + TypeScript + Vite + Tailwind CSS là web client cho sinh viên và giảng viên.
-- Spring Boot 4.1.1 chạy bằng Java 21 là server authoritative; client không tự quyết định quyền, trạng thái bài thi, đáp án đúng hoặc kết quả.
-- Client và server trao đổi JSON hai chiều qua Spring WebSocket tại `ws://localhost:8081/ws` trong môi trường development.
-- PostgreSQL là database chính; server truy cập bằng Spring JDBC và HikariCP. Thông tin nhạy cảm được truyền qua `DB_PASSWORD`, không hard-code vào source.
-- Novelty vẫn là anti-cheating/suspicious-activity detection kết hợp real-time teacher monitoring. Phần này đã chốt về hướng đề tài nhưng chưa được hiện thực end-to-end.
-
-### Backend đã hoàn thành
-
-- WebSocket foundation: lifecycle connect/disconnect, `CONNECTED`, `PING`/`PONG`, JSON validation, request correlation và response `ERROR` an toàn.
-- Registration và authentication: `REGISTER`/`REGISTERED`, `LOGIN`/`LOGGED_IN`, BCrypt, kiểm tra tài khoản active và phân quyền `STUDENT`/`TEACHER`.
-- `AuthenticatedSessionRegistry` dùng `ConcurrentHashMap` để gắn user đã đăng nhập với WebSocket session và xóa mapping khi disconnect.
-- Exam Management cho teacher đã có repository, service, DTO, handler và central WebSocket routing cho:
-  - `CREATE_EXAM` → `EXAM_CREATED`
-  - `GET_TEACHER_EXAMS` → `TEACHER_EXAMS`
-  - `GET_EXAM` → `EXAM_DETAILS`
-  - `UPDATE_EXAM` → `EXAM_UPDATED` (chỉ cho phép sửa đề `DRAFT` thuộc teacher hiện tại)
-  - `PUBLISH_EXAM` → `EXAM_PUBLISHED` (server kiểm tra readiness và chuyển `DRAFT` → `PUBLISHED` bằng conditional update)
-  - `CLOSE_EXAM` → `EXAM_CLOSED` (chỉ chuyển `PUBLISHED` → `CLOSED`)
-  - `DELETE_EXAM` → `EXAM_DELETED` (chỉ xóa đề `DRAFT`; choices, questions và exam được xóa trong cùng transaction)
-- Question Management đã có repository, transaction service, DTO, handler, ownership/status validation và central WebSocket routing cho:
-  - `CREATE_QUESTION` → `QUESTION_CREATED`
-  - `GET_EXAM_QUESTIONS` → `EXAM_QUESTIONS`
-- Student Exam Catalog đã được merge, gồm repository, service, handler và routing cho:
-  - `GET_AVAILABLE_EXAMS` → `AVAILABLE_EXAMS`
-  - `GET_AVAILABLE_EXAM` → `AVAILABLE_EXAM_DETAILS`
-- PostgreSQL schema hiện có `users`, `exams`, `questions` và `choices`, cùng primary key, foreign key, constraint và index cơ bản.
-- Backend đã có unit/integration tests cho schema, registration, login, protocol contract, authenticated session, WebSocket error handling, exam management, question management và student exam catalog. Lần full test ngày `2026-10-26` đã chạy thành công `119/119` tests. Nhóm Exam Management integration riêng pass `24/24`, bao gồm kiểm tra rollback khi xóa đề thất bại giữa transaction. Các lần chạy mới vẫn cần terminal có đúng `DB_PASSWORD`.
-
-### Frontend đã hoàn thành
-
-- Có routing và giao diện responsive cho Login, Student Registration, Student Dashboard, Exam Detail, Exam Room, Exam History, Exam Result, Teacher Dashboard, Exam Management, Create Exam, Exam Overview, Question Management, Exam Monitoring và Suspicious Activity.
-- Có `AuthProvider`, `useAuth`, `ProtectedRoute`, `HomeRedirect` và role guard cho `STUDENT`/`TEACHER`.
-- Teacher có route `/teacher/students/new` để tạo tài khoản sinh viên qua luồng `REGISTER`. Đây là chức năng nằm trong teacher portal, không phải public self-registration.
-- WebSocket client dùng shared provider/context, tạo `requestId`, ghép response với callback, timeout request, cleanup và reconnect bằng capped exponential backoff.
-- Login và Student Registration đã dùng server thật.
-- Create Exam đã gửi `CREATE_EXAM` thật và chỉ báo thành công khi nhận `EXAM_CREATED`.
-- Exam Management đã gửi `GET_TEACHER_EXAMS`, hiển thị danh sách exam thật từ PostgreSQL và không còn phụ thuộc mock cho danh sách teacher exam.
-- Hai commit client ổn định gần nhất là `92b4e67` (student account route) và `523a341` (teacher exam management over WebSocket). Trạng thái committed này đã qua ESLint và production build.
-
-### Đang triển khai trong working tree
-
-- Question Management client đã dùng `GET_EXAM_QUESTIONS` và `CREATE_QUESTION` thật; danh sách được nạp lại từ PostgreSQL và câu hỏi mới chỉ xuất hiện sau response thành công từ server.
-- Protocol TypeScript đã có kiểu cho create/get question và các lệnh lifecycle `UPDATE_EXAM`, `PUBLISH_EXAM`, `CLOSE_EXAM`, `DELETE_EXAM` cùng response tương ứng.
-- Nút Publish trong Question Management đã gửi `PUBLISH_EXAM` thật, có trạng thái đang gửi, xử lý `ERROR` và chỉ báo thành công sau `EXAM_PUBLISHED` từ server.
-- Working tree client ngày `2026-10-26` đã pass cả `npm run lint` và `npm run build`.
-- Student Dashboard và Exam Detail vẫn đang đọc `MOCK_STUDENT_EXAMS`; backend Student Exam Catalog đã sẵn sàng nhưng client chưa nối `GET_AVAILABLE_EXAMS`/`GET_AVAILABLE_EXAM`.
-
-### Chưa triển khai end-to-end
-
-- Update/delete/reorder question ở cả server và client. Backend đã có update/delete/publish/close exam; client mới nối publish, còn update/close/delete chưa được nối đầy đủ vào màn hình dùng dữ liệu thật.
-- Persistent authentication hoặc session resume sau refresh/reconnect; auth phía React hiện vẫn nằm trong memory.
-- Exam attempt/session, start/resume exam, server-authoritative deadline và timer synchronization.
-- Answer auto-save, recovery, submit, duplicate-submit protection, automatic grading, result và leaderboard.
-- Question/choice randomization theo từng attempt với stable ID mapping.
-- Server-push teacher monitoring và suspicious-activity storage/rules/dashboard.
-- Concurrency/load tests cho attempt, answer saving, deadline finalization, monitoring và anti-cheating.
-
-### Ưu tiên triển khai tiếp theo
-
-1. Kiểm thử thủ công luồng teacher tạo đề → thêm câu hỏi → publish với server và PostgreSQL thật.
-2. Bỏ mock khỏi Exam Overview, sau đó nối update/close/delete exam vào WebSocket backend đã có.
-3. Nối Student Dashboard và Exam Detail với Student Exam Catalog backend.
-4. Thiết kế và hiện thực exam attempt/session, randomization mapping, answer auto-save/recovery và submit/finalization.
-5. Sau khi core exam flow ổn định, triển khai real-time monitoring và novelty anti-cheating/suspicious-activity detection.
-
-> **Java Programming Project – Topic 4: Java Concurrent Application**
->
-> **Trạng thái:** kiến trúc đã được giảng viên làm rõ: **React web client ↔ WebSocket ↔ Java server ↔ relational database**. Bốn core features đã chốt là **real-time exam monitoring, auto-save & exam recovery, anti-cheating/suspicious-activity detection, question randomization**. Tài liệu này ghi cả thiết kế, kế hoạch và tiến độ hiện tại; chỉ đánh dấu hoàn thành khi đã có source code và bằng chứng kiểm tra tương ứng.
-
-## 1. Thông tin dự án
-
-| Mục | Nội dung |
-| --- | --- |
-| Tên dự án | Online Examination System |
-| Môn học | Java Software Development |
-| Năm học | 2026–2027 |
-| Hướng đề tài | Topic 4 – Java Concurrent Application |
-| Nhóm | `TBD` |
-| Giảng viên | `TBD` |
-| Kiến trúc đã chọn | React client + WebSocket + Java server + relational database |
-
-### Thành viên
-
-| Mã sinh viên | Họ và tên | Trách nhiệm kỹ thuật chính |
-| --- | --- | --- |
-| `TBD` | `TBD` | `TBD` |
-| `TBD` | `TBD` | `TBD` |
-| `TBD` | `TBD` | `TBD` |
-
-> Mỗi thành viên phải hiểu phần code được giao và luồng hệ thống. Trong vấn đáp, giảng viên có thể yêu cầu bất kỳ thành viên nào giải thích class/method, chạy một chức năng, sửa code hoặc debug lỗi.
-
-## 2. Tổng quan
-
-### 2.1. Bài toán
-
-Một hệ thống thi trực tuyến cơ bản chỉ có đăng nhập, hiển thị câu hỏi, nộp bài và tính điểm chưa thể hiện đủ yêu cầu của Topic 4. Hệ thống này phải xử lý nhiều sinh viên cùng kết nối, vào thi, lưu đáp án, nhận thông báo thời gian và nộp bài trong cùng thời điểm mà không làm mất dữ liệu, chấm trùng hoặc tạo trạng thái không nhất quán.
-
-Vì vậy concurrency là một phần cốt lõi của bài toán, không phải tính năng bổ sung. Java server chịu trách nhiệm về xác thực, luật nghiệp vụ, trạng thái lượt thi, deadline, chấm điểm, xử lý shared resources và tính đúng đắn của dữ liệu. React chỉ đảm nhiệm giao diện người dùng và giao tiếp thời gian thực với server.
-
-### 2.2. Mục tiêu
-
-- Xây dựng hệ thống thi trực tuyến đầy đủ cho sinh viên và giảng viên.
-- Dùng React làm giao diện web cho hai vai trò.
-- Dùng WebSocket cho giao tiếp hai chiều và sự kiện real-time.
-- Dùng Java server để thể hiện OOP, SOLID, concurrency, exception handling và database programming.
-- Cho phép nhiều phiên/lượt thi đồng thời nhưng giữ trạng thái nhất quán.
-- Chống xử lý trùng khi sinh viên nộp bài đồng thời với deadline.
-- Lưu dữ liệu bền vững trong relational database.
-- Theo dõi bài thi real-time cho giảng viên, không phụ thuộc polling thủ công.
-- Auto-save đáp án, phục hồi trạng thái/lượt thi sau disconnect-reconnect.
-- Xáo câu hỏi/lựa chọn nhưng giữ mapping ID gốc để chấm chính xác.
-- Ghi nhận anti-cheating/suspicious activity theo rule xác định, có thể giải thích và test.
-- Kiểm thử correctness, WebSocket, concurrency, reliability và hiệu năng bằng bằng chứng thực tế.
-
-### 2.3. Phạm vi phiên bản đầu
-
-**Trong phạm vi:**
-
-- React web client cho sinh viên và giảng viên.
-- Java server nhận nhiều WebSocket connection.
-- Giao thức message JSON qua WebSocket.
-- Đăng ký/đăng nhập/đăng xuất và phân quyền `STUDENT`/`TEACHER`.
-- Quản lý đề thi trắc nghiệm một đáp án đúng.
-- Sinh viên bắt đầu thi, lưu/sửa đáp án, nộp bài hoặc bị tự chốt khi hết giờ.
-- Auto-save đáp án qua WebSocket và phục hồi lượt thi sau reconnect.
-- Random question order và option order theo từng lượt thi, đồng thời giữ question/choice ID gốc.
-- Thông báo thời gian, cảnh báo và trạng thái thi từ server.
-- Teacher monitoring dashboard cập nhật qua WebSocket: online, disconnected, reconnected, taking, submitted, warning và suspicious activity.
-- Chấm tự động, kết quả, lịch sử thi và bảng xếp hạng theo chính sách công bố.
-- Theo dõi và ghi nhận suspicious activity theo rule anti-cheating đã định nghĩa.
-- Test concurrency và đo tải WebSocket.
-
-**Ngoài phạm vi ban đầu:**
-
-- Giao diện client bằng JavaFX hoặc Java console.
-- Nhiều server, database phân tán hoặc high availability production.
-- Webcam, khóa toàn màn hình tuyệt đối, nhận diện khuôn mặt hoặc tự động kết luận gian lận.
-- Ứng dụng mobile native.
-- Tự luận/chấm tay.
-- Code-based examination/code execution; đây không thuộc core scope hiện tại và chỉ xem là future extension nếu có sandbox/isolation an toàn.
-- Triển khai Internet công cộng khi chưa có HTTPS/WSS và cơ chế quản lý secret phù hợp.
-
-## 3. Kiến trúc hệ thống
-
-### 3.1. Kiến trúc đã chốt
-
-Giảng viên đã xác nhận rằng với hệ thống client-server này, **Java server** là phần phải thể hiện kỹ thuật Java/OOP/concurrency; client được phép dùng **React**. WebSocket là cơ chế giao tiếp real-time chính, không thay bằng HTTP request/response thông thường cho các luồng thi/monitoring. Kiến trúc này không được đổi sang ứng dụng JavaFX/Swing-only nếu không có chỉ dẫn mới.
-
-```mermaid
-flowchart TD
-    R1[React client – student] <-->|WebSocket / JSON| W[Java WebSocket server]
-    R2[React client – teacher] <-->|WebSocket / JSON| W
-    W --> H[WebSocket connection & message layer]
-    H --> A[Application services]
-    A --> M[Real-time monitoring & anti-cheat service]
-    T[Deadline scheduler] --> F[Attempt finalizer]
-    F --> A
-    A --> C[Concurrency/session management]
-    A --> P[Repositories / transactions]
-    P --> D[(Relational database)]
-```
+**Không còn là Java console/raw TCP JSON từng dòng.** Mỗi JSON hiện là một WebSocket text message; WebSocket sử dụng TCP nhưng có HTTP upgrade và framing riêng.
 
 ```text
-React Client
-     │
-     │ WebSocket – JSON messages
-     ▼
-Java Server
-     ├── Authentication and authorization
-     ├── WebSocket connection/message handling
-     ├── Exam management
-     ├── Exam session and deadline management
-     ├── Submission, grading and result processing
-     ├── Concurrency and shared-state protection
-     ├── Suspicious-activity monitoring
-     └── Database access
-             │
-             ▼
-      Relational database
+React pages/components → AuthProvider + WebSocketProvider
+  → WebSocket /ws → ExamWebSocketHandler → Message handlers
+  → Services (@Transactional) → Repository interfaces → JDBC → PostgreSQL
+
+Business transaction → MonitoringChanged
+  → after-commit listener → MonitoringPushHub → teacher socket
+
+AttemptDeadlineWorker → ExamAttemptService → cùng đường hoàn tất/chấm bài
 ```
 
-### 3.2. Vai trò các thành phần
+- Client: giao diện, forms/loading/errors, token theo tab và recovery; không tự quyết định điểm/deadline.
+- Router/handler: parse/dispatch, identity từ session, DTO và protocol errors an toàn.
+- Service: validation, ownership, lifecycle, transaction, grading và monitoring rules.
+- Repository/database: SQL có tham số, CRUD, constraints, snapshots và persistence.
 
-| Thành phần | Trách nhiệm |
-| --- | --- |
-| React client | Hiển thị giao diện, nhận thao tác, quản lý state UI, duy trì WebSocket client, gửi command và hiển thị event/response từ server. |
-| WebSocket layer | Xác thực connection, nhận/validate/dispatch JSON message, gửi response hoặc event, quản lý lifecycle connect/disconnect/reconnect. |
-| Application services | Giữ luật nghiệp vụ: quyền, đề thi, lượt thi, lưu đáp án, nộp bài, chấm, công bố kết quả và leaderboard. |
-| Concurrency/session layer | Thread pool, scheduled job, session tracking, shared-state coordination, auto-save/recovery và randomization mapping. |
-| Monitoring/anti-cheat layer | Tổng hợp trạng thái exam session, phát event real-time cho teacher, áp dụng rule suspicious activity và lưu activity record. |
-| Repositories | SQL tham số hóa, mapping dữ liệu, transaction và query tổng hợp. |
-| Database | Nguồn dữ liệu bền vững cho user, exam, attempt, answer, result và suspicious activity. |
+### Java design và consistency
 
-### 3.3. Nguyên tắc kiến trúc
+Domain records, repository interfaces, JDBC implementations và services tách trách nhiệm bằng composition/DI. Exceptions nghiệp vụ được map sang protocol error, không gửi stack trace/password hash cho client.
 
-- Server là nguồn quyết định duy nhất về danh tính, quyền, thời gian, trạng thái lượt thi và điểm.
-- React không được tự tính deadline hợp lệ, không giữ đáp án đúng và không quyết định liệu request có được chấp nhận.
-- Mọi dữ liệu client gửi lên đều phải validate ở server, kể cả `examId`, `attemptId`, `questionId` và lựa chọn đáp án.
-- WebSocket dùng cho message/event real-time; request không tin cậy chỉ vì nó đến từ connection đã mở.
-- Không giữ database lock hoặc transaction trong khi chờ network I/O.
-- Cache hoặc `ConcurrentHashMap` có thể hỗ trợ session/connection nhưng database là nguồn sự thật cho dữ liệu nghiệp vụ bền vững.
-- Không được để core business logic, deadline, anti-cheating rule hay submission integrity nằm ở React state.
+Registry sử dụng concurrent structures. Response và push tới cùng socket được tuần tự hoá. Attempt được khoá ở database khi ghi/hoàn tất; submit và deadline finalizer dùng transaction để tránh chấm trùng. Partial unique index chỉ cho một attempt `IN_PROGRESS` mỗi `(exam_id, student_id)`, không cấm nhiều attempt đã hoàn tất.
 
-## 4. Người dùng và tính năng
+Monitoring hiện push đồng bộ sau commit trên **một server**, chưa benchmark và không phải durable/distributed event broker.
 
-### 4.1. Sinh viên
+## 3. Luồng sử dụng và novelty
 
-Sinh viên có thể:
+**Teacher:** đăng nhập → tạo student → tạo draft → thêm câu hỏi/choices/đáp án đúng → kiểm tra readiness → publish → monitoring → review submissions/results → close khi cần.
 
-- Đăng ký, đăng nhập và đăng xuất.
-- Xem bài thi khả dụng và thông tin bài thi.
-- Bắt đầu hoặc tiếp tục lượt thi hợp lệ.
-- Nhận biến thể đề đã xáo, điều hướng câu hỏi và lưu/sửa đáp án khi còn thời gian.
-- Xem connection status, auto-save status, recovery status và warning notification trong Exam Room.
-- Nhận thông báo thời gian/trạng thái từ server.
-- Nộp bài hoặc nhận thông báo server tự chốt khi hết giờ.
-- Xem kết quả, lịch sử thi và bảng xếp hạng khi có quyền.
-- Có hoạt động trong phiên thi được ghi nhận cho mục đích monitoring.
+**Student:** đăng nhập tài khoản được cấp → catalog/detail → xác nhận điều kiện → start/recover → chọn/lưu đáp án → submit hoặc hết giờ → history/result.
 
-### 4.2. Giảng viên
+Đáp án đúng không được dùng để client chấm từng câu trong lúc thi. UI chờ save hoàn tất trước submit; điểm cuối lấy từ server.
 
-Giảng viên có thể:
+Browser báo `TAB_HIDDEN`, `WINDOW_BLUR`, `DISCONNECTED`, `RECONNECTED`. Server kiểm tra ownership/active attempt, lưu signal và thời gian server, phân loại `INFO`/`WARNING`; ngưỡng cảnh báo hiện là **3**. Snapshot chỉ push sau commit, không push dữ liệu rollback. Ownership được kiểm tra trước subscription/delivery.
 
-- Đăng nhập và truy cập các chức năng theo vai trò.
-- Tạo, sửa, xóa, publish/unpublish hoặc đóng bài thi.
-- Quản lý câu hỏi, lựa chọn, đáp án, thời lượng và thời điểm mở/công bố.
-- Xem các lượt thi, bài nộp, điểm, kết quả và bảng xếp hạng.
-- Theo dõi session thi và xem suspicious-activity report.
-- Xem Teacher Monitoring Dashboard cập nhật real-time, không cần refresh thủ công.
+Teacher overview tải tối đa **500 records mới nhất**; tổng warning không đếm hai lần event ngưỡng suy ra. **Signal chỉ hỗ trợ giáo viên xem xét, không chứng minh gian lận.** Mất focus có thể hợp lệ; browser có thể bị đóng/can thiệp hoặc không gửi được event khi offline. Chưa có bằng chứng server-side offline detection đầy đủ.
 
-### 4.3. Trang React và trạng thái hiện tại
+Đóng góp kỹ thuật khác: snapshot/randomization có thể recover, server-authoritative deadline, save/submit consistency và race tests có điều khiển. Font/màu/logo không phải novelty kỹ thuật chính.
 
-| Vai trò | Trang/màn hình đã có trong source | Trạng thái dữ liệu |
-| --- | --- | --- |
-| Chung | Login, Register Student, 404, connection status | Login và Register đã gửi WebSocket command thật; auth state hiện chỉ lưu trong bộ nhớ React. |
-| Sinh viên | Dashboard/Available Exams, Exam Information, Exam Room, Exam Result, Exam History | UI và routing đã có. Backend catalog cho danh sách/chi tiết exam khả dụng đã hoàn thành, nhưng Dashboard và Exam Detail phía client vẫn dùng mock; attempt, answer, history và result chưa nối server. |
-| Giảng viên | Dashboard, Exam Management, Create Exam, Exam Overview, Question Management, Exam Monitoring, Suspicious Activity | Create Exam và danh sách Exam Management đã dùng WebSocket/PostgreSQL thật. Question create/list có backend và đang được nối client; update/delete/reorder/publish, monitoring và suspicious activity chưa end-to-end. |
+Chi tiết: [Monitoring](docs/monitoring-live-review.md), [Deadline/recovery](docs/deadline-and-recovery.md), [Session resume](docs/session-resume.md).
 
-`Exam Room` hiện đã có question navigation, answer input, countdown và submit dialog ở mức UI, nhưng chưa gửi `SAVE_ANSWER`/`SUBMIT_EXAM` và chưa phục hồi attempt từ server. `Exam Monitoring` và `Suspicious Activity` đã có giao diện mẫu nhưng chưa nhận server-push event thật. Giao diện đẹp không thay thế cho concurrency, OOP, test hay đóng góp kỹ thuật.
+## 4. Database
 
-## 5. Yêu cầu chức năng
+Schema: [schema.sql](server/src/main/resources/schema.sql).
 
-| ID | Yêu cầu |
-| --- | --- |
-| FR01 | Người dùng đăng ký, đăng nhập, đăng xuất; server xác thực và phân quyền `STUDENT`/`TEACHER`. |
-| FR02 | Giảng viên tạo, sửa, xóa, publish/unpublish bài thi; cấu hình tiêu đề, mô tả, thời lượng, thời điểm mở và chính sách công bố. |
-| FR03 | Giảng viên quản lý câu hỏi, lựa chọn và đáp án của bài thi. |
-| FR04 | Sinh viên xem bài thi khả dụng và chỉ bắt đầu lượt mới khi đúng quyền, đúng thời điểm và chưa vượt giới hạn lượt thi. |
-| FR05 | Server tạo `startTime`/`deadline`, sinh biến thể đề theo lượt thi, trả nội dung không lộ đáp án đúng và duy trì trạng thái session thi. |
-| FR06 | Sinh viên lưu/sửa đáp án trước hạn; mỗi thay đổi được auto-save qua WebSocket sau khi server kiểm tra ownership, trạng thái và thời gian. |
-| FR07 | Sinh viên nộp bài hoặc server tự chốt theo deadline; cả hai dùng cùng một đường finalization. |
-| FR08 | Server chấm, lưu kết quả, công bố theo policy; sinh viên xem kết quả/lịch sử khi được phép. |
-| FR09 | Server gửi event real-time như trạng thái thi, cảnh báo, time update, nộp bài và kết quả qua WebSocket. |
-| FR10 | Teacher Monitoring Dashboard nhận update real-time về tổng số, online, taking, submitted, disconnected, reconnected, warning và suspicious count; không cần refresh thủ công. |
-| FR11 | Server random question order/option order hoặc chọn câu từ question bank theo policy, đồng thời lưu mapping ID gốc để resume/chấm đúng. |
-| FR12 | `RESUME_EXAM` hoặc message tương đương phục hồi saved answers, question mapping, connection state và thời gian còn lại sau reconnect. |
-| FR13 | `SuspiciousActivityService` áp dụng rule deterministic, lưu suspicious activity record và cho giảng viên xem qua dashboard. |
+| Bảng | Mục đích |
+|---|---|
+| `users` | Profile, BCrypt hash, role và active |
+| `exams` | Đề, thời lượng, trạng thái, teacher sở hữu |
+| `questions`, `choices` | Câu hỏi, lựa chọn, đáp án đúng và điểm |
+| `exam_attempts` | Student/exam, start/deadline, trạng thái và kết quả |
+| `attempt_questions`, `attempt_choices` | Snapshot/thứ tự theo attempt |
+| `attempt_answers` | Đáp án đã lưu |
+| `suspicious_activities` | Signal/cảnh báo |
 
-## 6. Yêu cầu phi chức năng
+Quan hệ: teacher `users → exams → questions → choices`; student `users` + `exams → exam_attempts → snapshots/answers/activities`.
 
-| ID | Yêu cầu |
-| --- | --- |
-| NFR01 | Java server phục vụ nhiều WebSocket client mà một connection chậm/lỗi không làm dừng các session khác. |
-| NFR02 | Một `ExamAttempt` chỉ được chốt/chấm một lần dù nhận submit trùng hoặc trùng deadline job. |
-| NFR03 | Server kiểm tra authentication, authorization, ownership, trạng thái và deadline cho mọi command. |
-| NFR04 | Dữ liệu đã commit còn sau restart; deadline/session đang mở được khôi phục theo dữ liệu bền vững. |
-| NFR05 | JSON không hợp lệ, message không hỗ trợ, disconnect hoặc lỗi client trả error/event an toàn và không làm chết server. |
-| NFR06 | Mật khẩu được lưu hash; server không trả đáp án đúng, stack trace, SQL hay dữ liệu nhạy cảm không cần thiết. |
-| NFR07 | Bảng xếp hạng chỉ dùng attempt terminal đã commit, không trùng sinh viên và có tie-break ổn định. |
-| NFR08 | Suspicious activity có thời điểm server, user/session/attempt, event type và chỉ giảng viên được xem. |
-| NFR09 | Socket/session/resource JDBC được đóng đúng vòng đời; không có deadlock hoặc resource leak đã biết. |
-| NFR10 | React UI hiển thị loading/reconnect/error rõ ràng; WebSocket lifecycle không làm UI bị kẹt hoặc tạo connection trùng. |
-| NFR11 | Source có cấu trúc rõ, tên có nghĩa, xử lý exception phù hợp, không debug/dead code khi nộp. |
-| NFR12 | Auto-save, reconnect/recovery và randomization không làm mất mapping question ID, saved answer hoặc reset deadline. |
-| NFR13 | Monitoring/anti-cheating chỉ đưa ra warning/suspicious signal theo rule có thể kiểm tra; không tuyên bố phát hiện gian lận tuyệt đối. |
+**Database cũ:** `CREATE TABLE IF NOT EXISTS` không sửa mọi constraint legacy. Nếu còn unique toàn trạng thái `(exam_id, student_id)`, đọc và chạy [migration thủ công](server/src/main/resources/db/migrations/001_attempt_active_uniqueness.sql) bằng table owner trên đúng database. Script tạo partial unique rồi bỏ constraint/index cũ. Chưa có Flyway/Liquibase tự chạy. Sao lưu dữ liệu quan trọng trước thay đổi schema; không xoá database để né lỗi.
 
-## 7. WebSocket protocol
+## 5. Cài đặt và chạy local — PowerShell
 
-### 7.1. Quy ước transport
+### 5.1. Chuẩn bị
 
-- Client-server communication: WebSocket.
-- Payload: UTF-8 JSON object.
-- Connection: `ws://` chỉ cho localhost/demo; dùng `wss://` khi triển khai qua mạng thật.
-- Mỗi client message có `requestId`, `type`, `payload`; server response/event có `type`, `requestId` khi liên quan đến request, `data` hoặc `error`.
-- Client xử lý reconnect theo policy; reconnect không được tạo attempt mới hoặc nới deadline.
-- Authentication/connection handshake và token/session rule sẽ được ghi chi tiết trong `docs/protocol.md`; Spring WebSocket đã được chọn nhưng cơ chế xác thực chưa triển khai.
+JDK 21/Maven trong PATH; Node.js tương thích Vite 8 và npm; PostgreSQL đang chạy; pgAdmin/psql; Git. Cần mạng để tải dependencies/Google Fonts.
 
-### 7.2. Command và event dự kiến
-
-| Client → Server | Server → Client |
-| --- | --- |
-| `PING` | `PONG` |
-| `AUTHENTICATE` | `AUTHENTICATED`, `AUTH_ERROR` |
-| `JOIN_EXAM`, `RESUME_EXAM` | `EXAM_STARTED`, `QUESTION_DATA`, `EXAM_STATE` |
-| `ANSWER_QUESTION` | `ANSWER_SAVED`, `ERROR` |
-| `SUBMIT_EXAM` | `EXAM_SUBMITTED`, `RESULT` |
-| `HEARTBEAT` | `HEARTBEAT_ACK`, `TIME_UPDATE` |
-| `LEAVE_EXAM` | `WARNING`, `EXAM_ENDED` |
-| Teacher monitor subscription/query | `MONITORING_UPDATE`, `STUDENT_STATUS_UPDATED`, `STUDENT_WARNING` |
-| Query commands | `LEADERBOARD`, `SUSPICIOUS_ACTIVITY`, `ERROR` |
-
-### 7.3. Message envelope
-
-Client command:
-
-```json
-{
-  "requestId": "req-123",
-  "type": "ANSWER_QUESTION",
-  "payload": {
-    "attemptId": 42,
-    "questionId": 20,
-    "answer": "A"
-  }
-}
+```powershell
+java -version
+mvn -version
+node -v
+npm.cmd -v
 ```
 
-Server response:
+Mọi `cd server`/`cd client` giả định bắt đầu từ repository root. Maven chạy tại nơi có `pom.xml` hoặc dùng `mvn -f server/pom.xml ...`.
 
-```json
-{
-  "requestId": "req-123",
-  "type": "ANSWER_SAVED",
-  "data": {
-    "attemptId": 42,
-    "questionId": 20,
-    "savedAt": "2026-10-05T09:12:32Z"
-  }
-}
-```
+### 5.2. Database mới
 
-Server event:
-
-```json
-{
-  "type": "TIME_UPDATE",
-  "data": {
-    "attemptId": 42,
-    "remainingSeconds": 1250
-  }
-}
-```
-
-Server error:
-
-```json
-{
-  "requestId": "req-123",
-  "type": "ERROR",
-  "error": {
-    "code": "ATTEMPT_NOT_ACCESSIBLE",
-    "message": "The attempt is not accessible."
-  }
-}
-```
-
-`requestId` hỗ trợ React ghép response với command đã gửi và hỗ trợ truy vết log. Error message không được tiết lộ đáp án, password, stack trace hoặc SQL.
-
-### 7.4. Event monitoring dự kiến
-
-Teacher Monitoring Dashboard chỉ subscribe đến event cần thiết cho exam mà teacher có quyền xem. Các event có thể gồm:
-
-```text
-STUDENT_CONNECTED
-STUDENT_DISCONNECTED
-STUDENT_RECONNECTED
-STUDENT_SUBMITTED
-STUDENT_WARNING
-STUDENT_STATUS_UPDATED
-MONITORING_UPDATE
-```
-
-Không bắt buộc hiện thực từng tên event trên. Trước khi code phải chốt contract thống nhất, payload tối thiểu, authorization, thứ tự event và xử lý reconnect. Dashboard phải được server push update qua WebSocket, không dùng polling-only trừ khi có lý do kỹ thuật được ghi rõ.
-
-### 7.5. Protocol foundation đã hiện thực
-
-Source hiện tại đã có giao thức JSON hai chiều cho kết nối, đăng ký, đăng nhập, teacher exam/question management và student exam catalog:
-
-| Hướng | Message type | Trạng thái | Mục đích |
-| --- | --- | --- | --- |
-| Server → Client | `CONNECTED` | Đã hiện thực | Gửi lời chào, `sessionId` và `serverTime` ngay sau khi WebSocket kết nối thành công. |
-| Client → Server | `PING` | Đã hiện thực | Gửi `requestId` và `clientTime` để kiểm tra đường truyền hai chiều. |
-| Server → Client | `PONG` | Đã hiện thực | Trả lại cùng `requestId` và thời gian server. |
-| Client → Server | `REGISTER` | Đã hiện thực | Validate payload, tạo tài khoản `STUDENT`, hash mật khẩu bằng BCrypt và lưu PostgreSQL. |
-| Server → Client | `REGISTERED` | Đã hiện thực | Trả thông tin tài khoản an toàn, không trả password hash. |
-| Client → Server | `LOGIN` | Đã hiện thực | Kiểm tra username/password và trạng thái active. |
-| Server → Client | `LOGGED_IN` | Đã hiện thực | Trả user/role và đăng ký user theo WebSocket session trong `AuthenticatedSessionRegistry`. |
-| Client → Server | `CREATE_EXAM`, `GET_TEACHER_EXAMS`, `GET_EXAM` | Đã hiện thực | Teacher tạo, liệt kê và đọc exam thuộc quyền sở hữu. |
-| Server → Client | `EXAM_CREATED`, `TEACHER_EXAMS`, `EXAM_DETAILS` | Đã hiện thực | Trả exam an toàn sau authorization và validation ở server. |
-| Client → Server | `CREATE_QUESTION`, `GET_EXAM_QUESTIONS` | Đã hiện thực | Teacher tạo question/choices trong draft exam và đọc danh sách câu hỏi của exam thuộc quyền. |
-| Server → Client | `QUESTION_CREATED`, `EXAM_QUESTIONS` | Đã hiện thực | Trả dữ liệu question/choice theo thứ tự ổn định sau transaction hoặc truy vấn PostgreSQL. |
-| Client → Server | `GET_AVAILABLE_EXAMS`, `GET_AVAILABLE_EXAM` | Đã hiện thực ở backend | Student đọc danh sách hoặc chi tiết exam khả dụng; client student vẫn cần nối hai command này. |
-| Server → Client | `AVAILABLE_EXAMS`, `AVAILABLE_EXAM_DETAILS` | Đã hiện thực ở backend | Trả catalog exam theo policy của service và không trả đáp án đúng. |
-| Server → Client | `ERROR` | Đã hiện thực cho foundation | Trả `INVALID_JSON`, `MISSING_MESSAGE_TYPE`, `UNSUPPORTED_MESSAGE_TYPE`, lỗi validation/authentication và `INTERNAL_SERVER_ERROR` an toàn. |
-
-Envelope client hiện tại:
-
-```json
-{
-  "requestId": "01d57e23-6e3e-4aeb-9892-8b579574c46f",
-  "type": "PING",
-  "payload": {
-    "clientTime": "2026-10-16T08:30:00.000Z"
-  }
-}
-```
-
-Response tương ứng:
-
-```json
-{
-  "requestId": "01d57e23-6e3e-4aeb-9892-8b579574c46f",
-  "type": "PONG",
-  "data": {
-    "serverTime": "2026-10-16T08:30:00.100Z"
-  },
-  "error": null
-}
-```
-
-Client ghép response với callback bằng `requestId`, timeout request sau 10 giây và tự reconnect theo capped exponential backoff `1s → 2s → 4s → 8s → tối đa 10s`. Reconnect tạo WebSocket session mới; cơ chế resume authenticated session chưa có, vì vậy không được coi reconnect transport là exam recovery.
-
-Các type exam create/list/get, question create/list và student catalog đã có ở central dispatcher. `JOIN_EXAM`/`START_ATTEMPT`, `SAVE_ANSWER`, `SUBMIT_EXAM`, publish/update/delete, monitoring, recovery, randomization và anti-cheating vẫn là contract dự kiến, chưa được hiện thực end-to-end.
-
-## 8. Concurrency design
-
-### 8.1. Thread model dự kiến
-
-| Thread/executor | Công việc | Shared resources liên quan |
-| --- | --- | --- |
-| WebSocket I/O/container threads | Nhận connection, frame và dispatch message. | Connection/session registry. |
-| Application executor | Chạy task nghiệp vụ nặng hoặc async theo kiến trúc thư viện server. | Services, repositories, database. |
-| `ScheduledExecutorService` | Deadline, heartbeat/session cleanup và job recovery. | Attempt đang mở, session state. |
-| Test/load executors | Tạo nhiều WebSocket client đồng thời trong test/benchmark. | Chỉ dùng cho tooling. |
-
-Cách dùng thread/container/executor cuối cùng phải được mô tả đúng theo thư viện WebSocket Java đã chọn. Không thêm thread chỉ để làm dự án trông phức tạp.
-
-### 8.2. Shared resources
-
-- Active WebSocket connections và online-user/session registry.
-- Trạng thái `ExamAttempt`.
-- Câu trả lời đã lưu.
-- Giới hạn lượt thi và một phiên thi đang hoạt động theo tài khoản.
-- Deadline scheduler registry.
-- Submission/result state.
-- Leaderboard query/result snapshot.
-- Suspicious activity records.
-
-### 8.3. Race condition quan trọng nhất: chốt bài
-
-Hai nguồn có thể cùng chốt một lượt thi:
-
-```text
-WebSocket SUBMIT_EXAM command ──┐
-                                ├── AttemptFinalizer
-Deadline scheduler job ─────────┘
-```
-
-Transition hợp lệ duy nhất là:
-
-```text
-IN_PROGRESS → SUBMITTED
-```
-
-Nguồn chốt (`USER` hoặc `DEADLINE`) được lưu metadata riêng. Cả hai đường phải dùng cùng `AttemptFinalizer`, transaction và conditional update/row lock. Chỉ task thắng được quyền chấm và ghi kết quả; task đến sau đọc kết quả đã có thay vì chấm thêm lần nữa.
-
-Một phương án cần được kiểm chứng với database đã chọn:
+SQL mẫu chạy bằng tài khoản quản trị trong **pgAdmin, không phải PowerShell**:
 
 ```sql
-UPDATE exam_attempts
-SET status = 'SUBMITTED',
-    submitted_at = ?,
-    submission_source = ?
-WHERE id = ?
-  AND status = 'IN_PROGRESS';
+CREATE ROLE online_exam_app LOGIN PASSWORD '<local-password>';
+CREATE DATABASE online_exam OWNER online_exam_app;
 ```
 
-Nếu số dòng update là `1`, task giành quyền finalization. Nếu là `0`, attempt đã được chốt hoặc không hợp lệ. Chấm điểm và lưu kết quả phải có transaction boundary chính xác; chi tiết cuối chỉ được mô tả là “đã hoàn thành” sau khi integration/concurrency test chứng minh.
+Thay placeholder, không commit password thật. `CREATE DATABASE` chạy ngoài transaction block. Nếu role/database đã tồn tại, kiểm tra owner/quyền thay vì tạo lại. App user cần quyền tạo objects trong schema `public`.
 
-### 8.4. Quy tắc sát deadline
-
-- `ANSWER_QUESTION` chỉ hợp lệ khi server time nhỏ hơn `deadline` và attempt còn `IN_PROGRESS`.
-- Tại hoặc sau deadline, server từ chối đáp án mới và finalizer chịu trách nhiệm chốt lượt.
-- Countdown React chỉ phục vụ hiển thị; server clock quyết định tính hợp lệ.
-- Kiểm tra deadline, ownership, status và ghi đáp án phải được phối hợp đúng trong transaction/service.
-
-### 8.5. Khởi động lại và reconnect
-
-- Câu trả lời và deadline được lưu database, không chỉ ở React state hoặc RAM server.
-- Reconnect xác minh session/user/attempt rồi trả state hiện tại; không xáo lại đề hoặc tạo deadline mới.
-- Khi Java server khởi động, đọc các attempt đang mở.
-- Attempt quá hạn đi qua `AttemptFinalizer`; attempt còn hạn được đăng ký lại scheduler.
-- Disconnect/reconnect và heartbeat có thể tạo audit event theo policy sau này chốt.
-
-## 9. Thiết kế Java, OOP và SOLID
-
-### 9.1. Module/class Java dự kiến
-
-| Nhóm | Thành phần | Trách nhiệm |
-| --- | --- | --- |
-| WebSocket | `ExamWebSocketEndpoint`, `ConnectionManager`, `MessageDispatcher` | Lifecycle connection, parse/validate message và gửi response/event. |
-| Service | `AuthenticationService`, `ExamService`, `AttemptService`, `SubmissionService`, `GradingService` | Luật nghiệp vụ cốt lõi. |
-| Service | `SessionManager`, `LeaderboardService`, `MonitoringService`, `SuspiciousActivityService` | Session, dashboard monitoring, xếp hạng và anti-cheating rule. |
-| Randomization | `ExamGenerator`, `QuestionRandomizationService` | Chọn/xáo câu hỏi-lựa chọn và lưu mapping cố định theo attempt. |
-| Concurrency | `DeadlineScheduler`, `AttemptFinalizer`, `ExecutorConfig` | Scheduler, finalization dùng chung và executor lifecycle. |
-| Domain | `User`, `Student`, `Teacher`, `Exam`, `Question`, `Choice`, `ExamAttempt`, `StudentAnswer`, `Result`, `SuspiciousActivity` | Mô hình nghiệp vụ và invariant. |
-| Repository | `UserRepository`, `ExamRepository`, `AttemptRepository`, `AnswerRepository`, `ResultRepository`, `AuditRepository` | Abstraction truy cập dữ liệu. |
-| Persistence | `Jdbc*Repository` hoặc implementation phù hợp công nghệ chốt | SQL, transaction và mapping dữ liệu. |
-| Protocol | `ClientMessage`, `ServerMessage`, `MessageType`, request/response DTO, `ErrorCode` | Contract message JSON. |
-
-Tên class/interface cuối cùng có thể đổi theo thư viện được chọn, nhưng trách nhiệm phải giữ tách bạch.
-
-### 9.2. OOP
-
-- **Encapsulation:** `ExamAttempt` bảo vệ status/invariant; code ngoài không sửa terminal state trực tiếp.
-- **Abstraction:** service phụ thuộc repository interface và clock/transaction abstraction phù hợp.
-- **Composition:** `Exam` gồm question/choice; `ExamAttempt` gồm snapshot và student answers.
-- **Inheritance/polymorphism:** có thể dùng `User → Student/Teacher` hoặc strategy cho grading/anti-cheat khi thật sự phù hợp; không tạo hierarchy giả để đủ rubric.
-- **Interfaces:** tách endpoint/protocol, service và persistence để test dễ hơn.
-- **Exception handling:** phân biệt validation, authentication, authorization, conflict, timeout, protocol và internal error.
-
-### 9.3. SOLID
-
-- **SRP:** WebSocket endpoint chỉ giao tiếp; service giữ luật; repository giữ persistence; React giữ UI state.
-- **OCP:** message handler/rule mới có thể thêm mà không phá finalization hiện có.
-- **LSP:** các implementation repository/service tuân thủ contract chung.
-- **ISP:** interface nhỏ theo use case, tránh một service/repository khổng lồ.
-- **DIP:** service phụ thuộc abstraction thay vì implementation JDBC/library cụ thể.
-
-## 10. Database và dữ liệu
-
-### 10.1. Công nghệ
-
-Database đã chọn là **PostgreSQL** và server truy cập bằng **Spring JDBC** (`JdbcTemplate`/`NamedParameterJdbcTemplate`) qua PostgreSQL JDBC Driver. Connection pool mặc định là HikariCP với tên `ExamDatabasePool`.
-
-Cấu hình mặc định hiện tại:
-
-| Thuộc tính | Giá trị/cách cung cấp |
-| --- | --- |
-| Database | `online_exam` |
-| Database user | `online_exam_app` |
-| JDBC URL | `jdbc:postgresql://localhost:5432/online_exam` hoặc biến môi trường `DB_URL` |
-| Username | `online_exam_app` hoặc biến môi trường `DB_USERNAME` |
-| Password | Bắt buộc truyền bằng biến môi trường `DB_PASSWORD`; không ghi mật khẩu thật vào Git |
-| Schema initialization | Spring Boot chạy `server/src/main/resources/schema.sql` khi khởi động |
-
-### 10.2. Schema đã hiện thực
-
-Bảng `users` đã được hiện thực trong `server/src/main/resources/schema.sql` với các cột `id`, `username`, `password_hash`, `full_name`, `email`, `role`, `active`, `created_at` và `updated_at`.
-
-- `id` là identity primary key.
-- `username` và `email` có unique index không phân biệt chữ hoa/chữ thường.
-- Các trường bắt buộc có `NOT NULL`; các trường chuỗi quan trọng có check constraint chống giá trị rỗng.
-- `role` chỉ chấp nhận `STUDENT` hoặc `TEACHER`.
-- `active` mặc định là `TRUE`; thời gian tạo/cập nhật mặc định dùng thời gian database.
-- Script dùng `CREATE ... IF NOT EXISTS`, vì vậy có thể chạy lại khi khởi động mà không tạo trùng bảng/index.
-
-Các lớp `User`, `NewUser`, `UserRole`, `UserRepository` và `JdbcUserRepository` đã tạo tầng domain/repository ban đầu. Repository hiện hỗ trợ tạo user, tìm theo ID/username/email, kiểm tra username/email đã tồn tại và đếm số user.
-
-### 10.3. Đăng ký và đăng nhập đã hiện thực
-
-`RegistrationService.registerStudent(...)` hiện thực luồng đăng ký phía server:
-
-1. Kiểm tra và chuẩn hóa username, họ tên, email và mật khẩu.
-2. Chuẩn hóa username/email về chữ thường và kiểm tra trùng không phân biệt hoa thường.
-3. Giới hạn mật khẩu tối thiểu 8 ký tự và tối đa 72 byte UTF-8 theo giới hạn đầu vào BCrypt.
-4. Hash mật khẩu bằng BCrypt cost factor `12`; không lưu raw password.
-5. Tạo user với role cố định `STUDENT` trong transaction.
-6. Chuyển duplicate key hoặc validation failure thành `RegistrationException` có error code.
-7. Chỉ trả `RegisteredUser`, không đưa password hash ra response model của service.
-
-Integration test `RegistrationServiceIntegrationTests` đã được viết để xác minh user được persist, role là `STUDENT`, trạng thái active và BCrypt hash khớp mật khẩu gốc. Test có `@Transactional`, nên dữ liệu thử được rollback sau mỗi lần chạy.
-
-`LoginService` đã tìm user theo username, kiểm tra BCrypt hash, từ chối tài khoản inactive và chỉ trả `LoggedInUser` an toàn. `ExamWebSocketHandler` xử lý `LOGIN`, còn `AuthenticatedSessionRegistry` dùng `ConcurrentHashMap` để gắn `sessionId` với user đã xác thực và xóa mapping khi WebSocket đóng. `LoginServiceIntegrationTests` và `AuthenticatedSessionRegistryTests` đã có trong source.
-
-React đã gửi `REGISTER`/`LOGIN` thật, lưu user đã đăng nhập trong `AuthContext`, bảo vệ route theo role `STUDENT`/`TEACHER`, điều hướng về dashboard tương ứng và logout phía client. Auth state chưa persist qua refresh và server chưa có command `LOGOUT` hoặc session-resume token.
-
-### 10.4. Exam/question persistence hiện tại và các thực thể còn thiếu
-
-| Thực thể | Mục đích |
-| --- | --- |
-| `users` | Tài khoản, password hash, role, display name. |
-| `exams` | Đã có schema/domain, `ExamRepository`/`JdbcExamRepository`, service, handler và central WebSocket routing cho create/list/get theo teacher ownership. Client teacher đã dùng server thật cho create và list; update/publish/close/delete chưa có. |
-| `questions` / `choices` | Đã có schema/domain, exception, create command, teacher-safe result DTO, repository/JDBC, transaction service, handler, test và central WebSocket routing cho create/list. Client Question Management đang được nối và chưa qua quality gate cuối; update/delete/reorder chưa có backend command. |
-| `exam_attempts` | Sinh viên, start/deadline, status, submission source/time và score. |
-| `attempt_questions` / `attempt_choice_order` | Mapping question/choice gốc với thứ tự/biến thể cố định của từng attempt. |
-| `student_answers` | Đáp án theo attempt/question. |
-| `results` | Kết quả công bố nếu tách khỏi attempt. |
-| `suspicious_activities` | Rule, event type, severity, timestamp, attempt/session và dữ liệu monitoring cần giảng viên xem xét. |
-| `activity_logs` | Activity event tổng quát nếu tách khỏi suspicious record để phục vụ monitoring/audit. |
-| `sessions` | Phiên xác thực nếu cần persistent session. |
-
-Schema thật hiện có các bảng `users`, `exams`, `questions` và `choices`, với primary key, foreign key, check constraint và index cơ bản. Source có integration tests cho schema và các service dùng PostgreSQL. Lần full test gần nhất được ghi nhận đã pass `80` tests khi terminal có đúng database credential. Các bảng attempt/answer/result/suspicious activity/session trong bảng trên vẫn chưa được triển khai; schema cuối còn phải bổ sung constraint/index và transaction boundary phục vụ các invariant concurrency.
-
-## 11. Bốn core features và novelty đã chốt
-
-Novelty của project là một hệ thống thi real-time có **monitoring, auto-save/recovery, suspicious-activity detection và question randomization** được thiết kế tích hợp. Đây không phải bốn feature rời rạc:
-
-```text
-Active exam
-    ├── Randomized question/option mapping
-    ├── Student answer changes → auto-save
-    ├── Connection/activity events
-    └── Server-side exam session
-                 │
-                 ▼
-         Java Server services
-                 │
-       ┌─────────┼──────────┐
-       ▼         ▼          ▼
-  Recovery   Monitoring  Suspicious rules
-       │         │          │
-       └─────────┴──────────┘
-                 ▼
-    Teacher Monitoring Dashboard
-```
-
-### 11.1. Real-time exam monitoring
-
-Teacher Monitoring Dashboard phải cập nhật qua WebSocket khi exam đang hoạt động, không cần giảng viên refresh trang thủ công. Với từng exam, dashboard hiển thị ít nhất:
-
-- Tổng số sinh viên/thí sinh được phép hoặc đã tham gia.
-- Số đang connected, đang làm bài, đã nộp, disconnected, reconnected.
-- Trạng thái gần nhất của từng sinh viên, ví dụ `Answering Q5`, `Reconnected`, `Submitted`.
-- Warning count và suspicious activity count.
-- Danh sách/số lượng event để teacher có thể xem chi tiết.
-
-Monitoring state là dữ liệu server tổng hợp từ session/activity event; React chỉ render dữ liệu server push. Cần xác định rõ quyền: teacher chỉ nhận monitoring data của exam mình sở hữu hoặc được phân quyền xem.
-
-### 11.2. Auto-save và exam recovery
-
-Auto-save không chỉ là lưu state React trước khi bấm submit. Luồng bắt buộc là:
-
-```text
-Student changes answer
-        ↓ WebSocket ANSWER_QUESTION
-Java Server validates user + attempt + deadline + question
-        ↓
-Update authoritative exam session state
-        ↓
-Persist StudentAnswer in database
-        ↓
-ANSWER_SAVED event/response to React
-```
-
-Khi mất kết nối:
-
-```text
-Exam in progress → connection lost → reconnect → RESUME_EXAM
-    → server validates identity/session/attempt
-    → server returns saved answers, question mapping, status and deadline
-    → React restores UI and continues the same attempt
-```
-
-Các invariant bắt buộc:
-
-- Server clock quyết định thời gian còn lại; reconnect không reset deadline.
-- Saved answers phải được persist an toàn và state khôi phục lấy từ server/database.
-- Attempt đã terminal không nhận đáp án mới.
-- Answer sau expiration bị từ chối.
-- Concurrent answer update không được corrupt state.
-- Reconnect không tạo attempt mới hoặc thay biến thể đề.
-
-### 11.3. Anti-cheating / suspicious-activity detection
-
-`SuspiciousActivityService` hoặc abstraction tương đương là component riêng, không rải rule vào WebSocket endpoint, React component hoặc repository không liên quan.
-
-Các activity event tiêu biểu:
-
-```text
-STUDENT_CONNECTED
-EXAM_STARTED
-EXAM_LEFT
-EXAM_RECONNECTED
-ANSWER_CHANGED
-EXAM_SUBMITTED
-EXAM_TIMEOUT
-SUSPICIOUS_ACTIVITY
-```
-
-Rule ban đầu phải deterministic, cấu hình được và test được. Ví dụ candidate để nhóm chốt cụ thể:
-
-- Repeated disconnect/reconnect vượt ngưỡng trong một khoảng thời gian.
-- Connection behavior bất thường theo rule rõ ràng.
-- Repeated unusual submission behavior hoặc request sau deadline.
-- Cố truy cập attempt của sinh viên khác.
-
-Mỗi suspicious record cần thời điểm server, user, exam/attempt/session liên quan, event type, rule/mô tả và severity phù hợp. Teacher xem được record qua Monitoring Dashboard.
-
-**Giới hạn trung thực:** đây là cảnh báo theo rule kỹ thuật, không phải bằng chứng tự động chứng minh hay kết luận sinh viên gian lận. Web client không thể xác minh chắc chắn hành vi dùng điện thoại, tài liệu ngoài màn hình hoặc người làm hộ.
-
-### 11.4. Question randomization
-
-System hỗ trợ một hoặc nhiều policy được chốt trong implementation:
-
-- Random question order.
-- Random answer-option order.
-- Random question selection từ question bank.
-
-Mô hình khái niệm:
-
-```text
-Question bank
-      ↓
-Exam generator
-      ↓
-Randomized exam instance
-      ↓
-Student exam session/attempt
-```
-
-Khi student bắt đầu attempt, server tạo/lưu mapping cố định của question và option order cho attempt đó. Client nhận thứ tự hiển thị nhưng vẫn gửi `questionId`/`choiceId` gốc. Sau reconnect, server trả đúng mapping cũ; grading dùng ID gốc chứ không dùng vị trí hiển thị. Không chỉ shuffle UI rồi làm mất identity dữ liệu.
-
-### 11.5. Code-based examination
-
-**Không thuộc core scope hiện tại.** Đây chỉ là future extension vì việc thực thi code sinh viên cần sandbox/isolation, time/memory limit và security model riêng.
-
-## 12. Kết quả và bảng xếp hạng
-
-- Một bảng cho mỗi bài thi.
-- Mỗi sinh viên một dòng, dùng điểm cao nhất từ các attempt `SUBMITTED` đã commit nếu policy cho phép thi lại.
-- Hòa điểm: thời gian làm của lượt đạt điểm cao nhất ngắn hơn → nộp sớm hơn → student ID tăng dần.
-- Không đưa attempt đang thi hoặc chưa commit vào leaderboard.
-- Giảng viên luôn xem được; sinh viên chỉ xem sau publication policy.
-- Chỉ hiển thị display name/alias, không công khai email hoặc thông tin nhạy cảm.
-
-## 13. Cấu trúc repository
-
-### 13.1. Cấu trúc hiện đã có
-
-```text
-online-examination-system/
-├── README.md
-├── NEW.md
-├── client/
-│   ├── package.json
-│   ├── vite.config.ts
-│   └── src/
-│       ├── App.tsx                    # route graph và route protection
-│       ├── main.tsx                   # AuthProvider + BrowserRouter
-│       ├── auth/                      # AuthContext, provider, hook
-│       ├── components/
-│       │   ├── common/
-│       │   ├── layout/                # student/teacher layouts
-│       │   └── routing/               # ProtectedRoute, HomeRedirect
-│       ├── mocks/                     # dữ liệu tạm cho flow chưa nối server
-│       ├── pages/                     # 14 nhóm trang student/teacher/auth
-│       ├── types/
-│       └── websocket/
-│           ├── protocol.ts
-│           └── useExamWebSocket.ts    # request callback, timeout, reconnect
-├── server/
-│   ├── pom.xml
-│   └── src/
-│       ├── main/
-│       │   ├── java/vn/edu/hanu/exam/
-│       │   │   ├── ExamServerApplication.java
-│       │   │   ├── config/PasswordConfig.java
-│       │   │   ├── database/DatabaseConnectionVerifier.java
-│       │   │   ├── domain/            # User, Exam, Question, Choice
-│       │   │   ├── exception/         # registration/authentication errors
-│       │   │   ├── protocol/          # JSON envelope và message type
-│       │   │   ├── repository/        # UserRepository + JDBC implementation
-│       │   │   ├── service/           # registration và login
-│       │   │   ├── session/           # AuthenticatedSessionRegistry
-│       │   │   └── websocket/
-│       │   │       ├── ExamWebSocketHandler.java
-│       │   │       ├── WebSocketConfig.java
-│       │   │       ├── dto/RegisterPayload.java
-│       │   │       └── handler/RegistrationMessageHandler.java
-│       │   └── resources/
-│       │       ├── application.properties
-│       │       └── schema.sql
-│       └── test/java/vn/edu/hanu/exam/ # schema, auth, protocol, WS error tests
-└── stitch_university_online_examination_system/  # UI mockup/reference
-```
-
-### 13.2. Cấu trúc mục tiêu khi mở rộng
-
-```text
-online-examination-system/
-├── README.md
-├── client/                              # React application
-│   ├── package.json
-│   ├── src/
-│   │   ├── components/
-│   │   ├── pages/
-│   │   │   ├── student/
-│   │   │   └── teacher/
-│   │   ├── layouts/
-│   │   ├── services/
-│   │   ├── websocket/
-│   │   ├── hooks/
-│   │   ├── context/
-│   │   ├── types/
-│   │   ├── features/
-│   │   │   ├── exam-room/
-│   │   │   └── monitoring/
-│   │   ├── utils/
-│   │   └── assets/
-│   └── README.md
-├── server/                              # Java application
-│   ├── pom.xml
-│   └── src/
-│       ├── main/
-│       │   ├── java/vn/edu/hanu/exam/
-│       │   │   ├── config/
-│       │   │   ├── websocket/
-│       │   │   ├── controller/
-│       │   │   ├── service/
-│       │   │   ├── domain/
-│       │   │   ├── repository/
-│       │   │   ├── dto/
-│       │   │   ├── concurrency/
-│       │   │   ├── monitoring/
-│       │   │   ├── randomization/
-│       │   │   ├── security/
-│       │   │   ├── exception/
-│       │   │   └── util/
-│       │   └── resources/
-│       └── test/
-│           └── java/vn/edu/hanu/exam/
-├── database/
-│   ├── schema.sql
-│   └── seed-demo.sql
-├── docs/
-│   ├── requirements.md
-│   ├── architecture.md
-│   ├── protocol.md
-│   ├── database.md
-│   ├── test-plan.md
-│   └── experiments.md
-└── report/
-    └── GroupXX_OnlineExaminationSystem_Report.docx
-```
-
-Phần `13.2` là cấu trúc mục tiêu, không phải xác nhận rằng mọi file đã tồn tại. Không tạo folder rỗng chỉ để giống tài liệu; cấu trúc phải mở rộng theo code và trách nhiệm thực tế.
-
-## 14. Công nghệ và môi trường
-
-### 14.1. Công nghệ
-
-| Khu vực | Công nghệ | Trạng thái |
-| --- | --- | --- |
-| Client | React 19.2.8 + TypeScript 6 + Vite 8.3.2 + Tailwind CSS 4.3.3 + React Router 8.4.0 | Đã có responsive UI, routing và production build thành công |
-| Real-time protocol | Native WebSocket + JSON | Đã có foundation/auth, teacher exam create/list/get, question create/list, student exam catalog, request timeout và reconnect/backoff phía client |
-| Server | Java 21 + Maven + Spring Boot 4.1.1 | Đã cấu hình |
-| WebSocket server library | Spring WebSocket (`spring-boot-starter-websocket`) | Đã chọn và hiện thực endpoint `/ws` |
-| JSON mapping | Jackson 3 qua `JsonMapper` (`spring-boot-starter-json`) | Đã dùng cho Java record ↔ JSON |
-| Persistence | PostgreSQL + Spring JDBC + HikariCP | Đã có schema `users`, `exams`, `questions`, `choices` và JDBC repository/service cho auth, exam, question và student catalog |
-| Password hashing | Spring Security Crypto + BCrypt cost `12` | Đã dùng trong đăng ký và kiểm tra login |
-| Testing server | Spring Boot Test/JUnit | Có unit/integration tests cho schema, auth, protocol/WebSocket, exam, question và student catalog; lần full test gần nhất ghi nhận `80` tests pass, concurrency/load test chưa có |
-| Kiểm tra client | TypeScript production build + ESLint + `git diff --check` | Commit client gần nhất đã pass; working tree Question Management ngày `2026-10-25` còn lỗi và phải chạy lại quality gate |
-| Source control | Git | Bắt buộc dùng |
-
-### 14.2. Cài đặt/build/run
-
-Yêu cầu local: JDK 21, Maven, Node.js/npm, Git và PostgreSQL.
-
-Trước khi chạy server hoặc test, đặt password của database user trong **chính terminal sẽ chạy Maven**. Không thay placeholder dưới đây bằng mật khẩu thật trong README hoặc commit mật khẩu vào source:
-
-```powershell
-$env:DB_PASSWORD = "<mật-khẩu-của-online_exam_app>"
-```
-
-Nếu database/user hoặc cổng PostgreSQL khác cấu hình mặc định, có thể đặt thêm:
-
-```powershell
-$env:DB_URL = "jdbc:postgresql://localhost:5432/online_exam"
-$env:DB_USERNAME = "online_exam_app"
-```
-
-Chạy Java server trong terminal thứ nhất:
+### 5.3. Backend — terminal thứ nhất
 
 ```powershell
 cd server
+$env:DB_URL = "jdbc:postgresql://localhost:5432/online_exam"
+$env:DB_USERNAME = "online_exam_app"
+$env:DB_PASSWORD = "<local-password>"
 mvn spring-boot:run
 ```
 
-Server được cấu hình ở cổng `8081` vì cổng `8080` đang được Jenkins sử dụng. WebSocket endpoint hiện tại là `ws://localhost:8081/ws` và chỉ chấp nhận origin development `http://localhost:5173`.
+- Port **8081**, endpoint **`ws://localhost:8081/ws`**.
+- Password không có default; env phải đặt trong chính terminal Maven.
+- `spring.sql.init.mode=always`: Spring thực thi schema lúc khởi động.
+- Allowed origin hiện là **`http://localhost:5173`**.
+- 8080 không dùng vì máy phát triển có Jenkins; đổi port phải đổi đồng bộ URL client.
 
-Chạy React client trong terminal thứ hai:
+### 5.4. Giáo viên đầu tiên
+
+**Chưa có default account hoặc bootstrap CLI.** Database rỗng cần quản trị provision teacher; `REGISTER` không phải cổng tự đăng ký/cấp quyền.
+
+Sau khi schema đã tạo, sinh BCrypt bằng dependency server. Trong terminal `server`:
+
+```powershell
+mvn dependency:build-classpath "-Dmdep.outputFile=target/runtime-classpath.txt"
+$examClasspath = (Get-Content target/runtime-classpath.txt -Raw).Trim()
+jshell --class-path "$examClasspath"
+```
+
+Trong JShell:
+
+```java
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+new BCryptPasswordEncoder().encode("<your-teacher-password>");
+/exit
+```
+
+Dùng **hash BCrypt đã sinh**, không phải password thô, trong SQL quản trị trên database `online_exam`:
+
+```sql
+INSERT INTO public.users (username, password_hash, full_name, email, role)
+VALUES ('teacher_demo', '<generated-bcrypt-hash>',
+        'Demo Teacher', 'teacher_demo@example.com', 'TEACHER');
+```
+
+Dùng username/email chưa tồn tại và password demo riêng. Terminal/JShell history có thể giữ nội dung nhập; không dùng production password hoặc đưa hash/password vào Git/ảnh báo cáo. Đây là hướng dẫn provisioning thủ công; fresh-install trọn vẹn vẫn cần nghiệm thu.
+
+Sau đó teacher đăng nhập tạo student tại `/teacher/students/new`.
+
+### 5.5. Frontend — terminal thứ hai
 
 ```powershell
 cd client
-npm install
-npm run dev
-```
-
-Nếu PowerShell chặn `npm.ps1`, dùng executable Windows trực tiếp:
-
-```powershell
+npm.cmd ci
+# Chỉ copy khi chưa có .env.local; không ghi đè config đã chỉnh.
+if (-not (Test-Path .env.local)) { Copy-Item .env.example .env.local }
 npm.cmd run dev
 ```
 
-Kiểm tra client:
+Config mẫu:
+
+```dotenv
+VITE_WEBSOCKET_URL=ws://localhost:8081/ws
+```
+
+Mở **http://localhost:5173**. Nếu Vite chuyển sang 5174, giải phóng 5173 hoặc chỉnh allowed origin server. `localhost`/`127.0.0.1` là hai origin khác nhau. Restart Vite sau đổi env.
+
+### 5.6. Build
 
 ```powershell
-cd client
+# Tại repository root; cần PostgreSQL/env vì chạy cả tests
+mvn -f server/pom.xml package
+```
+
+```powershell
+# Tại client
 npm.cmd run lint
 npm.cmd run build
 ```
 
-Kiểm tra server:
+Output: `server/target`, `client/dist`. `vite preview` không tự được server cho phép vì origin mặc định khác 5173. Production hosting/HTTPS/WSS chưa phải deployment workflow đã nghiệm thu.
+
+## 6. Routes chính
+
+| Vai trò | Route |
+|---|---|
+| Chung | `/`, `/login` |
+| Student catalog/detail | `/student/exams`, `/student/exams/:examId` |
+| Room | `/student/exams/:examId/room/:attemptId` |
+| History/result | `/student/history`, `/student/attempts/:attemptId/result` |
+| Teacher dashboard/exams | `/teacher`, `/teacher/exams`, `/teacher/exams/new` |
+| Overview/questions | `/teacher/exams/:examId`, `/teacher/exams/:examId/questions` |
+| Submissions | `/teacher/exams/:examId/submissions`, `/teacher/submissions/:attemptId` |
+| Tạo student | `/teacher/students/new` |
+| Monitoring | `/teacher/monitoring`, `/teacher/monitoring/:examId`, `/teacher/activities` |
+| Profile | `/student/profile`, `/teacher/profile` |
+
+React protected routes hỗ trợ điều hướng; server vẫn kiểm tra quyền dữ liệu. Không có `/admin/students/new`.
+
+## 7. WebSocket contract
+
+Source of truth: [MessageType.java](server/src/main/java/vn/edu/hanu/exam/protocol/MessageType.java), [protocol.ts](client/src/websocket/protocol.ts), DTO/handler tương ứng. Request dùng **payload**, response dùng **data**. Một JSON là một WebSocket text message.
+
+```json
+{"requestId":"save-001","type":"SAVE_ANSWER","payload":{"attemptId":12,"questionId":34,"choiceId":56}}
+```
+
+Response minh hoạ, không phải dữ liệu thực nghiệm:
+
+```json
+{"requestId":"save-001","type":"ANSWER_SAVED","data":{"questionId":34,"choiceId":56,"savedAt":"2026-10-28T10:00:00Z"},"error":null}
+```
+
+```json
+{"requestId":"register-001","type":"ERROR","data":null,"error":{"code":"FORBIDDEN","message":"Only teachers can create student accounts."}}
+```
+
+| Nhóm | Command → Response |
+|---|---|
+| Transport | `PING → PONG`; server event `CONNECTED` |
+| Identity | `LOGIN → LOGGED_IN`, `RESUME_SESSION → SESSION_RESUMED`, `LOGOUT → LOGGED_OUT` |
+| Registration | `REGISTER → REGISTERED` (teacher only) |
+| Profile | `GET_PROFILE → PROFILE_DETAILS`, `UPDATE_PROFILE → PROFILE_UPDATED`, `CHANGE_PASSWORD → PASSWORD_CHANGED` |
+| Student admin/dashboard | `GET_STUDENTS → STUDENTS`, `GET_STUDENT → STUDENT_DETAILS`, `GET_TEACHER_DASHBOARD → TEACHER_DASHBOARD` |
+| Exam đọc/tạo | `CREATE_EXAM → EXAM_CREATED`, `GET_TEACHER_EXAMS → TEACHER_EXAMS`, `GET_EXAM → EXAM_DETAILS` |
+| Lifecycle | `UPDATE_EXAM → EXAM_UPDATED`, `PUBLISH_EXAM → EXAM_PUBLISHED`, `CLOSE_EXAM → EXAM_CLOSED`, `DELETE_EXAM → EXAM_DELETED` |
+| Question | `CREATE_QUESTION → QUESTION_CREATED`, `UPDATE_QUESTION → QUESTION_UPDATED`, `DELETE_QUESTION → QUESTION_DELETED`, `GET_EXAM_QUESTIONS → EXAM_QUESTIONS` |
+| Catalog | `GET_AVAILABLE_EXAMS → AVAILABLE_EXAMS`, `GET_AVAILABLE_EXAM → AVAILABLE_EXAM_DETAILS` |
+| Attempt | `START_EXAM → EXAM_STARTED`, `GET_EXAM_ATTEMPT → EXAM_ATTEMPT_DETAILS`, `SAVE_ANSWER → ANSWER_SAVED`, `SUBMIT_EXAM → EXAM_SUBMITTED` |
+| Student results | `GET_ATTEMPT_HISTORY → ATTEMPT_HISTORY`, `GET_ATTEMPT_RESULT → ATTEMPT_RESULT` |
+| Teacher review | `GET_EXAM_SUBMISSIONS → EXAM_SUBMISSIONS`, `GET_SUBMISSION_RESULT → SUBMISSION_RESULT` |
+| Integrity | `REPORT_ACTIVITY → ACTIVITY_RECORDED`, `GET_EXAM_MONITORING → EXAM_MONITORING`, `GET_TEACHER_MONITORING → TEACHER_MONITORING` |
+
+Errors giữ requestId, type `ERROR`; client không gửi server-only types. Monitoring `live: true` đăng ký; `live: false` dừng subscription tương ứng và trả snapshot; bỏ `live` là one-time snapshot. Push có `requestId: null`. Payload đầy đủ xem DTO và [monitoring contract](docs/monitoring-live-review.md).
+
+## 8. Session/deadline
+
+- Token ngẫu nhiên 32 byte Base64URL, expiry tám giờ; server giữ SHA-256 digest, user ID, password fingerprint và expiry trong memory.
+- Client dùng `sessionStorage`; resume xác minh identity trước business commands; disconnect không revoke.
+- Logout thành công revoke credential kể cả socket khác dùng chung token.
+- Restart mất token, cần login lại; persisted attempt/answers/deadline còn nguyên.
+- Disable/password change kiểm tra khi resume, chưa revoke tức thời toàn bộ active sockets.
+- Deadline worker mặc định mỗi 5 giây, batch 100; config `exam.deadline.enabled`, `exam.deadline.interval-ms`.
+- Timer browser chỉ hiển thị; UI đọc lại attempt khi hết giờ. Finalize không hứa đúng tức thời timer về 0 vì có worker interval/thời gian xử lý.
+
+## 9. Kiểm thử và bằng chứng
 
 ```powershell
-cd server
+# Tại server, đã thiết lập DB credential trong chính terminal này
 mvn test
+mvn "-Dtest=RegistrationAuthorizationIntegrationTests" test
+mvn "-Dtest=AttemptServiceIntegrationTests,MonitoringIntegrationTests" test
 ```
 
-`npm.cmd run lint`, `npm.cmd run build` và `git diff --check` đã thành công trên source client hiện tại ngày `2026-10-22`; production build xử lý `135` modules. Log người dùng cung cấp ngày `2026-10-18` chứng minh Spring Boot kết nối được PostgreSQL và chạy được schema; lần test đó phát hiện named parameter `passwordHash` không khớp và source hiện tại đã sửa thành `.addValue("passwordHash", ...)`.
+PowerShell cần nháy toàn đối số `-Dtest=...,...`; không ghép hai lệnh thành `testmvn`.
 
-Lần kiểm tra lại từ môi trường Codex ngày `2026-10-18` xác nhận Maven đi qua compile/test-compile nhưng không thể chạy test đến cuối vì tiến trình kiểm tra không có đúng `DB_PASSWORD` (`password authentication failed for user "online_exam_app"`). Vì vậy source của lỗi named parameter đã được sửa và integration test đã có, nhưng README chưa tuyên bố toàn bộ server test pass cho đến khi chạy lại `mvn test` trong terminal có đúng credential và nhận `BUILD SUCCESS`.
+```powershell
+# Tại client
+npm.cmd run lint
+npm.cmd run build
+# Tại repository root
+git diff --check
+```
 
-## 15. Kế hoạch kiểm thử
+**Không chạy integration suite trên production/dữ liệu quan trọng.** Tests dùng PostgreSQL datasource; nên dùng database test riêng. Toàn suite chưa nghiệm thu trên database mới hoàn toàn. Fixture rollback/cleanup không phải lý do dùng dữ liệu thật tuỳ tiện.
 
-### 15.1. Môi trường cần ghi nhận
+### Kết quả ghi nhận ngày 28/10/2026
 
-- OS, CPU/RAM, JDK, Maven, Node.js/npm và browser version.
-- Commit hash và cấu hình database.
-- Java executor/pool/scheduler configuration.
-- WebSocket library/server configuration.
-- Số concurrent client, workload, warm-up và số lần lặp.
+| Kiểm tra | Bằng chứng |
+|---|---|
+| Full backend sau sửa quyền REGISTER | **261 tests, 0 failures, 0 errors, 0 skipped — BUILD SUCCESS** |
+| Registration authorization | 3 integration tests: anonymous/student bị chặn; teacher tạo student/hash đúng; payload role không nâng quyền |
+| Attempt integration | 9 tests; deadline, idempotence, concurrent submit/finalizer có điều khiển |
+| Monitoring | Owner-only push, identity/subscription, after-commit và rollback không push |
+| Session | Expiry/revocation/disabled/password change; login/disconnect/resume/logout qua Spring router |
+| Client | Lint pass sau chỉnh typography; production build pass sau đổi font Outfit |
+| Whitespace | Diff check không lỗi trong đợt kiểm tra; LF/CRLF warning không phải compile error |
 
-### 15.2. Test cases
+Mock socket routing không tương đương browser/load test qua socket thật. Chỉnh font/logo đã build, chưa visual QA mọi viewport. Không dùng số modules build làm tiêu chí hoàn thành.
 
-| ID | Trường hợp | Input/thiết lập | Kết quả kỳ vọng | Kết quả thực tế | Trạng thái |
-| --- | --- | --- | --- | --- | --- |
-| TC-DB01 | Khởi động với PostgreSQL | PostgreSQL local, đúng `DB_URL`/`DB_USERNAME`/`DB_PASSWORD` | Chạy `schema.sql`, kết nối đúng database user và đọc được số user | Log người dùng ngày `2026-10-18` xác nhận context/database khởi động thành công | PASS |
-| TC-REG01 | Đăng ký sinh viên ở service | Username/email ngẫu nhiên và mật khẩu hợp lệ | Persist user active có role `STUDENT`; raw password không được lưu và BCrypt matches | Test đã viết; lần chạy trước bắt được lỗi named parameter và source đã sửa, nhưng lần kiểm tra lại thiếu đúng credential | NEEDS RERUN |
-| TC01 | Authentication | Tài khoản hợp lệ/không hợp lệ | Đăng nhập hoặc error đúng, role đúng | Chưa chạy | NOT RUN |
-| TC02 | Quản lý đề | Teacher tạo/sửa/publish đề hợp lệ | Dữ liệu và quyền đúng | Chưa chạy | NOT RUN |
-| TC03 | Tham gia thi | Student vào đề khả dụng | Tạo/tiếp tục đúng một attempt hợp lệ | Chưa chạy | NOT RUN |
-| TC04 | Auto-save đáp án | `ANSWER_QUESTION` khi còn hạn | Answer được persist, `ANSWER_SAVED` đúng và UI có thể khôi phục | Chưa chạy | NOT RUN |
-| TC05 | Nộp bài hợp lệ | Một attempt đang mở submit qua WebSocket | Attempt terminal, chấm/lưu kết quả đúng | Chưa chạy | NOT RUN |
-| TC06 | Submit trùng | Hai `SUBMIT_EXAM` đồng thời cho một attempt | Chỉ một finalization/chấm/ghi điểm | Chưa chạy | NOT RUN |
-| TC07 | Submit trùng deadline | Submit user và scheduler job chạy gần đồng thời | Một trạng thái/kết quả terminal | Chưa chạy | NOT RUN |
-| TC08 | Lưu sát hoặc sau deadline | `ANSWER_QUESTION` khi server time ≥ deadline | Từ chối; dữ liệu không bị đổi sau chốt | Chưa chạy | NOT RUN |
-| TC09 | Auto-save/reconnect/recovery | Ngắt WebSocket sau khi lưu, rồi `RESUME_EXAM` | Attempt/deadline/question mapping/saved answers được khôi phục đúng | Chưa chạy | NOT RUN |
-| TC10 | Restart server | Restart khi có attempt mở | Khôi phục/chốt deadline đúng | Chưa chạy | NOT RUN |
-| TC11 | Ownership | Student A gửi `attemptId` của B | Từ chối an toàn, ghi audit phù hợp | Chưa chạy | NOT RUN |
-| TC12 | Nhiều WebSocket client | 10/50/N client cùng join/save/submit | Session độc lập, không mất dữ liệu | Chưa chạy | NOT RUN |
-| TC13 | Invalid protocol | JSON/type/payload không hợp lệ | Error đúng, server/connection xử lý theo policy | Chưa chạy | NOT RUN |
-| TC14 | Leaderboard concurrent read | Nhiều submit chạy khi query leaderboard | Chỉ dữ liệu committed, không duplicate | Chưa chạy | NOT RUN |
-| TC15 | Publication policy | Student/teacher đọc result trước/sau hạn | Quyền công bố chính xác | Chưa chạy | NOT RUN |
-| TC16 | Real-time monitoring | Teacher subscribe dashboard, students join/save/disconnect/submit | Dashboard nhận update WebSocket đúng, không cần manual refresh | Chưa chạy | NOT RUN |
-| TC17 | Question randomization | Hai student bắt đầu/reconnect cùng exam | Mapping question/option có thể khác nhau nhưng ổn định theo attempt và chấm đúng ID gốc | Chưa chạy | NOT RUN |
-| TC18 | Suspicious activity rule | Tạo disconnect/reconnect hoặc rule event vượt ngưỡng | `SuspiciousActivityService` tạo record/warning deterministic, teacher xem được | Chưa chạy | NOT RUN |
-| TC19 | Concurrent auto-save | Nhiều client, hoặc nhiều update cạnh tranh trên một attempt theo policy | Không corrupt answer state; ownership/deadline/status đúng | Chưa chạy | NOT RUN |
+### Checklist nghiệm thu còn phải ghi actual result
 
-Test race condition phải tạo tranh chấp chủ đích bằng executor/latch/barrier hoặc WebSocket test clients tự động, không chỉ thao tác tay trên hai browser.
+| Kịch bản | Mong đợi | Trạng thái |
+|---|---|---|
+| Teacher tạo/publish → student thi → teacher review | Dữ liệu/điểm xuyên suốt đúng | Chưa có biên bản E2E đầy đủ |
+| Refresh sau save | Cùng attempt/deadline/order/answer | Có tests thành phần; browser chưa hoàn tất |
+| Mất mạng/reconnect | Resume trước commands; không báo save giả | Cần browser verification |
+| Offline quá deadline | Server finalize, recover thấy result | Có integration tests; cần browser nghiệm thu |
+| Restart | Login lại, dữ liệu đã lưu không mất | Cần manual checklist |
+| Teacher khác truy cập đề/bài nộp | Từ chối, không rò dữ liệu | Có ownership tests; cần demo |
+| Nhiều student cùng thi | Không lẫn identity/answers/results | Chưa benchmark multi-user |
+| Responsive/zoom | Dễ đọc, không che controls | Chưa QA mọi màn hình |
 
-## 16. Đánh giá thực nghiệm
+### Test đồng thời trên một máy
 
-### 16.1. Kịch bản
+Chạy một backend, một Vite và một PostgreSQL. Dùng browser profiles riêng, mỗi profile một tài khoản student khác nhau, thêm teacher theo dõi cùng exam. Nhiều tab cùng credential không chứng minh nhiều user độc lập. Đổi focus có thể tạo warning hợp lệ.
 
-1. Baseline xử lý tuần tự hoặc cấu hình concurrency tối thiểu phù hợp kiến trúc.
-2. Concurrent Java server với executor/pool đã chọn.
-3. 10, 25, 50, 100 WebSocket client hoặc mức tải thực tế máy hỗ trợ.
-4. Kịch bản đồng thời join exam, save answers và submit.
-5. Lặp nhiều lần sau warm-up và công bố số lần lặp thật.
+Benchmark cần WebSocket clients tự động login/start/save/submit với barrier đồng thời; ghi cấu hình, số câu hỏi/clients, latency p50/p95, throughput/errors và database consistency. Tăng 10/25/50 clients theo khả năng máy. **Chưa có số đo công bố**; mọi thành phần cùng máy giới hạn suy rộng production.
 
-### 16.2. Metrics
+## 10. UI và repository
 
-- Response time p50/p95 cho command WebSocket quan trọng.
-- Throughput command/second hoặc completed attempts/second.
-- Số connection/request/attempt thành công.
-- Error/timeout/disconnect rate.
-- Tổng thời gian xử lý workload.
-- CPU/memory nếu công cụ cho phép.
-- Số duplicate submissions hoặc invariant violation, kỳ vọng bằng `0`.
-
-Kết quả thật được lưu trong `docs/experiments.md` bằng bảng/chart/log có nguồn. Không thay kỳ vọng bằng số liệu giả.
-
-## 17. Đóng góp kỹ thuật dự kiến
-
-Chỉ ghi “đã thực hiện” khi code/test/measurement chứng minh:
-
-1. **Real-time concurrency-safe exam session:** xử lý WebSocket nhiều client và trạng thái attempt nhất quán.
-2. **Idempotent attempt finalization:** submit user và deadline đi qua cùng transaction path, không chấm trùng.
-3. **Auto-save & exam recovery:** persist từng thay đổi đáp án và phục hồi authoritative state/deadline/mapping sau reconnect hoặc restart.
-4. **Question randomization with stable identity:** biến thể theo attempt, mapping ID gốc bền vững và chấm đúng sau reconnect.
-5. **Anti-cheating/monitoring mechanism:** rule deterministic, activity record, real-time teacher dashboard và giới hạn được trình bày trung thực.
-6. **Repeatable WebSocket concurrency tests:** tạo tranh chấp/tải đồng thời có kiểm soát.
-7. **Concurrency-safe leaderboard:** query dữ liệu đã commit với tie-break ổn định.
-
-## 18. Code quality, Git và tài liệu
-
-- Dùng Git với branch/commit có ý nghĩa; không tạo lịch sử giả.
-- Branch gợi ý: `feature/authentication`, `feature/websocket`, `feature/concurrency`, `feature/anti-cheat`, `feature/react-client`, `feature/database`, `feature/testing`.
-- Ghi nhận bug, refactoring, duplicate code bị loại bỏ, tối ưu transaction/query/pool và bằng chứng trước/sau nếu có.
-- README phải có lệnh build/run/test đã xác minh ở phiên bản cuối.
-- Báo cáo phải mô tả đúng source, kết quả test và experiment thực tế.
-
-## 19. Giới hạn và hướng phát triển
-
-### Giới hạn
-
-- Client web không thể xác minh toàn diện hoạt động của sinh viên ngoài hệ thống.
-- Một Java server là single point of failure.
-- Database/library cụ thể chưa chốt ở giai đoạn thiết kế.
-- Code execution là rủi ro bảo mật lớn và không thuộc phiên bản đầu nếu chưa có isolation.
-- Chưa có WSS/TLS production, mobile app hoặc hệ thống phân tán.
-
-### Hướng phát triển
-
-- Hoàn thiện rule anti-cheating, ngưỡng cảnh báo và evaluation dựa trên số liệu thực.
-- HTTPS/WSS, token rotation, rate limiting và observability.
-- Câu hỏi nhiều dạng, chấm tay hoặc code runner sandboxed.
-- Database production, connection pooling và multi-server design.
-- Real-time teacher monitoring nâng cao sau khi core correctness ổn định.
-
-## 20. Trạng thái dự án và quyết định
-
-### Đã chốt
-
-- [x] Topic 4 – Java Concurrent Application.
-- [x] Online Examination System theo kiến trúc client-server.
-- [x] React web client + WebSocket + Java server + relational database.
-- [x] Java server là thành phần kỹ thuật chính chịu trách nhiệm OOP, concurrency, authoritative exam state và persistence.
-- [x] Real-time monitoring là core feature; teacher dashboard nhận WebSocket update, không polling-only.
-- [x] Auto-save & exam recovery là core feature.
-- [x] Anti-cheating/suspicious-activity detection là novelty/core feature.
-- [x] Question randomization là core feature.
-- [x] Code execution/code-based examination không thuộc scope core hiện tại.
-- [x] PostgreSQL + Spring JDBC là database/persistence approach.
-
-### TODO / DECISION REQUIRED
-
-- [ ] Anti-cheating rules, threshold, severity và evaluation metric cụ thể.
-- [ ] Randomization policy: chỉ order, option order hay question-bank selection.
-- [ ] Chốt policy khi WebSocket reconnect: buộc đăng nhập lại hay thêm token/session-resume an toàn.
-- [ ] Hoàn thiện schema cho attempt/answer/result/activity/session, class diagram và final WebSocket contract.
-- [ ] Phân công thành viên, test tooling và load-generation method.
-
-### Historical implementation status (superseded)
-
-> Mục dưới đây là ảnh chụp tiến độ ngày `2026-10-23` và được giữ để theo dõi lịch sử. Trạng thái source mới nhất nằm trong mục **Cập nhật triển khai hiện tại - 2026-10-25** ở đầu README.
-
-Tại thời điểm cập nhật `2026-10-23`, giao diện React và auth foundation đã tiến xa hơn skeleton ban đầu. Backend đã có Exam Management create/list/get độc lập và Question Management persistence foundation, nhưng các message nghiệp vụ này chưa được nối vào WebSocket dispatcher và React vẫn chủ yếu dùng mock/local state cho dữ liệu exam. Không được dùng số lượng màn hình hoặc kết quả compile để tuyên bố hệ thống end-to-end đã hoàn thành.
-
-**Đã làm được:**
-
-- [x] Tạo React client bằng TypeScript/Vite và Java server bằng Spring Boot/Maven.
-- [x] Cấu hình React 19, TypeScript 6, Vite 8, Tailwind CSS 4 và React Router 8.
-- [x] Cấu hình Java 21, Spring Boot 4.1.1, Spring WebSocket và Jackson 3.
-- [x] Chuyển server sang cổng `8081`; endpoint WebSocket là `/ws`.
-- [x] Cấu hình development origin `http://localhost:5173`.
-- [x] Server theo dõi lifecycle kết nối và ghi log connect/disconnect.
-- [x] Server gửi event `CONNECTED` có `sessionId`, message và `serverTime`.
-- [x] Tạo Java records `ClientMessage`, `ServerMessage`, `ProtocolError` và enum `MessageType`.
-- [x] React có type tương ứng cho request/response protocol.
-- [x] React hook mở/đóng WebSocket, theo dõi `connecting`, `connected`, `disconnected`, `error`, parse response và dọn socket/timer khi component unmount.
-- [x] Client tạo `requestId` bằng `crypto.randomUUID()`, ghép response với callback, timeout request sau 10 giây và trả lỗi an toàn khi connection đóng.
-- [x] Client tự reconnect theo capped exponential backoff `1s → 2s → 4s → 8s → 10s`, tránh timer hoặc socket trùng.
-- [x] UI hiển thị trạng thái kết nối tại login và teacher workspace.
-- [x] Tạo `AuthProvider`, `useAuth`, `ProtectedRoute` và `HomeRedirect`; bảo vệ route theo role `STUDENT`/`TEACHER`.
-- [x] Tạo Student Portal header và Teacher Portal layout; hiển thị user thật từ auth state và hỗ trợ logout phía client.
-- [x] Có UI/routing cho Login, Register, Student Dashboard, Exam Detail, Exam Room, Exam History, Exam Result, Teacher Dashboard, Exam Management, Create Exam, Exam Overview, Question Management, Exam Monitoring và Suspicious Activity.
-- [x] Client đã qua ESLint và TypeScript production build (`139` modules) trong lần kiểm tra gần nhất; WebSocket dùng shared provider/context, URL lấy từ cấu hình môi trường và request vẫn được ghép bằng `requestId`.
-- [x] Chọn PostgreSQL và cấu hình datasource bằng `DB_URL`, `DB_USERNAME`, `DB_PASSWORD`; không hard-code password.
-- [x] Thêm Spring JDBC, PostgreSQL driver và Spring Security Crypto.
-- [x] Tạo idempotent `schema.sql` cho `users`, `exams`, `questions`, `choices`, constraint/index và foreign key cơ bản.
-- [x] Tạo domain model user, `UserRepository` abstraction và `JdbcUserRepository` dùng named SQL parameters.
-- [x] Tạo `DatabaseConnectionVerifier` để kiểm tra database/user hiện tại và đếm user khi ứng dụng khởi động.
-- [x] Tạo BCrypt `PasswordEncoder` với cost factor `12`.
-- [x] Hiện thực `RegistrationService` có validation, normalization, duplicate checking, transaction và mặc định role `STUDENT`.
-- [x] Tạo `RegistrationException`, request model `RegisterUserCommand` và safe result model `RegisteredUser` không chứa password hash.
-- [x] Nối React `REGISTER` qua `RegistrationMessageHandler` đến `RegistrationService` và trả `REGISTERED`/`ERROR`.
-- [x] Hiện thực `LoginService`, `LOGIN`/`LOGGED_IN`, kiểm tra BCrypt/active account và trả `INVALID_CREDENTIALS` an toàn.
-- [x] Tạo thread-safe `AuthenticatedSessionRegistry` bằng `ConcurrentHashMap`; gắn user với WebSocket session khi login và xóa khi disconnect.
-- [x] `ExamWebSocketHandler` trả lỗi cho JSON sai, thiếu/không hỗ trợ message type và unexpected runtime exception.
-- [x] Có `ExamRepository`/`JdbcExamRepository`, `ExamManagementService` và `ExamManagementMessageHandler` cho teacher create/list/get exam với ownership filtering.
-- [x] Có unit test handler và integration test source cho Exam Management create/list/get; `ExamManagementMessageHandlerTests` đã pass trong lần full-test gần nhất.
-- [x] Tạo `QuestionManagementException`, `CreateQuestionCommand`, teacher-only question/choice result DTO và immutable list wrapper.
-- [x] Tạo `QuestionRepository`/`JdbcQuestionRepository`; insert question/choice lấy generated ID, query exam ownership/status dùng `FOR UPDATE`, danh sách sắp xếp ổn định và choices được lấy bằng một join query thay vì N+1.
-- [x] Backend main source đã compile `BUILD SUCCESS` với `45` source files, Java 21 và Maven vào `2026-10-23`.
-- [x] Có test source cho schema, registration, login, message type contract, authenticated-session registry, registration handler và WebSocket error handling.
-
-**Đã có khung nhưng chưa hoàn chỉnh:**
-
-- [ ] Auth state phía React mới lưu trong memory; refresh sẽ đăng xuất.
-- [ ] Reconnect transport đã có nhưng authenticated session cũ không được resume trên socket mới; cần policy buộc login lại hoặc token/session-resume.
-- [ ] Logout hiện mới xóa React state; server chưa có `LOGOUT` command để clear session chủ động.
-- [ ] `lastMessage` đã có nhưng chưa có subscription API theo message type cho server-push monitoring event.
-- [ ] Exam Management mới hoàn thành create/list/get ở module độc lập; update/publish/close/delete đang được Phanh phát triển và toàn bộ command exam chưa được nối vào `MessageType`/`ExamWebSocketHandler`.
-- [ ] Question Management mới hoàn thành contract/model/JDBC repository; chưa có `QuestionManagementService`, transaction tạo question + choices, WebSocket DTO/handler và test.
-- [ ] Student Exam Catalog mới được giao cho Hải Yến, chưa có source và chưa được xem là đã triển khai.
-- [ ] Các trang exam/attempt/result/teacher/monitoring đã có UI nhưng vẫn đọc `MOCK_*` hoặc local state.
-- [ ] Cần chạy lại toàn bộ `mvn test` trong terminal có đúng `DB_PASSWORD` và ghi nhận `BUILD SUCCESS` trước khi đánh dấu server test pass hoàn toàn.
-
-**Chưa triển khai end-to-end:** quản lý exam/question từ React qua WebSocket đến PostgreSQL, student exam catalog, exam attempt/session, server-authoritative deadline, auto-save/recovery, submit/chấm điểm, leaderboard, question randomization, real-time teacher monitoring và anti-cheating event collection. Thư mục `stitch_university_online_examination_system/` chỉ là form tham khảo; giao diện React hiện tại đã được tách thành pages/components riêng và không phụ thuộc trực tiếp vào source mockup đó.
-
-## 21. Kế hoạch triển khai
-
-1. Chốt FR/NFR chi tiết, anti-cheating rule/threshold và policy exam/session.
-2. Chốt React TypeScript, Spring WebSocket, PostgreSQL và Spring JDBC. **Đã hoàn thành quyết định công nghệ.**
-3. Thiết kế `ExamSession` state, randomization mapping, WebSocket protocol, error code, database schema và OOP/domain model.
-4. Thiết kế concurrency model: executor, shared resources, locking/transaction và scheduler lifecycle.
-5. Thiết kế React pages, đặc biệt Exam Room và Teacher Monitoring Dashboard.
-6. Tạo skeleton client/server, WebSocket connection/message foundation và persistence foundation. **Đã hoàn thành `CONNECTED`/`PING`/`PONG`, request timeout/reconnect phía client, schema cơ bản và user JDBC repository.**
-7. Hoàn thiện registration/login transport, session registry và React role guard. **Đã hoàn thành foundation; còn logout/session resume và authorization cho command nghiệp vụ.**
-8. Hoàn thiện Exam Lifecycle, Question Management và Student Exam Catalog; sau đó tích hợp protocol/dispatcher và thay mock ở các trang teacher/student tương ứng bằng dữ liệu server thật. **Đang thực hiện: Exam create/list/get và Question JDBC foundation đã có, nhưng chưa end-to-end.**
-9. Hiện thực exam session, randomization, answer auto-save và `RESUME_EXAM` recovery.
-10. Hiện thực `AttemptFinalizer`, deadline scheduler, restart recovery và duplicate-submit protection.
-11. Hiện thực real-time monitoring và `SuspiciousActivityService` sau khi core session flow đúng.
-12. Viết unit, integration, WebSocket, monitoring và concurrency tests.
-13. Xây load test, đo sequential/concurrent và tối ưu bằng số liệu.
-14. Hoàn thiện README, docs, report, demo và viva preparation.
-
-## 22. Báo cáo và nộp bài
-
-Báo cáo theo technical paper: Title, Abstract, Keywords, Introduction, Problem Definition, Requirements, Architecture, Design, Implementation, Technical Details, Testing, Experimental Results, Discussion, Novelty/Contributions, Limitations, Future Work, Conclusion, References và Appendix nếu cần.
-
-Tên file:
+- Brand **EZAM**, logo `client/src/assets/logo.png` dùng qua `AppLogo`, favicon cùng ảnh.
+- Tên EZAM student header: Outfit 800, gradient xanh; Google Fonts cần mạng, có fallback.
+- Font nội dung: `client/src/index.css`; khai báo font family không có nghĩa font đã tải/cài trên máy.
+- Typography: chú thích 12px, label/menu 14px, nội dung/input 16px ở thiết lập mặc định, dùng rem cho thang chuẩn hoá.
+- Student header giữ logo/tên thương hiệu/navigation/account, bỏ title/subtitle dư.
+- `stitch_university_online_examination_system/` chỉ là UI reference.
 
 ```text
-report/GroupXX_OnlineExaminationSystem_Report.docx
+client/src/
+  assets/                 # logo/hình ảnh
+  auth/                   # identity/tab token
+  components/             # common/layout/routing/exam
+  pages/                  # student/teacher/auth/profile
+  websocket/              # transport/provider/protocol/subscriptions
+server/
+  src/main/java/vn/edu/hanu/exam/
+    config/               # password/deadline
+    domain/
+    exception/
+    protocol/             # envelopes/types
+    repository/           # interfaces/JDBC
+    service/              # exam/question/attempt/monitoring/submission...
+    session/              # registry/resume credentials
+    websocket/            # endpoint/DTO/handlers/push hub
+  src/main/resources/
+    application.properties
+    schema.sql
+    db/migrations/        # manual, không tự chạy
+  src/test/java/
+  pom.xml
+docs/                     # deadline/session/monitoring
+f2026-final-project/       # instructions/rubric
+PHAN_CONG_NHIEM_VU_BACKEND.md
+README.md
 ```
 
-- Kiểm tra Compilatio; similarity yêu cầu `≤ 20%`.
-- Trích dẫn nguồn, thư viện, code/ý tưởng tái sử dụng.
-- Nộp `source/` hoặc cấu trúc client/server/database hoàn chỉnh, `report/` và `README.md` qua LMS theo hướng dẫn giảng viên.
-- Deadline lấy từ LMS.
+## 11. Troubleshooting
 
-## 23. Checklist cuối
+| Lỗi | Kiểm tra |
+|---|---|
+| Maven không nhận | PATH/terminal mới; lệnh là `mvn`, không phải `maven` |
+| Không có POM | Vào server hoặc dùng `-f server/pom.xml` |
+| Goal spring không tồn tại | `mvn spring-boot:run` |
+| Port 8081 bận | Xác định đúng process/server cũ; không kill process lạ theo phỏng đoán |
+| DB authentication failed | Credential đúng terminal/database/user/port |
+| pgAdmin không thấy data | Đúng connection/database/schema chưa |
+| WebSocket fail | Backend/URL/port/origin; Network → Socket, handshake thành công HTTP 101 |
+| Socket dev đóng trước establish | Có thể StrictMode cleanup; kiểm tra socket cuối và hoạt động thật |
+| Unique constraint legacy | Kiểm tra migration, không xoá dữ liệu thật để né lỗi |
+| Login lại sau restart | Token memory mất; login rồi recover attempt |
+| Logo/font chưa đổi | Reload/Ctrl+F5, kiểm tra asset/Google Fonts |
 
-### Kiến trúc và source
+## 12. Giới hạn và phần việc còn lại
 
-- [x] Chọn React client + WebSocket + Java server + relational database.
-- [x] Chốt React TypeScript và Spring WebSocket.
-- [x] Chốt PostgreSQL + Spring JDBC; đã có datasource, schema `users`/`exams`/`questions`/`choices` và user JDBC repository.
-- [ ] Client/server/database build và chạy thành công trên môi trường sạch.
-- [ ] Protocol nghiệp vụ cuối được ghi rõ và client/server tuân thủ cùng contract; foundation connection, registration và login đã có.
-- [ ] Không commit secret, database thật, build output hoặc debug code.
+1. Hoàn tất browser acceptance, responsive/zoom QA, ghi actual results.
+2. Benchmark WebSocket tái lập được với số đo correctness/concurrency/performance thật.
+3. Nghiệm thu máy/database sạch, teacher provisioning, migration và dedicated test database.
+4. Hoàn thiện ERD/class diagram, thread model, contract chi tiết và đóng góp thành viên.
+5. Hoàn thiện report/demo/references/Compilatio/LMS; chưa xác nhận các việc này đã xong.
 
-### Kỹ thuật
+Hạn chế: token mất khi restart; monitoring synchronous/single-server; 500 records, chưa pagination toàn integrity history; browser signals không chống can thiệp tuyệt đối; passing threshold/leaderboard chưa nghiệm thu; chưa có quên mật khẩu tự phục vụ qua email.
 
-- [ ] OOP/SOLID đã bắt đầu bằng domain/service/repository abstraction; cần tiếp tục và đánh giá trên toàn hệ thống.
-- [ ] Thread model, shared resources, race conditions và synchronization khớp code.
-- [x] Client WebSocket có connect/disconnect, request correlation, timeout, cleanup và reconnect/backoff; server trả lỗi cho invalid/unsupported message.
-- [ ] Reconnect authenticated session/exam attempt chưa có; transport reconnect không đồng nghĩa recovery nghiệp vụ.
-- [ ] Submit/deadline không chấm trùng.
-- [ ] Restart/recovery giữ dữ liệu và deadline đúng.
-- [x] Novelty đã chốt: anti-cheating/suspicious-activity detection tích hợp với monitoring.
-- [ ] Auto-save/recovery, real-time monitoring, anti-cheating và randomization được hiện thực, test và giải thích được.
+Production cần HTTPS/WSS, XSS protection, authentication/storage phù hợp, rate limits, backup/operations và security review. `sessionStorage` không phải HttpOnly cookie; sign-out offline chỉ xoá token local, không bảo đảm revoke ngay server.
 
-### Test, báo cáo và nộp bài
+## 13. Yêu cầu môn học và bàn giao
 
-- [ ] Test case có input, expected, actual result và status.
-- [ ] Đã có test source cho schema/auth/protocol/WebSocket error; cần xác nhận lại toàn bộ bằng `BUILD SUCCESS` với đúng `DB_PASSWORD` và bổ sung exam/concurrency/load tests.
-- [ ] Có benchmark tái lập được và số đo thật.
-- [ ] README có lệnh build/run/test và cấu hình PostgreSQL; client lint/build/diff check đã xác minh ngày `2026-10-22`, server test đầy đủ và quy trình môi trường sạch vẫn cần xác minh.
-- [ ] Báo cáo `.docx` khớp source, có references và Compilatio `≤ 20%`.
-- [ ] Mọi thành viên có thể chạy, giải thích và debug phần mình phụ trách.
-- [ ] Nộp đầy đủ qua LMS đúng hạn.
+Đối chiếu [Instructions](f2026-final-project/Instructions.md), [Rubric](f2026-final-project/Rubric.md): giải thích bài toán/requirements, kiến trúc, Java/OOP, networking, SQL/JDBC/transactions, concurrency, tests và contribution phù hợp, không dùng công nghệ chỉ để có tên.
+
+- Report: Abstract, Introduction, Requirements, Architecture/Design, Implementation/Technical Details, Testing, Experimental Results, Discussion, Novelty, Limitations, Conclusion, References.
+- Test case có input/expected/actual/status; chỉ công bố số liệu đo thật.
+- Mỗi thành viên chạy/giải thích/debug được phần mình; đối chiếu phân công/Git, không suy đóng góp từ branch name.
+- Khai báo/trích dẫn AI tools, thư viện, nguồn theo quy định; trách nhiệm vẫn thuộc nhóm.
+- Tên report: `GroupXX_ProjectName_Report.docx`, ví dụ `GroupXX_EZAM_Report.docx`; thay group number trước nộp.
+- Compilatio similarity **≤ 20%**; nộp source/report/README qua LMS theo deadline giảng viên.
+- Không commit password/token thật, `.env.local`, dump chứa dữ liệu người dùng hoặc output build không cần thiết.
+
+README không thay thế report cuối, benchmark hoặc nghiệm thu hệ thống.
