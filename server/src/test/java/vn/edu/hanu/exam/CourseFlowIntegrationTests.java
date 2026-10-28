@@ -21,6 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
 import vn.edu.hanu.exam.exception.RegistrationException;
+import vn.edu.hanu.exam.exception.StudentExamCatalogException;
 import vn.edu.hanu.exam.service.RegisterUserCommand;
 import vn.edu.hanu.exam.service.course.CourseException;
 import vn.edu.hanu.exam.service.course.CourseService;
@@ -53,18 +54,43 @@ class CourseFlowIntegrationTests {
         assertEquals(1, courses.students(first.id(), teacher).size());
         assertEquals(1, courses.students(second.id(), teacher).size());
 
-        var exam = exams.createExamInCourse(teacher, first.id(),
-                new CreateExamCommand("Midterm", "Course exam", 60, OffsetDateTime.now().plusDays(2)));
+        var question = new CreateQuestionCommand(0, "Which answer is correct?", 5, 0, List.of(
+                new CreateQuestionCommand.ChoiceCommand("First", true, 0),
+                new CreateQuestionCommand.ChoiceCommand("Second", false, 1)));
+        var exam = exams.createExamWithQuestions(teacher, first.id(),
+                new CreateExamCommand("Midterm", "Course exam", 60, OffsetDateTime.now().plusDays(2)),
+                "Midterm examination", List.of(question));
         assertEquals(first.id(), exam.courseId());
         assertEquals("Programming", exam.courseName());
         assertEquals("Programming", exams.findAllByCreatedBy(teacher).exams().getFirst().courseName());
         assertEquals("Programming", exams.findByIdAndCreatedBy(exam.id(), teacher).courseName());
 
-        jdbc.update("UPDATE exams SET status = 'PUBLISHED' WHERE id = :id", Map.of("id", exam.id()));
+        exams.publishExam(exam.id(), teacher);
         assertTrue(catalog.findAllAvailable(student.id()).exams().stream().anyMatch(item -> item.id() == exam.id()));
-        assertEquals("Programming", catalog.findAvailableById(exam.id(), student.id()).courseName());
+        var available = catalog.findAvailableById(exam.id(), student.id());
+        assertEquals("Programming", available.courseName());
+        assertEquals("Midterm examination", available.assessmentType());
+        assertEquals(1, available.questionCount());
+        assertEquals(5, available.totalPoints());
+        assertEquals(exam.scheduledAt().toInstant(), available.scheduledAt().toInstant());
         long outsider = accounts.create(studentCommand("outside"), null).id();
         assertTrue(catalog.findAllAvailable(outsider).exams().stream().noneMatch(item -> item.id() == exam.id()));
+
+        var emptyExam = exams.createExamInCourse(teacher, first.id(),
+                new CreateExamCommand("Old empty exam", null, 60, OffsetDateTime.now().plusDays(2)));
+        jdbc.update("UPDATE exams SET status = 'PUBLISHED' WHERE id = :id", Map.of("id", emptyExam.id()));
+        assertTrue(catalog.findAllAvailable(student.id()).exams().stream().noneMatch(item -> item.id() == emptyExam.id()));
+        assertThrows(StudentExamCatalogException.class,
+                () -> catalog.findAvailableById(emptyExam.id(), student.id()));
+
+        var legacyExam = exams.createExam(teacher,
+                new CreateExamCommand("Old exam without course", null, 60, OffsetDateTime.now().plusDays(2)));
+        jdbc.update("INSERT INTO questions (exam_id, content, points, display_order) VALUES (:examId, 'Legacy question', 1, 0)",
+                Map.of("examId", legacyExam.id()));
+        jdbc.update("UPDATE exams SET status = 'PUBLISHED' WHERE id = :id", Map.of("id", legacyExam.id()));
+        assertTrue(catalog.findAllAvailable(student.id()).exams().stream().noneMatch(item -> item.id() == legacyExam.id()));
+        assertThrows(StudentExamCatalogException.class,
+                () -> catalog.findAvailableById(legacyExam.id(), student.id()));
     }
 
     @Test

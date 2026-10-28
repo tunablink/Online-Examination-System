@@ -357,6 +357,7 @@ export interface AvailableExamDetailsData {
   id: number;
   title: string;
   description: string | null;
+  assessmentType: string;
   durationMinutes: number;
   questionCount: number;
   totalPoints: number;

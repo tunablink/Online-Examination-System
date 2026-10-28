@@ -20,6 +20,7 @@ function isAvailableExam(value: unknown): value is AvailableExamDetailsData {
     typeof exam.id === "number" &&
     typeof exam.title === "string" &&
     (typeof exam.description === "string" || exam.description === null) &&
+    typeof exam.assessmentType === "string" &&
     typeof exam.durationMinutes === "number" &&
     typeof exam.questionCount === "number" &&
     typeof exam.totalPoints === "number"

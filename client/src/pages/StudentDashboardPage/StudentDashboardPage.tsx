@@ -8,11 +8,14 @@ import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
 import type { AvailableExamDetailsData } from '../../websocket/protocol';
 import { useWebSocket } from '../../websocket/useWebSocket';
 
-function isAvailableExam(value: unknown): value is AvailableExamDetailsData {
+type CatalogExam = Omit<AvailableExamDetailsData, 'assessmentType'> & { assessmentType?: string | null };
+
+function isAvailableExam(value: unknown): value is CatalogExam {
   if (typeof value !== 'object' || value === null) return false;
   const exam = value as Record<string, unknown>;
   return typeof exam.id === 'number' && typeof exam.title === 'string' &&
     (typeof exam.description === 'string' || exam.description === null) &&
+    (exam.assessmentType === undefined || exam.assessmentType === null || typeof exam.assessmentType === 'string') &&
     typeof exam.durationMinutes === 'number' && typeof exam.questionCount === 'number' &&
     typeof exam.totalPoints === 'number' &&
     (exam.scheduledAt === undefined || typeof exam.scheduledAt === 'string' || exam.scheduledAt === null);
@@ -25,21 +28,17 @@ const scheduleFormatter = new Intl.DateTimeFormat('en-GB', {
 function ExamCard({ exam }: { exam: AvailableExamDetailsData }) {
   return (
     <article className="group rounded-xl border border-[#dce7ea] bg-white p-3.5 transition hover:-translate-y-0.5 hover:border-[#a8cbd2] hover:shadow-[0_12px_30px_rgba(20,65,76,.07)]">
-      <div className="flex items-start justify-between gap-3">
-        <span className="grid h-9 w-9 place-items-center rounded-lg bg-[#edf6f7] font-mono text-sm font-bold text-[#00778b]">EX</span>
-        <span className="rounded-full border border-[#a8d7df] bg-[#eef9fa] px-2.5 py-1 text-sm font-semibold text-[#00778b]">AVAILABLE</span>
-      </div>
-      <p className="mt-3 text-sm font-bold uppercase tracking-[.09em] text-[#71868d]">EX-{String(exam.id).padStart(4, '0')} · Published examination</p>
+      <p className="text-sm font-bold uppercase tracking-[.09em] text-[#71868d]">EX-{String(exam.id).padStart(4, '0')} · {exam.assessmentType}</p>
       <h2 className="mt-1.5 text-xl font-bold leading-6 tracking-[-.025em] text-[#243238]">{exam.title}</h2>
-      {exam.courseName && <p className="mt-1 text-sm font-semibold text-[#00778b]">{exam.courseName}</p>}
+      {exam.courseName && <p className="mt-1 text-sm font-semibold text-[#00778b]">Course: {exam.courseName}</p>}
       <p className="mt-1 text-sm leading-5 text-[#687b82]">{exam.description?.trim() || 'No description was provided.'}</p>
+      {exam.scheduledAt && <p className="mt-2 flex items-center gap-1.5 text-sm text-[#64787f]"><Icon className="text-[#00778b]" name="calendar" size={14} />{scheduleFormatter.format(new Date(exam.scheduledAt))}</p>}
       <div className="mt-3 grid grid-cols-3 gap-2 border-y border-[#edf1f2] py-3 text-sm leading-5 text-[#64787f]">
         <span><Icon className="mb-1 text-[#00778b]" name="clock" size={14} />{exam.durationMinutes} mins</span>
         <span><Icon className="mb-1 text-[#00778b]" name="document" size={14} />{exam.questionCount} items</span>
         <span><Icon className="mb-1 text-[#00778b]" name="check" size={14} />{exam.totalPoints} points</span>
       </div>
-      <div className="mt-3 flex items-center justify-between gap-3">
-        <p className="text-sm text-[#71868d]">Secure AI proctoring enabled</p>
+      <div className="mt-3 flex justify-end">
         <Link className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#00778b] px-3 text-sm font-semibold text-white hover:bg-[#006273]" to={`/student/exams/${exam.id}`}>Enter exam<Icon name="arrow-right" size={12} /></Link>
       </div>
     </article>
@@ -65,7 +64,7 @@ function StudentDashboardPage() {
       setLoading(false);
       const received = message.data?.exams;
       if (message.type === 'AVAILABLE_EXAMS' && Array.isArray(received) && received.every(isAvailableExam)) {
-        setExams(received.map((exam) => ({ ...exam, scheduledAt: exam.scheduledAt ?? null })));
+        setExams(received.map((exam) => ({ ...exam, assessmentType: exam.assessmentType?.trim() || 'Examination', scheduledAt: exam.scheduledAt ?? null })));
         return;
       }
       setFeedback({ type: 'error', title: 'Unable to load examinations', message: message.error?.message ?? 'The server returned an invalid catalog.' });

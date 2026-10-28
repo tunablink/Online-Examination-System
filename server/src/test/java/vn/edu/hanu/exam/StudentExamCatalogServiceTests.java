@@ -77,7 +77,8 @@ class StudentExamCatalogServiceTests {
                 "questionCount",
                 "totalPoints",
                 "scheduledAt",
-                "courseName"), componentNames);
+                "courseName",
+                "assessmentType"), componentNames);
         assertFalse(componentNames.contains("questions"));
         assertFalse(componentNames.contains("choices"));
         assertFalse(componentNames.contains("correct"));

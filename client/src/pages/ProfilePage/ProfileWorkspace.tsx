@@ -37,6 +37,8 @@ function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
   const [loading, setLoading] = useState(true);
   const [savingDepartment, setSavingDepartment] = useState(false);
   const [changingPassword, setChangingPassword] = useState(false);
+  const [passwordFormOpen, setPasswordFormOpen] = useState(false);
+  const [currentPasswordError, setCurrentPasswordError] = useState('');
   const [profileFeedback, setProfileFeedback] = useState<Feedback | null>(null);
   const [passwordFeedback, setPasswordFeedback] = useState<Feedback | null>(null);
 
@@ -92,8 +94,10 @@ function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
   const changePassword = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setPasswordFeedback(null);
+    setCurrentPasswordError('');
     if (!passwords.currentPassword) {
-      setPasswordFeedback({ type: 'error', message: 'Enter your current password.' });
+      if (expectedRole === 'STUDENT') setCurrentPasswordError('Enter your current password.');
+      else setPasswordFeedback({ type: 'error', message: 'Enter your current password.' });
       return;
     }
     if (passwords.newPassword.length < 8 || new TextEncoder().encode(passwords.newPassword).length > 72) {
@@ -117,7 +121,12 @@ function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
       setChangingPassword(false);
       if (message.type === 'PASSWORD_CHANGED') {
         setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' });
+        if (expectedRole === 'STUDENT') setPasswordFormOpen(false);
         setPasswordFeedback({ type: 'success', title: 'Password changed', message: 'Use the new password the next time you sign in.' });
+        return;
+      }
+      if (expectedRole === 'STUDENT' && message.error?.code === 'INVALID_CURRENT_PASSWORD') {
+        setCurrentPasswordError('Password incorrect');
         return;
       }
       setPasswordFeedback({ type: 'error', title: 'Password not changed', message: `${message.error?.code ?? 'PASSWORD_CHANGE_FAILED'}: ${message.error?.message ?? 'The password could not be changed.'}` });
@@ -125,13 +134,23 @@ function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
     if (requestId === null) setChangingPassword(false);
   };
 
-  const identityLabel = expectedRole === 'STUDENT' ? 'Student ID / username' : 'Staff username';
+  const identityLabel = expectedRole === 'STUDENT' ? 'Student ID' : 'Staff username';
   const initials = profile?.fullName.trim().split(/\s+/).slice(-2).map((part) => part[0]).join('').toUpperCase() ?? '--';
+  const passwordControls = <>
+    {passwordFeedback && <div className="mt-5"><FeedbackMessage feedback={passwordFeedback} onClose={() => setPasswordFeedback(null)} /></div>}
+    {expectedRole === 'STUDENT' && !passwordFormOpen && <button className="h-9 rounded-lg border border-[#00778b] bg-white px-4 text-xs font-semibold text-[#00778b]" onClick={() => { setPasswordFeedback(null); setCurrentPasswordError(''); setPasswordFormOpen(true); }} type="button">Change password</button>}
+    {(expectedRole === 'TEACHER' || passwordFormOpen) && <form className={`${expectedRole === 'TEACHER' ? 'mt-5 ' : ''}grid grid-cols-2 gap-4 max-md:grid-cols-1`} onSubmit={changePassword}>
+      <label className="col-span-2 grid gap-2 max-md:col-span-1"><span className="text-sm font-semibold text-[#53646a]">Current password</span><input autoComplete="current-password" className={inputClass} disabled={changingPassword} onChange={(event) => { setCurrentPasswordError(''); setPasswords((current) => ({ ...current, currentPassword: event.target.value })); }} type="password" value={passwords.currentPassword} />{expectedRole === 'STUDENT' && currentPasswordError && <span className="text-xs font-medium text-[#bd2f35]" role="alert">{currentPasswordError}</span>}</label>
+      <label className="grid gap-2"><span className="text-sm font-semibold text-[#53646a]">New password</span><input autoComplete="new-password" className={inputClass} disabled={changingPassword} minLength={8} onChange={(event) => setPasswords((current) => ({ ...current, newPassword: event.target.value }))} type="password" value={passwords.newPassword} /></label>
+      <label className="grid gap-2"><span className="text-sm font-semibold text-[#53646a]">Confirm new password</span><input autoComplete="new-password" className={inputClass} disabled={changingPassword} minLength={8} onChange={(event) => setPasswords((current) => ({ ...current, confirmPassword: event.target.value }))} type="password" value={passwords.confirmPassword} /></label>
+      <div className="col-span-2 flex items-center justify-between gap-4 border-t border-[#e6edef] pt-4 max-md:col-span-1 max-sm:flex-col max-sm:items-stretch"><p className="text-xs text-[#7c898e]">Use 8–72 characters and do not reuse the current password.</p><div className="flex items-center gap-2 max-sm:justify-end">{expectedRole === 'STUDENT' && <button className="h-10 rounded-lg border border-[#d6e1e4] bg-white px-5 text-sm font-semibold text-[#53646a]" disabled={changingPassword} onClick={() => { setPasswords({ currentPassword: '', newPassword: '', confirmPassword: '' }); setCurrentPasswordError(''); setPasswordFeedback(null); setPasswordFormOpen(false); }} type="button">Cancel</button>}<button className="h-10 rounded-lg bg-[#26363c] px-5 text-sm font-semibold text-white disabled:bg-[#a8b2b6]" disabled={changingPassword || connectionStatus !== 'connected'} type="submit">{changingPassword ? 'Changing password…' : expectedRole === 'STUDENT' ? 'Save changes' : 'Change password'}</button></div></div>
+    </form>}
+  </>;
 
   return <div className="text-[#172126]">
     <section className="flex items-start justify-between gap-5 max-md:flex-col">
-      <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#00778b]">Account settings</p><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">My profile</h1><p className="mt-1 text-sm text-[#718087]">Review institution-managed information and maintain your account security.</p></div>
-      <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b8dbe1] bg-white px-3 text-xs font-semibold text-[#00778b] disabled:opacity-50" disabled={loading || connectionStatus !== 'connected'} onClick={loadProfile} type="button"><Icon className={loading ? 'animate-spin' : ''} name="refresh" size={13} />Refresh profile</button>
+      <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#00778b]">Account settings</p><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">My profile</h1>{expectedRole === 'TEACHER' && <p className="mt-1 text-sm text-[#718087]">Review institution-managed information and maintain your account security.</p>}</div>
+      {expectedRole === 'TEACHER' && <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b8dbe1] bg-white px-3 text-xs font-semibold text-[#00778b] disabled:opacity-50" disabled={loading || connectionStatus !== 'connected'} onClick={loadProfile} type="button"><Icon className={loading ? 'animate-spin' : ''} name="refresh" size={13} />Refresh profile</button>}
     </section>
 
     {profileFeedback && <div className="mt-5"><FeedbackMessage feedback={profileFeedback} onClose={() => setProfileFeedback(null)} /></div>}
@@ -147,27 +166,19 @@ function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
 
       <div className="grid gap-5">
         <section className="rounded-xl border border-[#dce7ea] bg-white p-6">
-          <div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#edf7f8] text-[#00778b]"><Icon name="users" size={16} /></span><div><h2 className="text-base font-bold">Institution information</h2><p className="mt-1 text-xs text-[#7c898e]">Identity fields are controlled by the institution and cannot be edited here.</p></div></div>
+          <div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#edf7f8] text-[#00778b]"><Icon name="users" size={16} /></span><div><h2 className="text-base font-bold">Institution information</h2>{expectedRole === 'TEACHER' && <p className="mt-1 text-xs text-[#7c898e]">Identity fields are controlled by the institution and cannot be edited here.</p>}</div></div>
           <div className="mt-5 grid grid-cols-2 gap-4 max-md:grid-cols-1">
             <ReadOnlyField label="Full name" value={profile?.fullName ?? ''} />
             <ReadOnlyField label={identityLabel} value={profile?.username ?? ''} />
-            <ReadOnlyField label="Institution email" value={profile?.email ?? ''} />
-            <ReadOnlyField label="Account role" value={profile?.role ?? expectedRole} />
+            <ReadOnlyField label={expectedRole === 'STUDENT' ? 'Institutional email' : 'Institution email'} value={profile?.email ?? ''} />
+            {expectedRole === 'STUDENT' ? <ReadOnlyField label="Department" value={profile?.department ?? ''} /> : <ReadOnlyField label="Account role" value={profile?.role ?? expectedRole} />}
           </div>
+          {expectedRole === 'STUDENT' && <div className="mt-6 border-t border-[#e6edef] pt-5">{passwordControls}</div>}
         </section>
 
         {expectedRole === 'TEACHER' && <section className="rounded-xl border border-[#dce7ea] bg-white p-6"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#edf7f8] text-[#00778b]"><Icon name="book" size={16} /></span><div><h2 className="text-base font-bold">Academic assignment</h2><p className="mt-1 text-xs text-[#7c898e]">Department is the only editable professional field in this milestone.</p></div></div><form className="mt-5" onSubmit={saveDepartment}><label className="grid gap-2"><span className="text-sm font-semibold text-[#53646a]">Department</span><input className={inputClass} disabled={savingDepartment || !profile} maxLength={120} onChange={(event) => setDepartment(event.target.value)} placeholder="e.g. Department of Computer Science" value={department} /></label><div className="mt-4 flex justify-end"><button className="h-10 rounded-lg bg-[#00778b] px-5 text-sm font-semibold text-white disabled:bg-[#a8bec3]" disabled={savingDepartment || !profile || department.trim() === (profile.department ?? '')} type="submit">{savingDepartment ? 'Saving…' : 'Save department'}</button></div></form></section>}
 
-        <section className="rounded-xl border border-[#dce7ea] bg-white p-6">
-          <div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#fff4dd] text-[#95610e]"><Icon name="lock" size={16} /></span><div><h2 className="text-base font-bold">Change password</h2><p className="mt-1 text-xs text-[#7c898e]">Current password verification is required before the credential is replaced.</p></div></div>
-          {passwordFeedback && <div className="mt-5"><FeedbackMessage feedback={passwordFeedback} onClose={() => setPasswordFeedback(null)} /></div>}
-          <form className="mt-5 grid grid-cols-2 gap-4 max-md:grid-cols-1" onSubmit={changePassword}>
-            <label className="col-span-2 grid gap-2 max-md:col-span-1"><span className="text-sm font-semibold text-[#53646a]">Current password</span><input autoComplete="current-password" className={inputClass} disabled={changingPassword} onChange={(event) => setPasswords((current) => ({ ...current, currentPassword: event.target.value }))} type="password" value={passwords.currentPassword} /></label>
-            <label className="grid gap-2"><span className="text-sm font-semibold text-[#53646a]">New password</span><input autoComplete="new-password" className={inputClass} disabled={changingPassword} minLength={8} onChange={(event) => setPasswords((current) => ({ ...current, newPassword: event.target.value }))} type="password" value={passwords.newPassword} /></label>
-            <label className="grid gap-2"><span className="text-sm font-semibold text-[#53646a]">Confirm new password</span><input autoComplete="new-password" className={inputClass} disabled={changingPassword} minLength={8} onChange={(event) => setPasswords((current) => ({ ...current, confirmPassword: event.target.value }))} type="password" value={passwords.confirmPassword} /></label>
-            <div className="col-span-2 flex items-center justify-between gap-4 border-t border-[#e6edef] pt-4 max-md:col-span-1 max-sm:flex-col max-sm:items-stretch"><p className="text-xs text-[#7c898e]">Use 8–72 characters and do not reuse the current password.</p><button className="h-10 rounded-lg bg-[#26363c] px-5 text-sm font-semibold text-white disabled:bg-[#a8b2b6]" disabled={changingPassword || connectionStatus !== 'connected'} type="submit">{changingPassword ? 'Changing password…' : 'Change password'}</button></div>
-          </form>
-        </section>
+        {expectedRole === 'TEACHER' && <section className="rounded-xl border border-[#dce7ea] bg-white p-6"><div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#fff4dd] text-[#95610e]"><Icon name="lock" size={16} /></span><div><h2 className="text-base font-bold">Change password</h2><p className="mt-1 text-xs text-[#7c898e]">Current password verification is required before the credential is replaced.</p></div></div>{passwordControls}</section>}
       </div>
     </div>
   </div>;
