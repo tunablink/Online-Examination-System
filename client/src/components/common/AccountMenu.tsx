@@ -52,8 +52,8 @@ function AccountMenu({ profilePath, fallbackName, fallbackAccountLabel, compact 
 
   return <div className="relative" ref={containerRef}>
     <button aria-expanded={open} aria-haspopup="menu" className={`flex items-center rounded-lg p-1 text-left hover:bg-[#f2f6f7] ${compact ? 'gap-2' : 'gap-3'}`} onClick={() => setOpen((current) => !current)} type="button">
-      <span className="text-right max-sm:hidden"><span className={`block truncate font-semibold text-[#263238] ${compact ? 'max-w-[105px] text-[9px]' : 'max-w-[150px] text-[11px]'}`}>{displayName}</span><span className={`block truncate text-[#78868b] ${compact ? 'max-w-[105px] text-[7px]' : 'mt-0.5 max-w-[150px] text-[9px]'}`}>{accountLabel}</span></span>
-      <span className={`grid place-items-center rounded-full bg-[#00778b] font-bold text-white ${compact ? 'h-7 w-7 text-[8px]' : 'h-9 w-9 text-[10px]'}`}>{getInitials(displayName)}</span>
+      <span className="text-right max-sm:hidden"><span className={`block truncate font-semibold text-[#263238] ${compact ? 'max-w-[105px] text-[9px]' : 'max-w-[150px] text-sm'}`}>{displayName}</span><span className={`block truncate text-[#78868b] ${compact ? 'max-w-[105px] text-[7px]' : 'mt-0.5 max-w-[150px] text-xs'}`}>{accountLabel}</span></span>
+      <span className={`grid place-items-center rounded-full bg-[#00778b] font-bold text-white ${compact ? 'h-7 w-7 text-[8px]' : 'h-9 w-9 text-sm'}`}>{getInitials(displayName)}</span>
       <Icon className={`text-[#718087] transition-transform ${open ? 'rotate-180' : ''}`} name="chevron-down" size={compact ? 10 : 12} />
     </button>
 

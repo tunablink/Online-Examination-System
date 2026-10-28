@@ -49,7 +49,7 @@ function ExamTimer({
     >
       <p
         className="
-          text-[10px] font-bold uppercase
+          text-sm font-bold uppercase
           tracking-[0.14em] opacity-70
         "
       >
@@ -66,13 +66,13 @@ function ExamTimer({
       </p>
 
       {isExpired && (
-        <p className="mt-1 text-xs font-semibold">
+        <p className="mt-1 text-sm font-semibold">
           Time has expired
         </p>
       )}
 
       {isWarning && (
-        <p className="mt-1 text-xs font-semibold">
+        <p className="mt-1 text-sm font-semibold">
           Less than five minutes remaining
         </p>
       )}

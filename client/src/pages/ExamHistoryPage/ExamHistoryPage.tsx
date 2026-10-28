@@ -101,24 +101,24 @@ function ExamHistoryPage() {
       <div className="mx-auto max-w-[1360px] px-6 py-7 max-sm:px-4">
         <section className="flex items-start justify-between gap-5 max-md:flex-col">
           <div>
-            <p className="text-[9px] font-bold uppercase tracking-[.13em] text-[#00778b]">
+            <p className="text-xs font-bold uppercase tracking-[.13em] text-[#00778b]">
               Performance archive
             </p>
             <h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">
               Examination history
             </h1>
-            <p className="mt-1 text-[11px] text-[#718087]">
+            <p className="mt-1 text-sm text-[#718087]">
               Review results saved by the examination server.
             </p>
           </div>
 
           <div className="flex gap-2">
             <div className="rounded-xl border border-[#dce7ea] bg-white px-5 py-3">
-              <p className="text-[8px] font-bold uppercase text-[#849197]">Submitted</p>
+              <p className="text-xs font-bold uppercase text-[#849197]">Submitted</p>
               <p className="mt-1 text-xl font-bold text-[#00778b]">{submitted}</p>
             </div>
             <div className="rounded-xl border border-[#dce7ea] bg-white px-5 py-3">
-              <p className="text-[8px] font-bold uppercase text-[#849197]">Expired</p>
+              <p className="text-xs font-bold uppercase text-[#849197]">Expired</p>
               <p className="mt-1 text-xl font-bold text-[#a26b16]">{expired}</p>
             </div>
           </div>
@@ -130,13 +130,13 @@ function ExamHistoryPage() {
             className="flex w-fit rounded-xl bg-[#e9eff1] p-1.5"
           >
             <NavLink
-              className={({ isActive }) => `rounded-lg px-6 py-3 text-[13px] font-semibold ${isActive ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`}
+              className={({ isActive }) => `rounded-lg px-6 py-3 text-base font-semibold ${isActive ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`}
               to="/student/exams"
             >
               Examinations
             </NavLink>
             <NavLink
-              className={({ isActive }) => `rounded-lg px-6 py-3 text-[13px] font-semibold ${isActive ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`}
+              className={({ isActive }) => `rounded-lg px-6 py-3 text-base font-semibold ${isActive ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`}
               to="/student/history"
             >
               History
@@ -151,14 +151,14 @@ function ExamHistoryPage() {
                 size={13}
               />
               <input
-                className="h-9 w-full rounded-lg border border-[#dbe5e8] bg-white pl-8 pr-3 text-[10px] outline-none focus:border-[#76b5c0]"
+                className="h-9 w-full rounded-lg border border-[#dbe5e8] bg-white pl-8 pr-3 text-sm outline-none focus:border-[#76b5c0]"
                 onChange={(event) => setQuery(event.target.value)}
                 placeholder="Search by exam or attempt ID"
                 value={query}
               />
             </label>
             <button
-              className="h-9 rounded-lg border border-[#b8d7dd] bg-white px-3 text-[10px] font-semibold text-[#00778b] disabled:opacity-50"
+              className="h-9 rounded-lg border border-[#b8d7dd] bg-white px-3 text-sm font-semibold text-[#00778b] disabled:opacity-50"
               disabled={loading || connectionStatus !== 'connected'}
               onClick={loadHistory}
               type="button"
@@ -179,7 +179,7 @@ function ExamHistoryPage() {
             <div className="flex rounded-md bg-[#edf2f3] p-0.5">
               {(['ALL', 'SUBMITTED', 'EXPIRED'] as Filter[]).map((value) => (
                 <button
-                  className={`rounded px-3 py-1 font-[inherit] text-[10px] font-semibold ${filter === value ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#66767c]'}`}
+                  className={`rounded px-3 py-1 font-[inherit] text-sm font-semibold ${filter === value ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#66767c]'}`}
                   key={value}
                   onClick={() => setFilter(value)}
                   type="button"
@@ -191,7 +191,7 @@ function ExamHistoryPage() {
           </div>
 
           {loading && attempts.length === 0 ? (
-            <p className="py-14 text-center text-[11px] text-[#7b898e]">
+            <p className="py-14 text-center text-sm text-[#7b898e]">
               Loading examination history through WebSocket…
             </p>
           ) : (
@@ -202,27 +202,27 @@ function ExamHistoryPage() {
                   key={item.attemptId}
                 >
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[.07em] text-[#00778b]">
+                    <p className="text-sm font-bold uppercase tracking-[.07em] text-[#00778b]">
                       EX-{String(item.examId).padStart(4, '0')} · Attempt {item.attemptId}
                     </p>
-                    <h2 className="mt-2 text-[15px] font-bold text-[#27363b]">
+                    <h2 className="mt-2 text-base font-bold text-[#27363b]">
                       {item.examTitle}
                     </h2>
-                    <p className="mt-1 text-[10px] text-[#819096]">
+                    <p className="mt-1 text-sm text-[#819096]">
                       Started {formatDate(item.startedAt)}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-[8px] font-bold uppercase text-[#89969b]">Finalized</p>
-                    <p className="mt-1 text-[10px] font-semibold text-[#53636a]">
+                    <p className="text-xs font-bold uppercase text-[#89969b]">Finalized</p>
+                    <p className="mt-1 text-sm font-semibold text-[#53636a]">
                       {formatDate(item.submittedAt)}
                     </p>
                   </div>
 
                   <div>
-                    <p className="text-[8px] font-bold uppercase text-[#89969b]">Score</p>
-                    <p className="mt-1 text-[15px] font-bold">
+                    <p className="text-xs font-bold uppercase text-[#89969b]">Score</p>
+                    <p className="mt-1 text-base font-bold">
                       {item.score}/{item.maxScore}{' '}
                       <small className={item.status === 'SUBMITTED' ? 'text-[#00778b]' : 'text-[#a26b16]'}>
                         {item.status}
@@ -232,7 +232,7 @@ function ExamHistoryPage() {
 
                   <div className="text-right max-lg:col-span-2">
                     <Link
-                      className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#b8d7dd] px-3 text-[9px] font-semibold text-[#00778b]"
+                      className="inline-flex h-9 items-center gap-1 rounded-lg border border-[#b8d7dd] px-3 text-xs font-semibold text-[#00778b]"
                       to={`/student/attempts/${item.attemptId}/result`}
                     >
                       View result
@@ -243,7 +243,7 @@ function ExamHistoryPage() {
               ))}
 
               {!loading && items.length === 0 && (
-                <p className="py-14 text-center text-[10px] text-[#7b898e]">
+                <p className="py-14 text-center text-sm text-[#7b898e]">
                   No completed attempts match this filter.
                 </p>
               )}

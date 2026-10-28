@@ -11,7 +11,7 @@ const styles: Record<ConnectionStatus, string> = {
 };
 
 function ConnectionBadge({ status }: ConnectionBadgeProps) {
-  return <span className={`inline-flex min-h-8 items-center gap-2 rounded-full border px-3 py-1.5 text-[10px] font-semibold ${styles[status]}`}><span className={`h-1.5 w-1.5 rounded-full ${status === 'connected' ? 'bg-[#00849a]' : status === 'connecting' ? 'bg-[#c68624]' : 'bg-[#bd2f35]'}`} />{labels[status]}</span>;
+  return <span className={`inline-flex min-h-8 items-center gap-2 rounded-full border px-3 py-1.5 text-sm font-semibold ${styles[status]}`}><span className={`h-1.5 w-1.5 rounded-full ${status === 'connected' ? 'bg-[#00849a]' : status === 'connecting' ? 'bg-[#c68624]' : 'bg-[#bd2f35]'}`} />{labels[status]}</span>;
 }
 
 export default ConnectionBadge;
