@@ -16,6 +16,15 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 - Đề cũ chưa có key sẽ từ chối attempt mới hoặc việc xác thực lại attempt cũ. Đặt key cho draft cũ; đề đã publish không được sửa key, cần close và tạo draft mới nếu chưa có key. Không tự sinh default key hoặc xoá bài làm hiện có; deadline worker vẫn hoàn tất attempt quá hạn.
 - Hướng dẫn, lỗi và kiểm thử: [Exam enrollment key](docs/exam-enrollment-key.md). Browser acceptance chưa hoàn tất; rate limiting chống đoán key chưa triển khai.
 
+### Cập nhật luồng vào thi và nộp bài
+
+- Trang `/student/exams/:examId` đã bỏ khối **Exam environment check**; **Before you begin** căn giữa, giới hạn chiều rộng và hiển thị giờ mở/đóng thành hai cột trên màn hình lớn, một cột trên màn hình nhỏ. Việc bỏ khối hiển thị không tắt activity monitoring hay các kiểm tra backend.
+- Enrollment key không hiển thị sẵn trên trang. Trong khoảng được vào thi, student xác nhận quy định rồi bấm **Enter secure exam** để mở popup nhập key; **Start examination** mới gửi `START_EXAM`. Popup có Show/Hide, Cancel, Esc và báo lỗi tại chỗ; đóng popup xoá key đang nhập khỏi state của popup. Key không được lưu vào browser storage.
+- Popup không tự tạo attempt hoặc bắt đầu tính giờ khi chỉ mở lên. Server xác nhận entry mới tạo attempt; nếu là lượt đã có thì giữ nguyên deadline. Nếu mất kết nối hoặc hết giờ nhận lượt khi popup đang mở, nút bắt đầu bị khoá. **Resume existing attempt** vẫn là thao tác riêng cho lượt đã xác thực hợp lệ.
+- Phòng thi `/student/exams/:examId/room/:attemptId` chỉ còn một cặp **thời gian + Submit** ở thanh thông tin đề, thay cho cặp thời gian/**Review & submit** cũ; không lặp lại trên header thương hiệu.
+- **Submit** mở popup xác nhận, chưa gửi bài ngay. Popup hiển thị số câu đã trả lời/chưa trả lời, cảnh báo còn câu trống và hai lựa chọn **Return to examination** / **Confirm submission**. Quay lại giữ nguyên bài làm; đồng hồ vẫn chạy khi popup mở.
+- Xác nhận nộp chờ đáp án đang lưu được ACK; bị khoá khi mất kết nối, hết giờ hoặc đang gửi bài. Chặn gửi lặp bằng trạng thái/ref in-flight; lỗi hiển thị trong popup. Chỉ chuyển sang trang kết quả sau `EXAM_SUBMITTED` hợp lệ từ server. Khi hết giờ vẫn dùng deadline worker, không tự chấm ở client.
+
 ### Khoảng vào thi và thời lượng riêng của sinh viên
 
 - Teacher đặt **Entry opens at** (`scheduledAt`), **Entry closes at** (`entryClosesAt`) và **Duration** riêng biệt khi tạo đề. Giờ đóng phải sau giờ mở. Edit của draft cho phép cập nhật khoảng này.
@@ -46,7 +55,7 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 | Enrollment key | Key theo từng đề, BCrypt hash; kiểm tra course/giờ mở; chỉ attempt đã xác thực key mới resume không cần nhập lại |
 | Entry window | Giờ mở/đóng nhận lượt mới do teacher đặt; sinh viên bắt đầu hợp lệ vẫn có đủ duration riêng, kể cả sau giờ đóng nhận lượt |
 | Answers | `SAVE_ANSWER`; UI chỉ báo lưu thành công sau ACK |
-| Submission/grading | Server chấm dữ liệu đã lưu trong transaction; row lock, submit idempotent |
+| Submission/grading | Popup xác nhận/tiếp tục thi, chờ save ACK, chống gửi lặp; server chấm dữ liệu đã lưu trong transaction, row lock và submit idempotent |
 | Deadline | Worker server hoàn tất attempt quá hạn kể cả khi student offline |
 | Results | Student xem lịch sử/kết quả của mình; teacher review bài nộp của đề mình sở hữu |
 | Monitoring | Snapshot push sau commit start/report/finalize; dashboard/activity reports dùng dữ liệu thật |
@@ -331,7 +340,7 @@ git diff --check
 | Attempt integration | 9 tests; deadline, idempotence, concurrent submit/finalizer có điều khiển |
 | Monitoring | Owner-only push, identity/subscription, after-commit và rollback không push |
 | Session | Expiry/revocation/disabled/password change; login/disconnect/resume/logout qua Spring router |
-| Client | Lint và production build pass sau bổ sung Entry opens/closes ở teacher và student; còn cảnh báo bundle lớn hơn 500 kB, không phải lỗi build |
+| Client | Lint và production build pass sau căn giữa pre-exam, chuyển key vào popup và gộp timer/Submit kèm popup xác nhận nộp; còn cảnh báo bundle lớn hơn 500 kB, không phải lỗi build |
 | Whitespace | Diff check không lỗi trong đợt kiểm tra; LF/CRLF warning không phải compile error |
 
 Mock socket routing không tương đương browser/load test qua socket thật. Chỉnh font/logo đã build, chưa visual QA mọi viewport. Không dùng số modules build làm tiêu chí hoàn thành.
@@ -341,6 +350,10 @@ Mock socket routing không tương đương browser/load test qua socket thật.
 | Kịch bản | Mong đợi | Trạng thái |
 |---|---|---|
 | Teacher tạo/publish → student thi → teacher review | Dữ liệu/điểm xuyên suốt đúng | Chưa có biên bản E2E đầy đủ |
+| Popup vào thi | Chỉ mở trong khoảng cho phép sau xác nhận quy định; key đúng mới vào, sai báo tại chỗ | Lint/build pass; browser checklist chưa hoàn tất |
+| Key sai sau khi đã có attempt hợp lệ | Không âm thầm resume; trả INVALID_ENROLLMENT_KEY, không reset deadline | Có service/WebSocket regression tests; cần browser nghiệm thu |
+| Popup nộp → Return to examination | Không gửi SUBMIT_EXAM, giữ đáp án và deadline; đồng hồ vẫn chạy | Source đã triển khai; cần browser nghiệm thu |
+| Popup nộp → Confirm submission | Chờ save ACK, không gửi lặp, lỗi tại chỗ; ACK nộp hợp lệ mới chuyển kết quả | Lint/build pass; cần browser nghiệm thu, gồm mất mạng/hết giờ khi popup mở |
 | Refresh sau save | Cùng attempt/deadline/order/answer | Có tests thành phần; browser chưa hoàn tất |
 | Mất mạng/reconnect | Resume trước commands; không báo save giả | Cần browser verification |
 | Offline quá deadline | Server finalize, recover thấy result | Có integration tests; cần browser nghiệm thu |
@@ -363,6 +376,18 @@ Benchmark cần WebSocket clients tự động login/start/save/submit với bar
 - Typography: chú thích 12px, label/menu 14px, nội dung/input 16px ở thiết lập mặc định, dùng rem cho thang chuẩn hoá.
 - Student header giữ logo/tên thương hiệu/navigation/account, bỏ title/subtitle dư.
 - `stitch_university_online_examination_system/` chỉ là UI reference.
+
+### File phụ trách luồng thi của student
+
+| File | Trách nhiệm |
+|---|---|
+| [ExamDetailPage.tsx](client/src/pages/ExamDetailPage/ExamDetailPage.tsx) | Trang trước khi thi dùng chung mọi exam ID: thông tin đề, Before you begin, điều kiện mở popup và Resume |
+| [ExamEntryDialog.tsx](client/src/components/exam/ExamEntryDialog.tsx) | Popup nhập enrollment key; native dialog, focus modal, Cancel/Esc và phản hồi lỗi |
+| [ExamRoomPage.tsx](client/src/pages/ExamRoomPage/ExamRoomPage.tsx) | Phòng thi dùng chung exam/attempt ID; timer theo deadline, save/submit, monitoring và điều hướng kết quả |
+| [SubmitExamDialog.tsx](client/src/pages/ExamRoomPage/components/SubmitExamDialog.tsx) | Popup xác nhận nộp; số câu đã/chưa trả lời, quay lại, pending/error và khoá xác nhận khi chưa thể nộp |
+| [QuestionPanel.tsx](client/src/pages/ExamRoomPage/components/QuestionPanel.tsx) | Hiển thị câu hỏi, choices, lựa chọn đáp án và flag; không hiện nhãn Single Choice hoặc icon check bổ sung cho lựa chọn |
+
+Hai popup dùng native `<dialog>` và khoá cuộn nền khi mở; không đóng bằng Cancel/Esc trong lúc request tương ứng đang pending. Đã kiểm tra lint/build, chưa coi đây là bằng chứng visual/accessibility QA trên mọi browser/viewport. Các thay đổi UI không thay thế quyền truy cập, kiểm tra key, deadline hay grading ở Java server.
 
 ```text
 client/src/
