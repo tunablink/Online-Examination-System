@@ -92,12 +92,7 @@ function LoginPage() {
     if (!form.username.trim() || !form.password)
       return setFeedback({
         type: "error",
-        message: "Enter both User ID and password.",
-      });
-    if (!/^[a-zA-Z0-9._-]{3,50}$/.test(form.username.trim()))
-      return setFeedback({
-        type: "error",
-        message: "User ID must be 3 to 50 characters and use only letters, numbers, dots, underscores, or hyphens.",
+        message: "Enter both username and password.",
       });
     if (connectionStatus !== "connected")
       return setFeedback({
@@ -156,7 +151,7 @@ function LoginPage() {
             <form className="mt-6 grid gap-5" onSubmit={submit}>
               <label className="grid gap-2">
                 <span className="text-sm font-semibold text-[#405057]">
-                  User ID
+                  Username or student ID
                 </span>
                 <div className="relative">
                   <Icon
@@ -168,10 +163,9 @@ function LoginPage() {
                     autoComplete="username"
                     autoFocus
                     className={`${inputClass} pl-10`}
-                    maxLength={50}
                     name="username"
                     onChange={change}
-                    placeholder="Enter your User ID"
+                    placeholder="Enter your username"
                     value={form.username}
                   />
                 </div>
