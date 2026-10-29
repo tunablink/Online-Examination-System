@@ -4,6 +4,7 @@ import { Link, useParams } from 'react-router';
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
 import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
+import StudentPortalNavigation from '../../components/layout/StudentPortalNavigation';
 import {
   isStudentAttemptResult,
   type StudentAttemptResult,
@@ -95,7 +96,8 @@ function ExamResultPage() {
   if (loading) {
     return (
       <main className="min-h-screen bg-[#f5f9fb]">
-        <StudentPortalHeader currentSection="Exam result" />
+        <StudentPortalHeader currentSection="Exam result" showNavigation={false} />
+        <div className="mx-auto w-full max-w-[1360px] px-7 pt-7 max-sm:px-4"><StudentPortalNavigation /></div>
         <div className="mx-auto max-w-xl px-6 py-20 text-center text-base text-[#718087]">
           Loading the server-authoritative result…
         </div>
@@ -106,7 +108,8 @@ function ExamResultPage() {
   if (result === null) {
     return (
       <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
-        <StudentPortalHeader currentSection="Exam result" />
+        <StudentPortalHeader currentSection="Exam result" showNavigation={false} />
+        <div className="mx-auto w-full max-w-[1360px] px-7 pt-7 max-sm:px-4"><StudentPortalNavigation /></div>
         <div className="mx-auto max-w-xl px-6 py-20 text-center">
           <Icon className="mx-auto text-[#a26b16]" name="clock" size={28} />
           <h1 className="mt-4 text-xl font-bold">Result is not available</h1>
@@ -148,10 +151,11 @@ function ExamResultPage() {
 
   return (
     <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
-      <StudentPortalHeader currentSection={`EX-${String(result.examId).padStart(4, '0')} · Result`} />
+      <StudentPortalHeader currentSection={`EX-${String(result.examId).padStart(4, '0')} · Result`} showNavigation={false} />
 
-      <div className="mx-auto max-w-[1100px] px-6 py-7 max-sm:px-4">
-        <div className="flex items-center gap-2 text-xs font-semibold text-[#75848a]">
+      <div className="mx-auto w-full max-w-[1360px] px-7 py-7 max-sm:px-4">
+        <StudentPortalNavigation />
+        <div className="mt-5 flex items-center gap-2 text-xs font-semibold text-[#75848a]">
           <Link to="/student/history">History</Link>
           <Icon name="arrow-right" size={10} />
           <span>Attempt {result.attemptId}</span>
@@ -167,9 +171,6 @@ function ExamResultPage() {
                 <h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">
                   {result.examTitle}
                 </h1>
-                <p className="mt-1 text-sm text-[#718087]">
-                  Exam {result.examId} · Attempt {result.attemptId}
-                </p>
               </div>
 
               <div className={`grid h-28 w-28 shrink-0 place-items-center rounded-full border-[8px] text-center ${expired ? 'border-[#ead8b7] text-[#a26b16]' : 'border-[#bce2e7] text-[#00778b]'}`}>
@@ -200,26 +201,47 @@ function ExamResultPage() {
         </section>
 
         <div className="mt-5 grid grid-cols-[minmax(0,1fr)_320px] gap-5 max-lg:grid-cols-1">
-          <section className="rounded-xl border border-[#dce7ea] bg-white p-6">
-            <h2 className="text-base font-bold">Performance summary</h2>
-            <p className="mt-1 text-xs text-[#7c898e]">
-              This score was calculated from answers saved on the Java server.
-            </p>
-            <div className="mt-5 h-2 overflow-hidden rounded-full bg-[#e8edef]">
+          <section className="flex flex-col justify-between gap-6 rounded-xl border border-[#dce7ea] bg-white p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-base font-bold">Performance summary</h2>
+              <p className="flex items-baseline gap-2 text-[#00778b]">
+                <strong className="text-3xl tracking-tight">{percent}%</strong>
+                <span className="text-sm text-[#607178]">of total points</span>
+              </p>
+            </div>
+            <div>
               <div
-                className="h-full rounded-full bg-[#00778b]"
-                style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
-              />
+                aria-label="Percentage of total points earned"
+                aria-valuemax={100}
+                aria-valuemin={0}
+                aria-valuenow={Math.min(100, Math.max(0, percent))}
+                className="h-3 overflow-hidden rounded-full bg-[#e8edef]"
+                role="progressbar"
+              >
+                <div
+                  className="h-full rounded-full bg-[#00778b]"
+                  style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+                />
+              </div>
+              <div className="mt-2 flex justify-between text-xs text-[#718087]">
+                <span>0%</span>
+                <span>100%</span>
+              </div>
             </div>
-            <div className="mt-4 flex justify-between text-xs font-semibold text-[#607178]">
-              <span>0%</span>
-              <span>{result.correctAnswers} correct answers</span>
-              <span>100%</span>
-            </div>
-            <p className="mt-6 rounded-lg bg-[#eff9fa] p-4 text-sm leading-5 text-[#315e67]">
-              The current version reports the server-calculated score and final attempt status.
-              A pass/fail policy is not inferred because no passing threshold has been configured for this exam.
-            </p>
+            <dl className="grid grid-cols-2 gap-4 border-t border-[#e6edef] pt-5 max-sm:grid-cols-1">
+              <div>
+                <dt className="text-sm text-[#607178]">Correct answers</dt>
+                <dd className="mt-2 text-2xl font-bold text-[#00778b]">
+                  {result.correctAnswers}<span className="ml-1 text-sm font-normal text-[#718087]">/ {result.totalQuestions}</span>
+                </dd>
+              </div>
+              <div>
+                <dt className="text-sm text-[#607178]">Incorrect / unanswered</dt>
+                <dd className="mt-2 text-2xl font-bold text-[#405057]">
+                  {Math.max(0, result.totalQuestions - result.correctAnswers)}
+                </dd>
+              </div>
+            </dl>
           </section>
 
           <aside className="rounded-xl border border-[#dce7ea] bg-white p-5">

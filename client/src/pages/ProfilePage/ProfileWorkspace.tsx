@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useNavigate } from 'react-router';
 
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
@@ -30,6 +31,15 @@ function ReadOnlyField({ label, value }: { label: string; value: string }) {
 }
 
 function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
+  const navigate = useNavigate();
+  const goBack = () => {
+    const historyIndex = window.history.state?.idx;
+    if (typeof historyIndex === 'number' && historyIndex > 0) {
+      navigate(-1);
+      return;
+    }
+    navigate(expectedRole === 'TEACHER' ? '/teacher' : '/student/exams', { replace: true });
+  };
   const { status: connectionStatus, sendMessage } = useWebSocket();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [department, setDepartment] = useState('');
@@ -148,8 +158,12 @@ function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
   </>;
 
   return <div className="text-[#172126]">
+    <button className="mb-5 inline-flex min-h-10 items-center gap-2 rounded-lg border border-[#b8dbe1] bg-white px-4 py-2 text-sm font-semibold text-[#00778b] hover:bg-[#eef6f7]" onClick={goBack} type="button">
+      <Icon name="arrow-left" size={16} />
+      Back
+    </button>
     <section className="flex items-start justify-between gap-5 max-md:flex-col">
-      <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#00778b]">Account settings</p><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">My profile</h1>{expectedRole === 'TEACHER' && <p className="mt-1 text-sm text-[#718087]">Review institution-managed information and maintain your account security.</p>}</div>
+      <div><p className="text-xs font-bold uppercase tracking-[.13em] text-[#00778b]">Account settings</p><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">My profile</h1></div>
       {expectedRole === 'TEACHER' && <button className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#b8dbe1] bg-white px-3 text-xs font-semibold text-[#00778b] disabled:opacity-50" disabled={loading || connectionStatus !== 'connected'} onClick={loadProfile} type="button"><Icon className={loading ? 'animate-spin' : ''} name="refresh" size={13} />Refresh profile</button>}
     </section>
 

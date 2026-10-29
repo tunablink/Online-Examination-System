@@ -49,6 +49,8 @@ public interface ExamRepository {
 
     boolean updateDraftAssessmentType(long examId, long teacherId, String assessmentType);
 
+    boolean updateDraftEntryClosesAt(long examId, long teacherId, OffsetDateTime entryClosesAt);
+
     ExamPublishReadiness getPublishReadiness(long examId);
 
     Optional<Exam> publishDraft(long examId, long teacherId);

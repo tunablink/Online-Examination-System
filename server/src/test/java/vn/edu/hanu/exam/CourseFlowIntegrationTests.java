@@ -20,7 +20,6 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.annotation.Propagation;
 
-import vn.edu.hanu.exam.exception.RegistrationException;
 import vn.edu.hanu.exam.exception.StudentExamCatalogException;
 import vn.edu.hanu.exam.service.RegisterUserCommand;
 import vn.edu.hanu.exam.service.course.CourseException;

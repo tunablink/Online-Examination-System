@@ -1,8 +1,14 @@
+import { useEffect, useRef } from 'react';
+
 interface SubmitExamDialogProps {
   answeredCount: number;
   totalQuestions: number;
   onCancel: () => void;
   onConfirm: () => void;
+  isPending: boolean;
+  confirmDisabled: boolean;
+  error: string | null;
+  statusMessage: string | null;
 }
 
 function SubmitExamDialog({
@@ -10,35 +16,37 @@ function SubmitExamDialog({
   totalQuestions,
   onCancel,
   onConfirm,
+  isPending,
+  confirmDisabled,
+  error,
+  statusMessage,
 }: SubmitExamDialogProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      dialog?.close();
+      document.body.style.overflow = previousOverflow;
+    };
+  }, []);
   const unansweredCount =
     totalQuestions - answeredCount;
 
   return (
-    <div
-      className="
-        fixed inset-0 z-50
-        grid place-items-center
-        bg-[#10252c]/60 p-5 backdrop-blur-sm
-      "
-      role="presentation"
-      onMouseDown={(event) => {
-        if (event.target === event.currentTarget) {
-          onCancel();
-        }
+    <dialog
+      className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-md overflow-y-auto rounded-xl border border-[#d5e4e7] bg-white p-6 text-[#172126] shadow-2xl backdrop:bg-[#10252c]/60 backdrop:backdrop-blur-sm"
+      aria-modal="true"
+      aria-labelledby="submit-exam-title"
+      aria-describedby="submit-exam-description"
+      onCancel={(event) => {
+        event.preventDefault();
+        if (!isPending) onCancel();
       }}
+      ref={dialogRef}
     >
-      <section
-        className="
-          w-full max-w-md
-          rounded-xl border border-[#d5e4e7]
-          bg-white p-6
-          shadow-[0_30px_80px_rgb(15_23_42/0.30)]
-        "
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="submit-exam-title"
-      >
         <p
           className="
             text-sm font-bold uppercase
@@ -58,7 +66,7 @@ function SubmitExamDialog({
           Submit this examination?
         </h2>
 
-        <p className="mt-3 text-base leading-6 text-[#66777d]">
+        <p className="mt-3 text-base leading-6 text-[#66777d]" id="submit-exam-description">
           Once submitted, the attempt cannot be reopened or edited.
         </p>
 
@@ -122,6 +130,9 @@ function SubmitExamDialog({
           </p>
         )}
 
+        {error && <p className="mt-4 rounded-lg border border-[#edc9cc] bg-[#fff4f4] p-3 text-sm text-[#99282e]" role="alert">{error}</p>}
+        {statusMessage && <p className="mt-4 text-sm leading-6 text-[#81591d]" role="status">{statusMessage}</p>}
+
         <div
           className="
             mt-6 grid grid-cols-2 gap-3
@@ -137,9 +148,11 @@ function SubmitExamDialog({
               transition-colors
               hover:border-[#8cbcc5]
               hover:text-[#17343b]
+              disabled:cursor-not-allowed disabled:opacity-50
             "
             type="button"
             onClick={onCancel}
+            disabled={isPending}
           >
             Return to examination
           </button>
@@ -150,15 +163,16 @@ function SubmitExamDialog({
               bg-[#00778b] px-4
               text-base font-semibold text-white
               transition-colors hover:bg-[#006273]
+              disabled:cursor-not-allowed disabled:opacity-50
             "
             type="button"
-            onClick={onConfirm}
+            disabled={isPending || confirmDisabled}
+            onClick={() => { if (!isPending && !confirmDisabled) onConfirm(); }}
           >
-            Confirm submission
+            {isPending ? 'Submitting…' : 'Confirm submission'}
           </button>
         </div>
-      </section>
-    </div>
+    </dialog>
   );
 }
 

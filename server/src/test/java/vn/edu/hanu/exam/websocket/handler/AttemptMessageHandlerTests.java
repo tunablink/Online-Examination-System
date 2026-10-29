@@ -53,15 +53,15 @@ class AttemptMessageHandlerTests {
     void authenticatedStudentCanStartExamAndRequestIdIsPreserved() throws Exception {
         authenticate(UserRole.STUDENT, 20L);
         ExamAttemptDetails details = sampleAttempt();
-        when(attemptService.startExam(12L, 20L)).thenReturn(details);
+        when(attemptService.startExam(12L, 20L, "ExamTestKey123!")).thenReturn(details);
 
         ServerMessage response = handler.handleStart(
                 SESSION_ID,
                 REQUEST_ID,
-                Map.of("examId", 12L));
+                Map.of("examId", 12L, "enrollmentKey", "ExamTestKey123!"));
 
         assertSuccess(response, "EXAM_STARTED", details);
-        verify(attemptService).startExam(12L, 20L);
+        verify(attemptService).startExam(12L, 20L, "ExamTestKey123!");
         assertFalse(jsonMapper.writeValueAsString(response).contains("\"correct\""));
     }
 

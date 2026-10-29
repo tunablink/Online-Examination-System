@@ -4,13 +4,17 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.Map;
 import java.util.UUID;
+import java.util.ArrayList;
+import java.util.List;
 
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,7 +37,7 @@ import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 import vn.edu.hanu.exam.domain.UserRole;
 import vn.edu.hanu.exam.service.LoggedInUser;
 
-@SpringBootTest
+@SpringBootTest(properties = "exam.deadline.enabled=false")
 class MonitoringIntegrationTests {
     @Autowired
     private MonitoringService monitoringService;
@@ -41,11 +45,75 @@ class MonitoringIntegrationTests {
     @Autowired
     private NamedParameterJdbcTemplate jdbcTemplate;
 
-    @Autowired private MonitoringPushHub pushHub;
-    @Autowired private AuthenticatedSessionRegistry sessions;
-    @Autowired private PlatformTransactionManager transactions;
-    @Autowired private TeacherMonitoringQuery overview;
-    @Autowired private vn.edu.hanu.exam.session.SessionResumeService resumeService;
+    @Autowired
+    private MonitoringPushHub pushHub;
+    @Autowired
+    private AuthenticatedSessionRegistry sessions;
+    @Autowired
+    private PlatformTransactionManager transactions;
+    @Autowired
+    private TeacherMonitoringQuery overview;
+    @Autowired
+    private vn.edu.hanu.exam.session.SessionResumeService resumeService;
+
+    private final List<Long> createdUserIds = new ArrayList<>();
+    private final List<Long> createdExamIds = new ArrayList<>();
+    private final List<Long> createdAttemptIds = new ArrayList<>();
+
+    @AfterEach
+    void cleanUpTestData() {
+        TransactionTemplate cleanupTransaction = new TransactionTemplate(transactions);
+
+        cleanupTransaction.executeWithoutResult(status -> {
+            if (!createdAttemptIds.isEmpty()) {
+                Map<String, Object> params = Map.of("ids", createdAttemptIds);
+
+                // Xóa các bảng con trước khi xóa attempt.
+                jdbcTemplate.update("""
+                        DELETE FROM suspicious_activities
+                        WHERE attempt_id IN (:ids)
+                        """, params);
+
+                jdbcTemplate.update("""
+                        DELETE FROM attempt_answers
+                        WHERE attempt_id IN (:ids)
+                        """, params);
+
+                jdbcTemplate.update("""
+                        DELETE FROM attempt_choices
+                        WHERE attempt_id IN (:ids)
+                        """, params);
+
+                jdbcTemplate.update("""
+                        DELETE FROM attempt_questions
+                        WHERE attempt_id IN (:ids)
+                        """, params);
+
+                jdbcTemplate.update("""
+                        DELETE FROM exam_attempts
+                        WHERE id IN (:ids)
+                        """, params);
+            }
+
+            if (!createdExamIds.isEmpty()) {
+                jdbcTemplate.update("""
+                        DELETE FROM exams
+                        WHERE id IN (:ids)
+                        """, Map.of("ids", createdExamIds));
+            }
+
+            if (!createdUserIds.isEmpty()) {
+                jdbcTemplate.update("""
+                        DELETE FROM users
+                        WHERE id IN (:ids)
+                        """, Map.of("ids", createdUserIds));
+            }
+        });
+
+        createdAttemptIds.clear();
+        createdExamIds.clear();
+        createdUserIds.clear();
+    }
 
     @Test
     void pushOccursAfterCommitOnlyAndOverviewFiltersTeacherOwnership() throws Exception {
@@ -54,16 +122,21 @@ class MonitoringIntegrationTests {
         String sessionId = UUID.randomUUID().toString();
         when(owner.getId()).thenReturn(sessionId);
         when(owner.isOpen()).thenReturn(true);
-        sessions.authenticate(sessionId, new LoggedInUser(fixture.teacherId(), "owner", "Owner", "o@example.com", UserRole.TEACHER));
-        resumeService.issue(sessionId, new LoggedInUser(fixture.teacherId(), "owner", "Owner", "o@example.com", UserRole.TEACHER));
+        sessions.authenticate(sessionId,
+                new LoggedInUser(fixture.teacherId(), "owner", "Owner", "o@example.com", UserRole.TEACHER));
+        resumeService.issue(sessionId,
+                new LoggedInUser(fixture.teacherId(), "owner", "Owner", "o@example.com", UserRole.TEACHER));
         pushHub.watch(owner, fixture.examId(), Map.of("live", true));
         try {
             var transaction = new TransactionTemplate(transactions);
             transaction.executeWithoutResult(status -> {
                 monitoringService.reportActivity(fixture.studentId(),
                         new ReportActivityCommand(fixture.attemptId(), ActivityType.TAB_HIDDEN));
-                try { verify(owner, never()).sendMessage(any()); }
-                catch (java.io.IOException exception) { throw new IllegalStateException(exception); }
+                try {
+                    verify(owner, never()).sendMessage(any());
+                } catch (java.io.IOException exception) {
+                    throw new IllegalStateException(exception);
+                }
             });
             ArgumentCaptor<TextMessage> message = ArgumentCaptor.forClass(TextMessage.class);
             verify(owner).sendMessage(message.capture());
@@ -85,10 +158,6 @@ class MonitoringIntegrationTests {
             pushHub.remove(sessionId);
             sessions.remove(sessionId);
             resumeService.revoke(sessionId);
-            jdbcTemplate.update("DELETE FROM suspicious_activities WHERE attempt_id=:id", Map.of("id", fixture.attemptId()));
-            jdbcTemplate.update("DELETE FROM exam_attempts WHERE id=:id", Map.of("id", fixture.attemptId()));
-            jdbcTemplate.update("DELETE FROM exams WHERE id=:id", Map.of("id", fixture.examId()));
-            jdbcTemplate.update("DELETE FROM users WHERE id IN (:ids)", Map.of("ids", java.util.List.of(fixture.teacherId(), fixture.studentId())));
         }
     }
 
@@ -144,42 +213,109 @@ class MonitoringIntegrationTests {
     private Fixture createFixture() {
         long teacherId = insertUser("TEACHER");
         long studentId = insertUser("STUDENT");
+
         Long examId = jdbcTemplate.queryForObject("""
-                INSERT INTO exams (title, duration_minutes, status, created_by)
-                VALUES (:title, 60, 'PUBLISHED', :teacherId)
-                RETURNING id
-                """, Map.of("title", "Monitoring " + UUID.randomUUID(), "teacherId", teacherId), Long.class);
-        OffsetDateTime startedAt = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1);
-        Long attemptId = jdbcTemplate.queryForObject("""
-                INSERT INTO exam_attempts (
-                    exam_id, student_id, status, started_at, deadline_at
-                ) VALUES (
-                    :examId, :studentId, 'IN_PROGRESS', :startedAt, :deadline
+                INSERT INTO exams (
+                    title,
+                    duration_minutes,
+                    status,
+                    created_by
+                )
+                VALUES (
+                    :title,
+                    60,
+                    'PUBLISHED',
+                    :teacherId
                 )
                 RETURNING id
-                """, Map.of(
+                """,
+                Map.of(
+                        "title", "Monitoring " + UUID.randomUUID(),
+                        "teacherId", teacherId),
+                Long.class);
+
+        if (examId == null) {
+            throw new IllegalStateException(
+                    "Monitoring exam ID was not returned.");
+        }
+
+        createdExamIds.add(examId);
+
+        OffsetDateTime startedAt = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1);
+
+        Long attemptId = jdbcTemplate.queryForObject("""
+                INSERT INTO exam_attempts (
+                    exam_id,
+                    student_id,
+                    status,
+                    started_at,
+                    deadline_at
+                )
+                VALUES (
+                    :examId,
+                    :studentId,
+                    'IN_PROGRESS',
+                    :startedAt,
+                    :deadline
+                )
+                RETURNING id
+                """,
+                Map.of(
                         "examId", examId,
                         "studentId", studentId,
                         "startedAt", startedAt,
-                        "deadline", startedAt.plusMinutes(60)), Long.class);
-        if (examId == null || attemptId == null) {
-            throw new IllegalStateException("Monitoring fixture IDs were not returned.");
+                        "deadline", startedAt.plusMinutes(60)),
+                Long.class);
+
+        if (attemptId == null) {
+            throw new IllegalStateException(
+                    "Monitoring attempt ID was not returned.");
         }
-        return new Fixture(teacherId, studentId, examId, attemptId);
+
+        createdAttemptIds.add(attemptId);
+
+        return new Fixture(
+                teacherId,
+                studentId,
+                examId,
+                attemptId);
     }
 
     private long insertUser(String role) {
-        String suffix = UUID.randomUUID().toString().replace("-", "");
+        String suffix = UUID.randomUUID()
+                .toString()
+                .replace("-", "");
+
         Long id = jdbcTemplate.queryForObject("""
-                INSERT INTO users (username, password_hash, full_name, email, role)
-                VALUES (:username, 'test-hash', :fullName, :email, :role)
+                INSERT INTO users (
+                    username,
+                    password_hash,
+                    full_name,
+                    email,
+                    role
+                )
+                VALUES (
+                    :username,
+                    'test-hash',
+                    :fullName,
+                    :email,
+                    :role
+                )
                 RETURNING id
-                """, Map.of(
+                """,
+                Map.of(
                         "username", "monitor_" + suffix,
                         "fullName", "Monitoring User",
                         "email", suffix + "@example.com",
-                        "role", role), Long.class);
-        if (id == null) throw new IllegalStateException("Monitoring user ID was not returned.");
+                        "role", role),
+                Long.class);
+
+        if (id == null) {
+            throw new IllegalStateException(
+                    "Monitoring user ID was not returned.");
+        }
+
+        createdUserIds.add(id);
         return id;
     }
 

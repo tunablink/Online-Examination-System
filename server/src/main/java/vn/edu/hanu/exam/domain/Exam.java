@@ -14,8 +14,15 @@ public record Exam(
     OffsetDateTime updatedAt,
     Long courseId,
     String courseName,
-    String assessmentType
+    String assessmentType,
+    OffsetDateTime entryClosesAt
 ) {
+    public Exam(long id, String title, String description, int durationMinutes, OffsetDateTime scheduledAt,
+            ExamStatus status, long createdBy, OffsetDateTime createdAt, OffsetDateTime updatedAt,
+            Long courseId, String courseName, String assessmentType) {
+        this(id, title, description, durationMinutes, scheduledAt, status, createdBy, createdAt, updatedAt,
+                courseId, courseName, assessmentType, null);
+    }
     public Exam(long id, String title, String description, int durationMinutes, OffsetDateTime scheduledAt,
             ExamStatus status, long createdBy, OffsetDateTime createdAt, OffsetDateTime updatedAt,
             Long courseId, String courseName) {

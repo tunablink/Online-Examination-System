@@ -36,6 +36,8 @@ import vn.edu.hanu.exam.service.attempt.StudentAttemptResult;
 @SpringBootTest(properties = "exam.deadline.enabled=false")
 @Transactional
 class AttemptServiceIntegrationTests {
+    private static final String TEST_KEY = "AttemptTestKey123!";
+    @Autowired private org.springframework.security.crypto.password.PasswordEncoder passwords;
     @Autowired
     private ExamAttemptService attemptService;
 
@@ -56,7 +58,7 @@ class AttemptServiceIntegrationTests {
         insertQuestionWithChoices(examId, "Question one", 3, 0);
         insertQuestionWithChoices(examId, "Question two", 5, 1);
 
-        ExamAttemptDetails details = attemptService.startExam(examId, studentId);
+        ExamAttemptDetails details = attemptService.startExam(examId, studentId, TEST_KEY);
 
         assertEquals(examId, details.examId());
         assertEquals("Attempt integration exam", details.examTitle());
@@ -78,8 +80,8 @@ class AttemptServiceIntegrationTests {
         long draftId = insertExam(teacherId, "DRAFT", 30);
         long closedId = insertExam(teacherId, "CLOSED", 30);
 
-        assertAttemptError("EXAM_NOT_AVAILABLE", () -> attemptService.startExam(draftId, studentId));
-        assertAttemptError("EXAM_NOT_AVAILABLE", () -> attemptService.startExam(closedId, studentId));
+        assertAttemptError("EXAM_NOT_AVAILABLE", () -> attemptService.startExam(draftId, studentId, TEST_KEY));
+        assertAttemptError("EXAM_NOT_AVAILABLE", () -> attemptService.startExam(closedId, studentId, TEST_KEY));
     }
 
     @Test
@@ -89,7 +91,7 @@ class AttemptServiceIntegrationTests {
         long examId = insertExam(teacherId, "PUBLISHED", 45);
         insertQuestionWithChoices(examId, "Only question", 2, 0);
 
-        ExamAttemptDetails first = attemptService.startExam(examId, studentId);
+        ExamAttemptDetails first = attemptService.startExam(examId, studentId, TEST_KEY);
         ExamAttemptDetails second = attemptService.startExam(examId, studentId);
 
         assertEquals(first, second);
@@ -103,7 +105,7 @@ class AttemptServiceIntegrationTests {
         long otherStudentId = insertUser("STUDENT");
         long examId = insertExam(teacherId, "PUBLISHED", 60);
         insertQuestionWithChoices(examId, "Ownership question", 4, 0);
-        ExamAttemptDetails attempt = attemptService.startExam(examId, ownerId);
+        ExamAttemptDetails attempt = attemptService.startExam(examId, ownerId, TEST_KEY);
 
         assertAttemptError(
                 "ATTEMPT_NOT_FOUND",
@@ -119,7 +121,7 @@ class AttemptServiceIntegrationTests {
         insertQuestionWithChoices(examId, "Recovery question two", 1, 1);
         insertQuestionWithChoices(examId, "Recovery question three", 1, 2);
 
-        ExamAttemptDetails started = attemptService.startExam(examId, studentId);
+        ExamAttemptDetails started = attemptService.startExam(examId, studentId, TEST_KEY);
         ExamAttemptDetails recovered = attemptService.getAttempt(started.attemptId(), studentId);
 
         assertEquals(questionOrder(started), questionOrder(recovered));
@@ -138,7 +140,7 @@ class AttemptServiceIntegrationTests {
                 4,
                 0);
 
-        ExamAttemptDetails started = attemptService.startExam(examId, studentId);
+        ExamAttemptDetails started = attemptService.startExam(examId, studentId, TEST_KEY);
         long questionId = started.questions().getFirst().id();
         long correctChoiceId = choiceIds.getFirst();
 
@@ -189,7 +191,7 @@ class AttemptServiceIntegrationTests {
         long studentId = insertUser("STUDENT");
         long examId = insertExam(teacherId, "PUBLISHED", 60);
         List<Long> choices = insertQuestionWithChoices(examId, "Deadline question", 4, 0);
-        ExamAttemptDetails started = attemptService.startExam(examId, studentId);
+        ExamAttemptDetails started = attemptService.startExam(examId, studentId, TEST_KEY);
         attemptService.saveAnswer(started.attemptId(), started.questions().getFirst().id(),
                 choices.getFirst(), studentId);
 
@@ -222,7 +224,7 @@ class AttemptServiceIntegrationTests {
         long studentId = insertUser("STUDENT");
         long examId = insertExam(teacherId, "PUBLISHED", 60);
         insertQuestionWithChoices(examId, "Future question", 2, 0);
-        ExamAttemptDetails started = attemptService.startExam(examId, studentId);
+        ExamAttemptDetails started = attemptService.startExam(examId, studentId, TEST_KEY);
         assertFalse(attemptService.expireAttempt(started.attemptId(), studentId));
         assertFalse(attemptService.expireAttempt(started.attemptId(), insertUser("STUDENT")));
         assertEquals("IN_PROGRESS", attemptService.getAttempt(started.attemptId(), studentId).status().name());
@@ -240,7 +242,7 @@ class AttemptServiceIntegrationTests {
         var executor = Executors.newFixedThreadPool(2);
         try {
             List<Long> choices = insertQuestionWithChoices(examId, "Concurrent deadline", 3, 0);
-            ExamAttemptDetails attempt = attemptService.startExam(examId, studentId);
+            ExamAttemptDetails attempt = attemptService.startExam(examId, studentId, TEST_KEY);
             attemptService.saveAnswer(attempt.attemptId(), attempt.questions().getFirst().id(),
                     choices.getFirst(), studentId);
             jdbcTemplate.update("""
@@ -315,7 +317,10 @@ class AttemptServiceIntegrationTests {
                 "duration", durationMinutes,
                 "status", status,
                 "createdBy", teacherId), Long.class);
-        return requireId(id);
+        long examId = requireId(id);
+        jdbcTemplate.update("UPDATE exams SET enrollment_key_hash=:hash WHERE id=:id",
+                Map.of("id", examId, "hash", passwords.encode(TEST_KEY)));
+        return examId;
     }
 
     private List<Long> insertQuestionWithChoices(

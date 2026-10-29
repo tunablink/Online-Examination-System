@@ -17,7 +17,15 @@ public record ExamDetails(
         OffsetDateTime updatedAt,
         Long courseId,
         String courseName,
-        String assessmentType) {
+        String assessmentType,
+        OffsetDateTime entryClosesAt) {
+
+    public ExamDetails(long id, String title, String description, int durationMinutes, OffsetDateTime scheduledAt,
+            ExamStatus status, long createdBy, OffsetDateTime createdAt, OffsetDateTime updatedAt,
+            Long courseId, String courseName, String assessmentType) {
+        this(id, title, description, durationMinutes, scheduledAt, status, createdBy, createdAt, updatedAt,
+                courseId, courseName, assessmentType, null);
+    }
 
     public ExamDetails(long id, String title, String description, int durationMinutes, OffsetDateTime scheduledAt,
             ExamStatus status, long createdBy, OffsetDateTime createdAt, OffsetDateTime updatedAt,
@@ -47,6 +55,6 @@ public record ExamDetails(
         return new ExamDetails(
                 exam.id(), exam.title(), exam.description(), exam.durationMinutes(), exam.scheduledAt(),
                 exam.status(), exam.createdBy(), exam.createdAt(), exam.updatedAt(), exam.courseId(),
-                exam.courseName(), exam.assessmentType());
+                exam.courseName(), exam.assessmentType(), exam.entryClosesAt());
     }
 }

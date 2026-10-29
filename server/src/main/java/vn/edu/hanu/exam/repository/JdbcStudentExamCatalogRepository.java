@@ -23,6 +23,7 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                    e.description,
                    e.duration_minutes,
                    e.scheduled_at,
+                   e.entry_closes_at,
                    e.assessment_type,
                    (SELECT name FROM courses WHERE courses.id = e.course_id) AS course_name,
                    COUNT(q.id) AS question_count,
@@ -36,6 +37,7 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                      e.description,
                      e.duration_minutes,
                      e.scheduled_at,
+                     e.entry_closes_at,
                      e.assessment_type,
                      e.created_at
             """;
@@ -115,6 +117,7 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
                 resultSet.getLong("total_points"),
                 resultSet.getObject("scheduled_at", OffsetDateTime.class),
                 resultSet.getString("course_name"),
-                resultSet.getString("assessment_type"));
+                resultSet.getString("assessment_type"),
+                resultSet.getObject("entry_closes_at", OffsetDateTime.class));
     }
 }

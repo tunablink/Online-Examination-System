@@ -29,6 +29,7 @@ import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 import vn.edu.hanu.exam.exception.AttemptException;
 import vn.edu.hanu.exam.repository.AttemptRepository;
 import vn.edu.hanu.exam.repository.CourseRepository;
+import vn.edu.hanu.exam.service.exam.ExamEnrollmentKeyService;
 
 @Service
 public class ExamAttemptService {
@@ -44,6 +45,12 @@ public class ExamAttemptService {
     private final AttemptRepository attemptRepository;
     private final CourseRepository courseRepository;
     private ApplicationEventPublisher events;
+    private ExamEnrollmentKeyService enrollmentKeys;
+
+    @Autowired
+    void setEnrollmentKeys(ExamEnrollmentKeyService enrollmentKeys) {
+        this.enrollmentKeys = enrollmentKeys;
+    }
 
     @Autowired
     void setEventPublisher(ApplicationEventPublisher events) { this.events = events; }
@@ -65,6 +72,11 @@ public class ExamAttemptService {
 
     @Transactional
     public ExamAttemptDetails startExam(long examId, long studentId) {
+        return startExam(examId, studentId, null);
+    }
+
+    @Transactional
+    public ExamAttemptDetails startExam(long examId, long studentId, String enrollmentKey) {
         if (examId <= 0) {
             throw examNotAvailable();
         }
@@ -78,26 +90,45 @@ public class ExamAttemptService {
             if (exam.courseId() != null && (courseRepository == null || !courseRepository.isEnrolled(exam.courseId(), studentId))) {
                 throw examNotAvailable();
             }
+            requireExamOpen(exam);
 
             ExamAttempt existingAttempt = attemptRepository
                     .findInProgressByExamAndStudent(examId, studentId)
                     .orElse(null);
             if (existingAttempt != null) {
+                if (!attemptRepository.isEnrollmentVerified(existingAttempt.id(), studentId)) {
+                    requireAdmissionOpen(exam, OffsetDateTime.now(ZoneOffset.UTC));
+                    verifyEnrollment(examId, enrollmentKey);
+                    requireAdmissionOpen(exam, OffsetDateTime.now(ZoneOffset.UTC));
+                    if (!attemptRepository.markEnrollmentVerified(existingAttempt.id(), studentId)) {
+                        throw new AttemptException(ATTEMPT_NOT_ACTIVE, "The attempt is no longer active.");
+                    }
+                } else if (enrollmentKey != null && !enrollmentKey.isEmpty()) {
+                    // Only an explicitly keyless resume skips validation. A key
+                    // supplied by the entry popup must never be silently ignored.
+                    verifyEnrollment(examId, enrollmentKey);
+                }
                 return buildDetails(existingAttempt, exam);
             }
 
+            requireAdmissionOpen(exam, OffsetDateTime.now(ZoneOffset.UTC));
             List<Question> questions = new ArrayList<>(attemptRepository.findQuestionsByExamId(examId));
             List<Choice> choices = attemptRepository.findChoicesByExamId(examId);
             validateExamContent(questions, choices);
+            verifyEnrollment(examId, enrollmentKey);
             Collections.shuffle(questions);
 
             OffsetDateTime startedAt = OffsetDateTime.now(ZoneOffset.UTC);
+            requireAdmissionOpen(exam, startedAt);
             OffsetDateTime deadline = startedAt.plusMinutes(exam.durationMinutes());
             ExamAttempt attempt = attemptRepository.insertAttempt(
                     examId,
                     studentId,
                     startedAt,
                     deadline);
+            if (!attemptRepository.markEnrollmentVerified(attempt.id(), studentId)) {
+                throw new IllegalStateException("The attempt's enrollment verification could not be saved.");
+            }
 
             attemptRepository.insertAttemptQuestions(
                     attempt.id(),
@@ -131,6 +162,8 @@ public class ExamAttemptService {
                     .orElseThrow(ExamAttemptService::attemptNotFound);
             Exam exam = attemptRepository.findExamById(attempt.examId())
                     .orElseThrow(() -> new IllegalStateException("Attempt references a missing exam."));
+            requireExamOpen(exam);
+            if (attempt.status() == AttemptStatus.IN_PROGRESS) requireVerifiedAccess(exam, attempt, studentId);
             return buildDetails(attempt, exam);
         } catch (DataAccessException | IllegalStateException exception) {
             throw databaseError(exception);
@@ -163,6 +196,9 @@ public class ExamAttemptService {
                         ATTEMPT_EXPIRED,
                         "The examination deadline has passed.");
             }
+            Exam exam = attemptRepository.findExamById(attempt.examId())
+                    .orElseThrow(() -> new IllegalStateException("Attempt references a missing exam."));
+            requireVerifiedAccess(exam, attempt, studentId);
             if (!attemptRepository.containsAttemptChoice(attemptId, questionId, choiceId)) {
                 throw invalidAnswer();
             }
@@ -180,6 +216,10 @@ public class ExamAttemptService {
 
     @Transactional
     public ExamSubmissionResult submitExam(long attemptId, long studentId) {
+        return completeAttempt(attemptId, studentId, false);
+    }
+
+    private ExamSubmissionResult completeAttempt(long attemptId, long studentId, boolean deadlineWorker) {
         if (attemptId <= 0) {
             throw attemptNotFound();
         }
@@ -196,6 +236,11 @@ public class ExamAttemptService {
                                 "A terminal attempt does not contain a stored result."));
             }
 
+            if (!deadlineWorker) {
+                Exam exam = attemptRepository.findExamById(attempt.examId())
+                        .orElseThrow(() -> new IllegalStateException("Attempt references a missing exam."));
+                requireVerifiedAccess(exam, attempt, studentId);
+            }
             OffsetDateTime submittedAt = OffsetDateTime.now(ZoneOffset.UTC);
             AttemptStatus finalStatus = submittedAt.isBefore(attempt.deadline())
                     ? AttemptStatus.SUBMITTED
@@ -232,8 +277,37 @@ public class ExamAttemptService {
 
         // The transaction above owns the row lock. Reuse the same grading and
         // conditional update path as manual submit while retaining that lock.
-        submitExam(attemptId, studentId);
+        completeAttempt(attemptId, studentId, true);
         return true;
+    }
+
+    private void verifyEnrollment(long examId, String key) {
+        if (enrollmentKeys == null) throw new IllegalStateException("Enrollment key validation is unavailable.");
+        enrollmentKeys.requireValid(examId, key);
+    }
+
+    private static void requireExamOpen(Exam exam) {
+        if (exam.scheduledAt() != null && OffsetDateTime.now(ZoneOffset.UTC).isBefore(exam.scheduledAt())) {
+            throw new AttemptException("EXAM_NOT_OPEN", "This examination has not opened yet.");
+        }
+    }
+
+    private static void requireAdmissionOpen(Exam exam, OffsetDateTime now) {
+        if (exam.entryClosesAt() != null && !now.isBefore(exam.entryClosesAt())) {
+            throw new AttemptException("EXAM_ENTRY_CLOSED",
+                    "The entry window has closed. New attempts can no longer be started.");
+        }
+    }
+
+    private void requireVerifiedAccess(Exam exam, ExamAttempt attempt, long studentId) {
+        requireExamOpen(exam);
+        if (exam.courseId() != null && (courseRepository == null || !courseRepository.isEnrolled(exam.courseId(), studentId))) {
+            throw examNotAvailable();
+        }
+        if (!attemptRepository.isEnrollmentVerified(attempt.id(), studentId)) {
+            throw new AttemptException("ENROLLMENT_KEY_REQUIRED",
+                    "Return to the exam details and enter the enrollment key before continuing this attempt.");
+        }
     }
 
     @Transactional(readOnly = true)

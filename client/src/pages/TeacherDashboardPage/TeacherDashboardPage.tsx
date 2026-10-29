@@ -72,12 +72,12 @@ function TeacherDashboardPage() {
         <div>
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-[25px] font-bold tracking-[-.04em] text-[#172126]">Teacher Dashboard</h1>
-            <span className="rounded-full border border-[#dfe7e9] bg-white px-2.5 py-1 text-xs font-semibold text-[#617077]"><span className="mr-1.5 inline-block h-1.5 w-1.5 rounded-full bg-[#c77d16]" />Academic Term 2026 / Q4</span>
           </div>
           <p className="mt-1 text-base text-[#6d7b80]">Welcome back, <strong className="text-[#425157]">{displayName}</strong> — live oversight & academic analytics</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <span className="inline-flex h-9 items-center gap-2 rounded-lg border border-[#dbe5e8] bg-white px-3 text-sm font-semibold text-[#64747a]"><Icon name="refresh" size={14} /> {connectionStatus === 'connected' ? 'Live data synced' : 'Reconnecting'}</span>
+                  <Link className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#bed8dd] bg-white px-4 text-sm font-semibold text-[#00778b] hover:bg-[#f0f8f9]" to="/teacher/monitoring"><Icon name="monitor" size={15} />Open exam monitoring</Link>
+
           <Link className="inline-flex h-9 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white hover:bg-[#006273]" to="/teacher/exams/new"><Icon name="plus" size={15} /> Create Exam</Link>
         </div>
       </section>
@@ -93,25 +93,12 @@ function TeacherDashboardPage() {
         <MetricCard icon="alert" label="Warning signals" value={flagged} note="Human review" tone="red" />
       </section>
 
-      <section className="mt-5 flex items-center justify-between gap-5 rounded-xl border border-[#dce7ea] bg-white p-5 max-lg:flex-col max-lg:items-start">
-        <div className="flex items-center gap-5">
-          <div className="grid h-20 w-20 shrink-0 place-items-center rounded-full border-[7px] border-[#cfe8ec] border-r-[#00778b] text-center">
-            <span className="text-base font-bold text-[#26363c]">LIVE<small className="block text-xs font-semibold text-[#a36b16]">SESSION</small></span>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[.08em] text-[#76858b]"><span className="h-2 w-2 rounded-full bg-[#00849a]" /> Live monitoring</div>
-            <h2 className="mt-2 text-xl font-bold tracking-[-.025em] text-[#1d292e]">Your examination activity</h2>
-            <p className="mt-1 text-sm text-[#6b7a80]">{activeStudents} active attempts across your examinations</p>
-            <div className="mt-3 flex flex-wrap gap-4 text-sm font-semibold text-[#53636a]"><span>{monitoring.data?.completedAttempts ?? '—'} finalized attempts</span><span className="text-[#bd2f35]">{flagged} warning signals</span></div>
-          </div>
-        </div>
-        <Link className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#bed8dd] bg-white px-4 text-sm font-semibold text-[#00778b] hover:bg-[#f0f8f9]" to="/teacher/monitoring"><Icon name="monitor" size={15} />Open exam monitoring</Link>
-      </section>
+      
 
       <div className="mt-5 grid grid-cols-[minmax(0,2fr)_340px] gap-5 max-xl:grid-cols-1">
         <section className="overflow-hidden rounded-xl border border-[#dce7ea] bg-white">
           <div className="flex items-center justify-between border-b border-[#e7edef] px-5 py-4">
-            <div><h2 className="text-base font-bold text-[#27343a]">Recent examinations</h2><p className="mt-1 text-sm text-[#7a888d]">Data loaded through the authenticated WebSocket session</p></div>
+            <div><h2 className="text-base font-bold text-[#27343a]">Recent examinations</h2></div>
             <Link className="text-sm font-semibold text-[#00778b]" to="/teacher/exams">View all schedules <Icon className="inline" name="arrow-right" size={12} /></Link>
           </div>
           <div className="overflow-x-auto">

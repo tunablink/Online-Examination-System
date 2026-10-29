@@ -11,7 +11,15 @@ public record AvailableExamDetails(
         long totalPoints,
         OffsetDateTime scheduledAt,
         String courseName,
-        String assessmentType) {
+        String assessmentType,
+        OffsetDateTime entryClosesAt) {
+
+    public AvailableExamDetails(long id, String title, String description, int durationMinutes,
+            long questionCount, long totalPoints, OffsetDateTime scheduledAt, String courseName,
+            String assessmentType) {
+        this(id, title, description, durationMinutes, questionCount, totalPoints, scheduledAt, courseName,
+                assessmentType, null);
+    }
 
     public AvailableExamDetails(long id, String title, String description, int durationMinutes,
             long questionCount, long totalPoints, OffsetDateTime scheduledAt, String courseName) {

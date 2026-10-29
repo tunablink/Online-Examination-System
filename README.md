@@ -2,7 +2,28 @@
 
 Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java server qua WebSocket → PostgreSQL**. Giáo viên quản lý đề/câu hỏi, cấp tài khoản sinh viên, giám sát và xem bài nộp; sinh viên làm bài, lưu đáp án, nộp bài và xem kết quả server.
 
-**Cập nhật: 28/10/2026.** Đây là hiện trạng source, thay thế các bản tiến độ cũ trong README. Có source hoặc build/test pass không đồng nghĩa đã nghiệm thu đầy đủ.
+**Cập nhật: 29/10/2026.** Đây là hiện trạng source, thay thế các bản tiến độ cũ trong README. Có source hoặc build/test pass không đồng nghĩa đã nghiệm thu đầy đủ.
+
+### Enrollment key theo từng đề thi
+
+- Teacher nhập key khi tạo đề, hoặc đặt/thay key trong Edit của draft. `CREATE_EXAM` yêu cầu key ở cả client và backend; khi sửa draft, để trống giữ key đã có.
+- Student phải thuộc course và nhập đúng key để bắt đầu attempt mới. Key phân biệt hoa/thường, tối thiểu 8 ký tự và tối đa 72 UTF-8 bytes.
+- Database chỉ lưu BCrypt hash; response exam/catalog/attempt không trả key hoặc hash. Teacher cần giữ bản riêng để cung cấp cho sinh viên; không có chức năng đọc lại key đã lưu.
+- Attempt đang làm **đã xác thực key** khôi phục được mà không nhập lại, không reset deadline. Attempt cũ chưa có dấu xác thực phải nhập key một lần qua trang chi tiết đề; attempt đã hoàn tất không miễn key cho lần thi mới.
+- Popup Enter gửi key thì server luôn kiểm tra, kể cả khi đã có attempt xác thực trước đó: nhập sai không được âm thầm chuyển thành resume. Chỉ Resume bỏ key/gửi chuỗi rỗng mới được khôi phục lượt đã xác thực mà không nhập lại.
+- Schema khởi động thêm `exams.enrollment_key_hash`; có [migration thủ công](server/src/main/resources/db/migrations/002_exam_enrollment_key.sql) nếu không dùng auto-init.
+- Server chặn trước giờ `scheduledAt` và kiểm tra dấu `exam_attempts.enrollment_verified_at` khi start/recover/save/manual submit; frontend tách Enter và Resume. URL phòng thi không bỏ qua được các kiểm tra này. [Migration dấu xác thực](server/src/main/resources/db/migrations/003_attempt_enrollment_verification.sql) giữ NULL cho dữ liệu cũ, không tự coi là đã xác thực.
+- Đề cũ chưa có key sẽ từ chối attempt mới hoặc việc xác thực lại attempt cũ. Đặt key cho draft cũ; đề đã publish không được sửa key, cần close và tạo draft mới nếu chưa có key. Không tự sinh default key hoặc xoá bài làm hiện có; deadline worker vẫn hoàn tất attempt quá hạn.
+- Hướng dẫn, lỗi và kiểm thử: [Exam enrollment key](docs/exam-enrollment-key.md). Browser acceptance chưa hoàn tất; rate limiting chống đoán key chưa triển khai.
+
+### Khoảng vào thi và thời lượng riêng của sinh viên
+
+- Teacher đặt **Entry opens at** (`scheduledAt`), **Entry closes at** (`entryClosesAt`) và **Duration** riêng biệt khi tạo đề. Giờ đóng phải sau giờ mở. Edit của draft cho phép cập nhật khoảng này.
+- Backend chỉ cho bắt đầu lượt mới khi `scheduledAt <= serverNow < entryClosesAt`, đồng thời vẫn yêu cầu course membership và enrollment key. Trước giờ mở trả `EXAM_NOT_OPEN`; tới giờ đóng trả `EXAM_ENTRY_CLOSED`.
+- Deadline mỗi sinh viên = **thời điểm server tạo attempt + durationMinutes**; không lấy giờ đóng nhận lượt để cắt thời gian làm bài. Ví dụ mở 09:00–10:00, duration 60 phút, bắt đầu 09:50 thì deadline 10:50.
+- Đóng nhận lượt mới **không tự chuyển đề sang CLOSED**. Attempt đã xác thực key được resume/lưu đáp án/nộp bài sau giờ đóng đến deadline riêng; refresh/reconnect không reset deadline. Attempt legacy chưa xác thực không được xác thực lần đầu sau giờ đóng.
+- Trang chi tiết student hiển thị khoảng vào thi và chặn Enter ngoài khoảng; Resume được tách riêng. Backend vẫn là nơi quyết định, không dựa vào đồng hồ hay nút trên browser để cấp quyền.
+- Auto-init bổ sung cột nullable `exams.entry_closes_at`. Có [migration thủ công 004](server/src/main/resources/db/migrations/004_exam_entry_window.sql). Đề legacy NULL không được tự gán giờ đóng; sửa draft hoặc tạo đề mới có khoảng rõ ràng trước khi dùng flow mới. Không thay deadline hay xoá bài làm hiện có.
 
 ## 1. Phạm vi và trạng thái
 
@@ -22,13 +43,15 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 | Questions | Tạo/xem/sửa/xoá câu hỏi và choices; ownership/status validation |
 | Student catalog | Danh sách/chi tiết đề lấy từ server/PostgreSQL |
 | Attempt | Start/recover; snapshot và thứ tự câu hỏi/choices ngẫu nhiên theo attempt |
+| Enrollment key | Key theo từng đề, BCrypt hash; kiểm tra course/giờ mở; chỉ attempt đã xác thực key mới resume không cần nhập lại |
+| Entry window | Giờ mở/đóng nhận lượt mới do teacher đặt; sinh viên bắt đầu hợp lệ vẫn có đủ duration riêng, kể cả sau giờ đóng nhận lượt |
 | Answers | `SAVE_ANSWER`; UI chỉ báo lưu thành công sau ACK |
 | Submission/grading | Server chấm dữ liệu đã lưu trong transaction; row lock, submit idempotent |
 | Deadline | Worker server hoàn tất attempt quá hạn kể cả khi student offline |
 | Results | Student xem lịch sử/kết quả của mình; teacher review bài nộp của đề mình sở hữu |
 | Monitoring | Snapshot push sau commit start/report/finalize; dashboard/activity reports dùng dữ liệu thật |
 | UI | EZAM, logo dùng chung, Tailwind, typography dễ đọc, font Outfit ở tên thương hiệu student header |
-| Checks | Full backend gần nhất **261 tests pass**; frontend lint/build pass |
+| Checks | Full backend gần nhất **302 tests pass**; frontend lint/build pass |
 | Acceptance/load | Chưa hoàn tất browser checklist, fresh-install verification hoặc benchmark multi-user |
 
 Một số search/notification/language controls có thể mới là giao diện, chưa phải nghiệp vụ hoàn chỉnh. Protocol có student list/detail, nhưng route `/teacher/students/new` hiện là **tạo sinh viên**, không phải cam kết có màn hình quản trị sinh viên đầy đủ.
@@ -298,16 +321,17 @@ git diff --check
 
 **Không chạy integration suite trên production/dữ liệu quan trọng.** Tests dùng PostgreSQL datasource; nên dùng database test riêng. Toàn suite chưa nghiệm thu trên database mới hoàn toàn. Fixture rollback/cleanup không phải lý do dùng dữ liệu thật tuỳ tiện.
 
-### Kết quả ghi nhận ngày 28/10/2026
+### Kết quả ghi nhận gần nhất ngày 29/10/2026
 
 | Kiểm tra | Bằng chứng |
 |---|---|
-| Full backend sau sửa quyền REGISTER | **261 tests, 0 failures, 0 errors, 0 skipped — BUILD SUCCESS** |
+| Full backend sau vá key sai khi đã có attempt | **302 tests, 0 failures, 0 errors, 0 skipped — BUILD SUCCESS** |
+| Enrollment key và khoảng vào thi | 19 PostgreSQL/Spring integration tests; key/course/opening guards, không lộ bí mật, lưu giờ đóng khi tạo/sửa, từ chối sau giờ đóng, vào muộn vẫn đủ phút, verified resume/save/submit sau giờ đóng, chặn legacy chưa xác thực; key sai trên attempt đã xác thực bị chặn ở service và WebSocket; contract tests CREATE_EXAM thiếu key/giờ đóng |
 | Registration authorization | 3 integration tests: anonymous/student bị chặn; teacher tạo student/hash đúng; payload role không nâng quyền |
 | Attempt integration | 9 tests; deadline, idempotence, concurrent submit/finalizer có điều khiển |
 | Monitoring | Owner-only push, identity/subscription, after-commit và rollback không push |
 | Session | Expiry/revocation/disabled/password change; login/disconnect/resume/logout qua Spring router |
-| Client | Lint pass sau chỉnh typography; production build pass sau đổi font Outfit |
+| Client | Lint và production build pass sau bổ sung Entry opens/closes ở teacher và student; còn cảnh báo bundle lớn hơn 500 kB, không phải lỗi build |
 | Whitespace | Diff check không lỗi trong đợt kiểm tra; LF/CRLF warning không phải compile error |
 
 Mock socket routing không tương đương browser/load test qua socket thật. Chỉnh font/logo đã build, chưa visual QA mọi viewport. Không dùng số modules build làm tiêu chí hoàn thành.

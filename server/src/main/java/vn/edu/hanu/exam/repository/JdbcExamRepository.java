@@ -20,7 +20,7 @@ import vn.edu.hanu.exam.domain.ExamStatus;
 @Repository
 public class JdbcExamRepository implements ExamRepository {
     private static final String SELECT_COLUMNS = """
-            SELECT id, title, description, assessment_type, duration_minutes, scheduled_at,
+            SELECT id, title, description, assessment_type, duration_minutes, scheduled_at, entry_closes_at,
                    status, created_by, created_at, updated_at, course_id,
                    (SELECT name FROM courses WHERE courses.id = exams.course_id) AS course_name
             FROM exams
@@ -155,6 +155,14 @@ public class JdbcExamRepository implements ExamRepository {
                     "Expected one updated exam, but affected " + affectedRows + " rows.");
         }
         return findByIdAndCreatedBy(examId, teacherId);
+    }
+
+    @Override
+    public boolean updateDraftEntryClosesAt(long examId, long teacherId, OffsetDateTime entryClosesAt) {
+        return jdbcTemplate.update("""
+                UPDATE exams SET entry_closes_at=:closes, updated_at=CURRENT_TIMESTAMP
+                WHERE id=:id AND created_by=:teacher AND status='DRAFT'
+                """, Map.of("id", examId, "teacher", teacherId, "closes", entryClosesAt)) == 1;
     }
 
     @Override
@@ -369,6 +377,7 @@ public class JdbcExamRepository implements ExamRepository {
                 resultSet.getObject("updated_at", OffsetDateTime.class),
                 resultSet.getObject("course_id", Long.class),
                 resultSet.getString("course_name"),
-                resultSet.getString("assessment_type"));
+                resultSet.getString("assessment_type"),
+                resultSet.getObject("entry_closes_at", OffsetDateTime.class));
     }
 }

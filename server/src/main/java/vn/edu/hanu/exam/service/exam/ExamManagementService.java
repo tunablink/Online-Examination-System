@@ -4,6 +4,7 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 import org.springframework.dao.DataAccessException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -37,6 +38,10 @@ public class ExamManagementService {
     private final ExamRepository examRepository;
     private final CourseService courseService;
     private final QuestionManagementService questionService;
+    private ExamEnrollmentKeyService enrollmentKeys;
+
+    @Autowired
+    void setEnrollmentKeys(ExamEnrollmentKeyService enrollmentKeys) { this.enrollmentKeys = enrollmentKeys; }
 
     public ExamManagementService(ExamRepository examRepository, CourseService courseService,
             QuestionManagementService questionService) {
@@ -45,10 +50,12 @@ public class ExamManagementService {
         this.questionService = questionService;
     }
 
+    @Transactional
     public ExamDetails createExam(long teacherId, CreateExamCommand command) {
         return createExamInternal(teacherId, null, command);
     }
 
+    @Transactional
     public ExamDetails createExamInCourse(long teacherId, long courseId, CreateExamCommand command) {
         courseService.requireOwned(courseId, teacherId);
         return createExamInternal(teacherId, courseId, command);
@@ -89,11 +96,21 @@ public class ExamManagementService {
                     INVALID_EXAM_SCHEDULE,
                     "Exam date and time must be in the future.");
         }
+        validateEntryWindow(command.scheduledAt(), command.entryClosesAt(), false);
         try {
             Exam created = courseId == null
                     ? examRepository.create(title, command.description(), command.durationMinutes(), command.scheduledAt(), teacherId)
                     : examRepository.createInCourse(title, command.description(), command.durationMinutes(),
                             command.scheduledAt(), teacherId, courseId, assessmentType);
+            if (command.entryClosesAt() != null) {
+                if (!examRepository.updateDraftEntryClosesAt(created.id(), teacherId, command.entryClosesAt())) {
+                    throw new IllegalStateException("The draft entry window could not be saved.");
+                }
+                created = examRepository.findByIdAndCreatedBy(created.id(), teacherId).orElseThrow();
+            }
+            if (command.enrollmentKey() != null) {
+                enrollmentKeys.configureDraft(created.id(), teacherId, command.enrollmentKey());
+            }
             return ExamDetails.from(created);
         } catch (DataAccessException | IllegalStateException exception) {
             throw databaseError(exception);
@@ -146,6 +163,11 @@ public class ExamManagementService {
                         "Only a draft exam can be updated.");
             }
 
+            validateEntryWindow(command.scheduledAt() == null ? currentExam.scheduledAt() : command.scheduledAt(),
+                    command.entryClosesAt() == null ? currentExam.entryClosesAt() : command.entryClosesAt(), false);
+            if (command.entryClosesAt() != null && !command.entryClosesAt().isAfter(OffsetDateTime.now())) {
+                throw new ExamManagementException("INVALID_ENTRY_WINDOW", "Entry closing time must be in the future.");
+            }
             var updated = command.scheduledAt() == null
                     ? examRepository.updateDraft(
                             examId,
@@ -171,9 +193,26 @@ public class ExamManagementService {
                 }
                 saved = examRepository.findByIdAndCreatedBy(examId, teacherId).orElseThrow();
             }
+            if (command.enrollmentKey() != null && !command.enrollmentKey().isEmpty()) {
+                enrollmentKeys.configureDraft(examId, teacherId, command.enrollmentKey());
+            }
+            if (command.entryClosesAt() != null) {
+                if (!examRepository.updateDraftEntryClosesAt(examId, teacherId, command.entryClosesAt())) {
+                    throw new ExamManagementException(EXAM_NOT_EDITABLE, "The exam is no longer editable.");
+                }
+                saved = examRepository.findByIdAndCreatedBy(examId, teacherId).orElseThrow();
+            }
             return ExamDetails.from(saved);
         } catch (DataAccessException | IllegalStateException exception) {
             throw databaseError(exception);
+        }
+    }
+
+    public static void validateEntryWindow(OffsetDateTime opensAt, OffsetDateTime closesAt, boolean required) {
+        if ((required && closesAt == null)
+                || (closesAt != null && opensAt != null && !closesAt.isAfter(opensAt))) {
+            throw new ExamManagementException("INVALID_ENTRY_WINDOW",
+                    "Entry closing time is required and must be later than the opening time.");
         }
     }
 

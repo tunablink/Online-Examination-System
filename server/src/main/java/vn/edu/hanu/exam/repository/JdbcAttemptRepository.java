@@ -30,7 +30,7 @@ import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 @Repository
 public class JdbcAttemptRepository implements AttemptRepository {
         private static final String EXAM_COLUMNS = """
-                        SELECT id, title, description, duration_minutes, status,
+                        SELECT id, title, description, duration_minutes, scheduled_at, entry_closes_at, status,
                                created_by, created_at, updated_at, course_id
                         FROM exams
                         """;
@@ -49,6 +49,24 @@ public class JdbcAttemptRepository implements AttemptRepository {
 
         public JdbcAttemptRepository(NamedParameterJdbcTemplate jdbcTemplate) {
                 this.jdbcTemplate = jdbcTemplate;
+        }
+
+        @Override
+        public boolean isEnrollmentVerified(long attemptId, long studentId) {
+                return Boolean.TRUE.equals(jdbcTemplate.queryForObject("""
+                        SELECT EXISTS (SELECT 1 FROM exam_attempts
+                            WHERE id=:id AND student_id=:student
+                              AND enrollment_verified_at IS NOT NULL)
+                        """, Map.of("id", attemptId, "student", studentId), Boolean.class));
+        }
+
+        @Override
+        public boolean markEnrollmentVerified(long attemptId, long studentId) {
+                return jdbcTemplate.update("""
+                        UPDATE exam_attempts SET enrollment_verified_at=CURRENT_TIMESTAMP
+                        WHERE id=:id AND student_id=:student AND status='IN_PROGRESS'
+                          AND enrollment_verified_at IS NULL
+                        """, Map.of("id", attemptId, "student", studentId)) == 1;
         }
 
         @Override
@@ -522,12 +540,13 @@ public class JdbcAttemptRepository implements AttemptRepository {
                                 resultSet.getString("title"),
                                 resultSet.getString("description"),
                                 resultSet.getInt("duration_minutes"),
-                                null,
+                                resultSet.getObject("scheduled_at", OffsetDateTime.class),
                                 ExamStatus.valueOf(resultSet.getString("status")),
                                 resultSet.getLong("created_by"),
                                 resultSet.getObject("created_at", OffsetDateTime.class),
                                 resultSet.getObject("updated_at", OffsetDateTime.class),
-                                resultSet.getObject("course_id", Long.class), null);
+                                resultSet.getObject("course_id", Long.class), null, "Examination",
+                                resultSet.getObject("entry_closes_at", OffsetDateTime.class));
         }
 
         private static ExamAttempt mapAttempt(ResultSet resultSet, int rowNumber) throws SQLException {

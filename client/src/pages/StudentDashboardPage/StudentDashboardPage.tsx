@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, NavLink } from 'react-router';
+import { Link } from 'react-router';
 
 import { useAuth } from '../../auth/useAuth';
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
 import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
+import StudentPortalNavigation from '../../components/layout/StudentPortalNavigation';
 import type { AvailableExamDetailsData } from '../../websocket/protocol';
 import { useWebSocket } from '../../websocket/useWebSocket';
 
@@ -49,6 +50,7 @@ function StudentDashboardPage() {
   const { user } = useAuth();
   const { status: connectionStatus, sendMessage } = useWebSocket();
   const [exams, setExams] = useState<AvailableExamDetailsData[]>([]);
+  const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [dashboardOpenedAt] = useState(() => Date.now());
@@ -81,6 +83,15 @@ function StudentDashboardPage() {
     return () => window.clearTimeout(timer);
   }, [connectionStatus, loadExams]);
 
+  const filteredExams = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase();
+    return exams.filter((exam) =>
+      `${exam.title} ${exam.courseName ?? ''} ${exam.id} EX-${String(exam.id).padStart(4, '0')}`
+        .toLowerCase()
+        .includes(normalizedQuery),
+    );
+  }, [exams, query]);
+
   const upcomingExams = useMemo(() => {
     return exams
       .filter((exam) => exam.scheduledAt !== null && Date.parse(exam.scheduledAt) > dashboardOpenedAt)
@@ -91,18 +102,31 @@ function StudentDashboardPage() {
   return (
     <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
       <StudentPortalHeader currentSection="Student Dashboard" prominentTitle showNavigation={false} />
-      <div className="mx-auto w-full max-w-[1360px] px-6 py-7 max-sm:px-4">
-        <section className="flex items-end justify-between gap-5 max-md:flex-col max-md:items-start">
-          <div><p className="text-sm font-bold uppercase tracking-[.12em] text-[#00778b]">Assessment workspace</p><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">Good morning, {user?.fullName ?? 'Student'}</h1><p className="mt-1 text-base text-[#718087]">Choose a published examination and review its secure entry requirements.</p></div>
-          <div className="flex gap-3"><div className="rounded-xl border border-[#dce7ea] bg-white px-5 py-3"><p className="text-xs font-bold uppercase text-[#859399]">Available</p><p className="mt-1 text-xl font-bold text-[#00778b]">{exams.length}</p></div><div className="rounded-xl border border-[#dce7ea] bg-white px-5 py-3"><p className="text-xs font-bold uppercase text-[#859399]">Connection</p><p className="mt-1 text-base font-bold">{connectionStatus === 'connected' ? 'Online' : 'Offline'}</p></div></div>
+      <div className="mx-auto w-full max-w-[1360px] px-7 py-7 max-sm:px-4">
+        <section>
+          <div><h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">Good morning, {user?.fullName ?? 'Student'}</h1></div>
         </section>
 
-        <section className="mt-6"><nav aria-label="Student portal navigation" className="flex w-fit rounded-xl bg-[#e9eff1] p-1.5"><NavLink className={({ isActive }) => `rounded-lg px-6 py-3 text-base font-semibold ${isActive ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`} to="/student/exams">Examinations</NavLink><NavLink className={({ isActive }) => `rounded-lg px-6 py-3 text-base font-semibold ${isActive ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`} to="/student/history">History</NavLink></nav>
-          {loading && exams.length === 0 ? <div className="mt-4 rounded-xl border border-[#dce7ea] bg-white py-14 text-center text-sm text-[#77868b]">Loading published examinations through WebSocket…</div> : exams.length > 0 && <div className="mt-4 rounded-xl border border-[#dce7ea] bg-white p-6"><div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-5">{exams.map((exam) => <ExamCard exam={exam} key={exam.id} />)}</div></div>}
+        <section className="mt-6">
+          <div className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-stretch">
+            <StudentPortalNavigation />
+            <div className="flex min-w-0 gap-2">
+              <label className="relative block w-full min-w-0 md:min-w-[220px]">
+                <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7d8b90]" name="search" size={13} />
+                <input
+                  aria-label="Search examinations by title, course name or exam ID"
+                  className="h-9 w-full rounded-lg border border-[#dbe5e8] bg-white pl-8 pr-3 text-sm outline-none focus:border-[#76b5c0]"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search exam or course"
+                  type="search"
+                  value={query}
+                />
+              </label>
+            </div>
+          </div>
+          {loading && exams.length === 0 ? <div className="mt-4 rounded-xl border border-[#dce7ea] bg-white py-14 text-center text-sm text-[#77868b]">Loading published examinations through WebSocket…</div> : exams.length > 0 && <div className="mt-4 rounded-xl border border-[#dce7ea] bg-white p-6">{filteredExams.length > 0 ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-5">{filteredExams.map((exam) => <ExamCard exam={exam} key={exam.id} />)}</div> : <p className="py-8 text-center text-sm text-[#77868b]" role="status">No examinations match your search.</p>}</div>}
           {!loading && exams.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-[#cbd9dd] bg-white py-14 text-center text-sm text-[#77868b]">No published examinations are available.</div>}
         </section>
-
-        <section className="mt-6 rounded-xl border border-[#cfe2e6] bg-gradient-to-r from-[#e8f6f8] to-white p-3"><div className="flex items-center gap-3"><span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-white text-[#00778b] shadow-sm"><Icon name="shield" size={18} /></span><div><p className="text-base font-bold text-[#224048]">Secure examination environment is ready</p><p className="mt-1 text-sm text-[#638087]">The catalog below is loaded from the Java server through WebSocket.</p></div></div></section>
 
         <section className="mt-3 rounded-xl border border-[#dce7ea] bg-white px-5 py-4">
           <p className="text-xs font-bold uppercase tracking-[.1em] text-[#00778b]">Upcoming examination</p>

@@ -14,6 +14,7 @@ import { useWebSocket } from "../../websocket/useWebSocket";
 import type { MonitoringActivityType } from "../../websocket/protocol";
 import QuestionNavigator from "./components/QuestionNavigator";
 import QuestionPanel from "./components/QuestionPanel";
+import SubmitExamDialog from "./components/SubmitExamDialog";
 
 function formatTime(value: number) {
   const safe = Math.max(0, Math.floor(value));
@@ -425,7 +426,8 @@ function ExamRoomPage() {
     if (
       submitting || submitInFlight.current || saveInFlight.current ||
       attempt.status !== "IN_PROGRESS" ||
-      connectionStatus !== "connected"
+      connectionStatus !== "connected" ||
+      secondsUntil(attempt.deadline) <= 0 || submissionResult !== null
     )
       return;
     submitInFlight.current = true;
@@ -476,10 +478,6 @@ function ExamRoomPage() {
       <StudentPortalHeader
         compact
         currentSection={`${attempt.examTitle} · ${examCode}`}
-        onSubmit={attempt.status === "IN_PROGRESS" ? () => {
-          if (!interactionDisabled) setSubmissionNotice(true);
-        } : undefined}
-        timerLabel={formatTime(remainingSeconds)}
       />
       <div className="border-b border-[#e2eaed] bg-white">
         <div className="mx-auto flex min-h-[78px] max-w-[1460px] items-center justify-between gap-5 px-6 max-md:flex-col max-md:items-start max-md:py-4 max-sm:px-4">
@@ -498,38 +496,6 @@ function ExamRoomPage() {
                 <Icon className="text-[#00778b]" name="shield" size={14} />
                 Integrity monitoring active
               </span>
-              <span
-                className={`inline-flex items-center gap-1 ${saveState === "error" ? "text-[#b42b31]" : saveState === "saved" ? "text-[#00778b]" : "text-[#9a6415]"}`}
-              >
-                <Icon
-                  name={
-                    saveState === "saved"
-                      ? "check"
-                      : saveState === "error"
-                        ? "alert"
-                        : "activity"
-                  }
-                  size={14}
-                />
-                {saveState === "saving"
-                  ? "Saving answer…"
-                  : saveState === "saved"
-                    ? "Answer saved to server"
-                    : saveState === "error"
-                      ? "Answer not saved"
-                      : "Answers auto-save after selection"}
-              </span>
-              <span
-                className={
-                  connectionStatus === "connected"
-                    ? "text-[#00778b]"
-                    : "text-[#b42b31]"
-                }
-              >
-                {connectionStatus === "connected"
-                  ? "● Live connection"
-                  : "● Connection interrupted"}
-              </span>
             </div>
             {saveError && (
               <p className="mt-1 text-sm font-medium text-[#b42b31]">
@@ -537,66 +503,49 @@ function ExamRoomPage() {
               </p>
             )}
           </div>
-          <div className="flex gap-2">
-            <span className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef3f4] px-3 text-base font-semibold">
+          <div className="flex flex-wrap items-center gap-3 max-sm:w-full">
+            <span aria-label={`Time remaining: ${formatTime(remainingSeconds)}`} className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#f1f5f6] px-3 font-mono text-sm font-bold tabular-nums text-[#26343a]">
               <Icon className="text-[#9b6a00]" name="clock" size={15} />
-              {formatTime(remainingSeconds)} remaining
+              {formatTime(remainingSeconds)}
             </span>
             <button
-              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#eef3f4] px-3 text-base font-semibold disabled:cursor-not-allowed disabled:opacity-50"
-              disabled={interactionDisabled}
-              onClick={() => setSubmissionNotice(true)}
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white hover:bg-[#006273] disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={interactionDisabled || submissionResult !== null}
+              onClick={() => {
+                if (interactionDisabled || submitInFlight.current) return;
+                setSubmissionError(null);
+                setSubmissionNotice(true);
+              }}
               type="button"
             >
-              <Icon className="text-[#00778b]" name="eye" size={15} />
-              Review & submit
+              {submitting ? 'Submitting…' : 'Submit'}
+              <Icon name="arrow-right" size={14} />
             </button>
           </div>
         </div>
       </div>
 
       {submissionNotice && (
-        <div className="mx-auto mt-5 max-w-[1412px] px-6 max-sm:px-4">
-          <div
-            className="rounded-lg border border-[#b8d8dd] bg-[#eff9fa] p-4 text-[#31555d]"
-            role="alert"
-          >
-            <strong className="block text-base font-bold">
-              Submit this examination?
-            </strong>
-            <p className="mt-1 text-sm leading-5">
-              You answered {answeredCount} of {questions.length} questions.
-              Submission is final; your server-saved answers will be graded
-              immediately.
-            </p>
-            {submissionError && (
-              <p className="mt-2 text-sm font-semibold text-[#b42b31]">
-                {submissionError}
-              </p>
-            )}
-            <div className="mt-3 flex gap-2">
-              <button
-                className="h-9 rounded-lg border border-[#b8cdd1] bg-white px-4 text-sm font-semibold disabled:opacity-50"
-                disabled={submitting}
-                onClick={() => {
-                  setSubmissionNotice(false);
-                  setSubmissionError(null);
-                }}
-                type="button"
-              >
-                Continue exam
-              </button>
-              <button
-                className="h-9 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white disabled:bg-[#9ebbc0]"
-                disabled={submitting || saveState === "saving"}
-                onClick={submitExam}
-                type="button"
-              >
-                {submitting ? "Submitting…" : "Confirm submission"}
-              </button>
-            </div>
-          </div>
-        </div>
+        <SubmitExamDialog
+          answeredCount={answeredCount}
+          totalQuestions={questions.length}
+          isPending={submitting}
+          confirmDisabled={interactionDisabled || saveState === "saving" || submissionResult !== null}
+          error={submissionError}
+          statusMessage={remainingSeconds <= 0
+            ? 'Time is up. Your saved answers are being finalized by the server.'
+            : connectionStatus !== 'connected'
+              ? 'Reconnect to the examination server before submitting.'
+              : saveState === 'saving'
+                ? 'Please wait until your current answer has been saved.'
+                : null}
+          onCancel={() => {
+            if (submitInFlight.current) return;
+            setSubmissionNotice(false);
+            setSubmissionError(null);
+          }}
+          onConfirm={submitExam}
+        />
       )}
 
       {remainingSeconds <= 0 && attempt.status === "IN_PROGRESS" && !submissionResult && (

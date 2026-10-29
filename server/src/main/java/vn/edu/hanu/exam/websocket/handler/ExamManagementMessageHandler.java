@@ -18,6 +18,7 @@ import vn.edu.hanu.exam.protocol.ClientMessage;
 import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.exam.CreateExamCommand;
+import vn.edu.hanu.exam.service.exam.ExamEnrollmentKeyService;
 import vn.edu.hanu.exam.service.exam.ExamManagementService;
 import vn.edu.hanu.exam.service.exam.UpdateExamCommand;
 import vn.edu.hanu.exam.service.question.CreateQuestionCommand;
@@ -74,6 +75,8 @@ public class ExamManagementMessageHandler {
     public ServerMessage handleCreate(String sessionId, String requestId, Map<String, Object> payload) {
         return withTeacher(sessionId, requestId, teacher -> {
             CreateExamPayload input = convertPayload(payload, CreateExamPayload.class);
+            ExamEnrollmentKeyService.validateConfiguration(input.enrollmentKey());
+            ExamManagementService.validateEntryWindow(input.scheduledAt(), input.entryClosesAt(), true);
             List<CreateQuestionCommand> questions = input.questions() == null ? List.of() : input.questions().stream()
                     .map(question -> {
                         if (question == null) throw new InvalidPayloadException();
@@ -93,7 +96,7 @@ public class ExamManagementMessageHandler {
                             input.title(),
                             input.description(),
                             input.durationMinutes(),
-                            input.scheduledAt()), input.assessmentType(), questions));
+                            input.scheduledAt(), input.enrollmentKey(), input.entryClosesAt()), input.assessmentType(), questions));
         });
     }
 
@@ -144,7 +147,7 @@ public class ExamManagementMessageHandler {
                                             input.description(),
                                             input.durationMinutes(),
                                             input.scheduledAt(),
-                                            input.assessmentType())));
+                                            input.assessmentType(), input.enrollmentKey(), input.entryClosesAt())));
                 });
     }
 

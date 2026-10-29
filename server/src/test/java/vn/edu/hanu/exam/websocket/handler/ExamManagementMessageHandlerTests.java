@@ -61,8 +61,9 @@ class ExamManagementMessageHandlerTests {
                 "title", "Java Midterm",
                 "description", "Core Java",
                 "durationMinutes", 60,
-                "courseId", 3L,
+                "courseId", 3L, "enrollmentKey", "HandlerKey123!",
                 "scheduledAt", scheduledAt.toString(),
+                "entryClosesAt", scheduledAt.plusHours(2).toString(),
                 "assessmentType", "Midterm examination",
                 "questions", List.of(Map.of("content", "Which is Java?", "points", 1,
                         "displayOrder", 0, "choices", List.of(
@@ -80,7 +81,8 @@ class ExamManagementMessageHandlerTests {
                         "Java Midterm",
                         "Core Java",
                         60,
-                        scheduledAt.withOffsetSameInstant(ZoneOffset.UTC)),
+                        scheduledAt.withOffsetSameInstant(ZoneOffset.UTC), "HandlerKey123!",
+                        scheduledAt.plusHours(2).withOffsetSameInstant(ZoneOffset.UTC)),
                 "Midterm examination",
                 List.of(new CreateQuestionCommand(0, "Which is Java?", 1, 0,
                         List.of(new CreateQuestionCommand.ChoiceCommand("A language", true, 0),
@@ -95,7 +97,8 @@ class ExamManagementMessageHandlerTests {
                 .thenThrow(new ExamManagementException("INVALID_EXAM_TITLE", "Exam title is required."));
 
         assertError(handler.handleCreate(
-                SESSION_ID, REQUEST_ID, Map.of("durationMinutes", 60, "courseId", 3L,
+                SESSION_ID, REQUEST_ID, Map.of("durationMinutes", 60, "courseId", 3L, "enrollmentKey", "HandlerKey123!",
+                        "entryClosesAt", OffsetDateTime.now().plusDays(2).toString(),
                         "assessmentType", "Quiz", "questions", List.of())), "INVALID_EXAM_TITLE");
     }
 
@@ -107,8 +110,26 @@ class ExamManagementMessageHandlerTests {
                 .thenThrow(new ExamManagementException("INVALID_EXAM_DURATION", "Invalid duration."));
 
         assertError(handler.handleCreate(SESSION_ID, REQUEST_ID, Map.of(
-                "title", "Exam", "durationMinutes", 0, "courseId", 3L,
+                "title", "Exam", "durationMinutes", 0, "courseId", 3L, "enrollmentKey", "HandlerKey123!",
+                "entryClosesAt", OffsetDateTime.now().plusDays(2).toString(),
                 "assessmentType", "Quiz", "questions", List.of())), "INVALID_EXAM_DURATION");
+    }
+
+    @Test
+    void creatingWithoutAnEnrollmentKeyIsRejectedBeforeServiceCall() {
+        authenticate(UserRole.TEACHER);
+        assertError(handler.handleCreate(SESSION_ID, REQUEST_ID,
+                Map.of("title", "Exam", "courseId", 3L, "durationMinutes", 60)), "INVALID_ENROLLMENT_KEY");
+        org.mockito.Mockito.verifyNoInteractions(examService);
+    }
+
+    @Test
+    void creatingWithoutEntryClosingTimeIsRejectedBeforeServiceCall() {
+        authenticate(UserRole.TEACHER);
+        assertError(handler.handleCreate(SESSION_ID, REQUEST_ID,
+                Map.of("title", "Exam", "courseId", 3L, "durationMinutes", 60,
+                        "enrollmentKey", "HandlerKey123!")), "INVALID_ENTRY_WINDOW");
+        org.mockito.Mockito.verifyNoInteractions(examService);
     }
 
     @Test

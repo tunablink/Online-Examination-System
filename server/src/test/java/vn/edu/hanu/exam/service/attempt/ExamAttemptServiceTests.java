@@ -36,6 +36,8 @@ class ExamAttemptServiceTests {
     void setUp() {
         repository = mock(AttemptRepository.class);
         service = new ExamAttemptService(repository);
+        when(repository.isEnrollmentVerified(anyLong(), anyLong())).thenReturn(true);
+        when(repository.findExamById(12L)).thenReturn(Optional.of(sampleExam(ExamStatus.PUBLISHED)));
     }
 
     @Test

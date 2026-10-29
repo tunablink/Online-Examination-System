@@ -10,7 +10,10 @@ public record CreateExamPayload(
         OffsetDateTime scheduledAt,
         long courseId,
         String assessmentType,
-        List<NewQuestion> questions) {
+        List<NewQuestion> questions,
+        String enrollmentKey,
+        OffsetDateTime entryClosesAt) {
+    @Override public String toString() { return "CreateExamPayload[enrollmentKey=REDACTED]"; }
     public record NewQuestion(String content, int points, int displayOrder, List<NewChoice> choices) {}
     public record NewChoice(String content, boolean correct, int displayOrder) {}
 }

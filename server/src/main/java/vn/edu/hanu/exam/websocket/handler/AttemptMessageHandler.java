@@ -82,7 +82,7 @@ public class AttemptMessageHandler {
             return ServerMessage.success(
                     requestId,
                     TYPE_EXAM_STARTED,
-                    attemptService.startExam(input.examId(), student.id()));
+                    attemptService.startExam(input.examId(), student.id(), input.enrollmentKey()));
         });
     }
 
@@ -184,7 +184,8 @@ public class AttemptMessageHandler {
     }
 
     private StartExamPayload convertStartPayload(Map<String, Object> payload) {
-        if (payload == null || !isIntegralNumber(payload.get("examId"))) {
+        if (payload == null || !isIntegralNumber(payload.get("examId"))
+                || (payload.get("enrollmentKey") != null && !(payload.get("enrollmentKey") instanceof String))) {
             throw new InvalidPayloadException();
         }
         try {

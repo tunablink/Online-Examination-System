@@ -1,7 +1,7 @@
 import { Link, NavLink } from "react-router";
 
 import AccountMenu from "../common/AccountMenu";
-import AppLogo from "../common/AppLogo";
+import AppBrand from "../common/AppBrand";
 import Icon from "../common/Icon";
 
 interface StudentPortalHeaderProps {
@@ -30,10 +30,7 @@ function StudentPortalHeader({
             className="flex shrink-0 items-center gap-2.5"
             to="/student/exams"
           >
-            <AppLogo />
-            <span className="font-brand text-xl font-extrabold tracking-[-0.04em] bg-gradient-to-b from-[#35CAE5] via-[#1F7DB8] to-[#0A1878] bg-clip-text text-transparent">
-              EZAM
-            </span>
+            <AppBrand />
           </Link>
         </div>
 
@@ -82,6 +79,7 @@ function StudentPortalHeader({
             fallbackAccountLabel="Student account"
             fallbackName="Student"
             profilePath="/student/profile"
+            showAccountLabel={false}
           />
         </div>
       </div>

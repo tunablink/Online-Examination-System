@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, NavLink } from 'react-router';
+import { Link } from 'react-router';
 
 import FeedbackMessage, { type Feedback } from '../../components/common/FeedbackMessage';
 import Icon from '../../components/common/Icon';
 import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
+import StudentPortalNavigation from '../../components/layout/StudentPortalNavigation';
 import {
   isAttemptHistoryResult,
   type StudentAttemptResult,
@@ -87,9 +88,6 @@ function ExamHistoryPage() {
     });
   }, [attempts, filter, query]);
 
-  const submitted = attempts.filter((item) => item.status === 'SUBMITTED').length;
-  const expired = attempts.filter((item) => item.status === 'EXPIRED').length;
-
   return (
     <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
       <StudentPortalHeader
@@ -98,50 +96,18 @@ function ExamHistoryPage() {
         showNavigation={false}
       />
 
-      <div className="mx-auto max-w-[1360px] px-6 py-7 max-sm:px-4">
-        <section className="flex items-start justify-between gap-5 max-md:flex-col">
+      <div className="mx-auto w-full max-w-[1360px] px-7 py-7 max-sm:px-4">
+        <section>
           <div>
-            <p className="text-xs font-bold uppercase tracking-[.13em] text-[#00778b]">
-              Performance archive
-            </p>
             <h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">
               Examination history
             </h1>
-            <p className="mt-1 text-sm text-[#718087]">
-              Review results saved by the examination server.
-            </p>
           </div>
 
-          <div className="flex gap-2">
-            <div className="rounded-xl border border-[#dce7ea] bg-white px-5 py-3">
-              <p className="text-xs font-bold uppercase text-[#849197]">Submitted</p>
-              <p className="mt-1 text-xl font-bold text-[#00778b]">{submitted}</p>
-            </div>
-            <div className="rounded-xl border border-[#dce7ea] bg-white px-5 py-3">
-              <p className="text-xs font-bold uppercase text-[#849197]">Expired</p>
-              <p className="mt-1 text-xl font-bold text-[#a26b16]">{expired}</p>
-            </div>
-          </div>
         </section>
 
-        <div className="mt-5 flex items-center justify-between gap-4 max-md:flex-col max-md:items-stretch">
-          <nav
-            aria-label="Student portal navigation"
-            className="flex w-fit rounded-xl bg-[#e9eff1] p-1.5"
-          >
-            <NavLink
-              className={({ isActive }) => `rounded-lg px-6 py-3 text-base font-semibold ${isActive ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`}
-              to="/student/exams"
-            >
-              Examinations
-            </NavLink>
-            <NavLink
-              className={({ isActive }) => `rounded-lg px-6 py-3 text-base font-semibold ${isActive ? 'bg-white text-[#00778b] shadow-sm' : 'text-[#68777d]'}`}
-              to="/student/history"
-            >
-              History
-            </NavLink>
-          </nav>
+        <div className="mt-6 flex items-center justify-between gap-4 max-md:flex-col max-md:items-stretch">
+          <StudentPortalNavigation />
 
           <div className="flex gap-2">
             <label className="relative block w-full min-w-[220px]">
@@ -153,7 +119,7 @@ function ExamHistoryPage() {
               <input
                 className="h-9 w-full rounded-lg border border-[#dbe5e8] bg-white pl-8 pr-3 text-sm outline-none focus:border-[#76b5c0]"
                 onChange={(event) => setQuery(event.target.value)}
-                placeholder="Search by exam or attempt ID"
+                placeholder="Search course"
                 value={query}
               />
             </label>

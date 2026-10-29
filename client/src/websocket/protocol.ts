@@ -126,6 +126,7 @@ export interface CreateExamPayload {
   description: string;
   durationMinutes: number;
   scheduledAt: string;
+  entryClosesAt: string;
   courseId: number;
   assessmentType: string;
   questions: Array<{
@@ -167,6 +168,7 @@ export interface UpdateExamPayload {
   description: string;
   durationMinutes: number;
   scheduledAt: string;
+  entryClosesAt?: string;
 }
 
 export interface ExamIdPayload {
@@ -301,6 +303,7 @@ export interface ExamDetailsData {
   description: string | null;
   durationMinutes: number;
   scheduledAt: string | null;
+  entryClosesAt?: string | null;
   status: ExamStatus;
   createdBy: number;
   createdAt: string;
@@ -362,6 +365,7 @@ export interface AvailableExamDetailsData {
   questionCount: number;
   totalPoints: number;
   scheduledAt: string | null;
+  entryClosesAt?: string | null;
   courseName: string | null;
 }
 
@@ -407,6 +411,7 @@ export interface ServerMessageData {
   description?: string | null;
   durationMinutes?: number;
   scheduledAt?: string | null;
+  entryClosesAt?: string | null;
   status?: ExamStatus;
   createdBy?: number;
   createdAt?: string;

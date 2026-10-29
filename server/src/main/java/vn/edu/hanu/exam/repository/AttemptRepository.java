@@ -17,6 +17,10 @@ import vn.edu.hanu.exam.domain.attempt.SavedAnswer;
 import vn.edu.hanu.exam.domain.attempt.StoredAttemptResult;
 
 public interface AttemptRepository {
+    boolean isEnrollmentVerified(long attemptId, long studentId);
+
+    boolean markEnrollmentVerified(long attemptId, long studentId);
+
     List<ExamAttempt> findDueAttempts(int limit);
 
     Optional<Exam> findExamById(long examId);

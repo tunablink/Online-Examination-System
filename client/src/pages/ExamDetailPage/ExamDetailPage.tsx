@@ -12,6 +12,7 @@ import type {
   ServerMessage,
 } from "../../websocket/protocol";
 import { useWebSocket } from "../../websocket/useWebSocket";
+import ExamEntryDialog from '../../components/exam/ExamEntryDialog';
 
 function isAvailableExam(value: unknown): value is AvailableExamDetailsData {
   if (typeof value !== "object" || value === null) return false;
@@ -40,6 +41,24 @@ function ExamDetailPage() {
   const [starting, setStarting] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [confirmed, setConfirmed] = useState(false);
+  const [entryDialogOpen, setEntryDialogOpen] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const opensAt = exam?.scheduledAt ? Date.parse(exam.scheduledAt) : null;
+  const closesAt = exam?.entryClosesAt ? Date.parse(exam.entryClosesAt) : null;
+  const entryClosed = closesAt !== null && Number.isFinite(closesAt) && now >= closesAt;
+  const waitingForOpening = opensAt !== null && Number.isFinite(opensAt) && now < opensAt;
+
+  useEffect(() => {
+    const boundaries = [opensAt, closesAt].filter((value): value is number => value !== null && Number.isFinite(value));
+    if (boundaries.length === 0) return;
+    const lastBoundary = Math.max(...boundaries);
+    const timer = window.setInterval(() => {
+      const current = Date.now();
+      setNow(current);
+      if (current >= lastBoundary) window.clearInterval(timer);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [opensAt, closesAt]);
 
   useEffect(() => {
     if (numericExamId === null || connectionStatus !== "connected") return;
@@ -96,13 +115,14 @@ function ExamDetailPage() {
     });
   };
 
-  const startExam = () => {
-    if (exam === null || connectionStatus !== "connected") return;
+  const startExam = (key: string) => {
+    if (exam === null || connectionStatus !== "connected" || starting || !confirmed || waitingForOpening) return;
+    if (entryClosed && key !== '') return;
     setStarting(true);
     setFeedback(null);
     const requestId = sendMessage(
       "START_EXAM",
-      { examId: exam.id },
+      { examId: exam.id, enrollmentKey: key },
       handleStartResponse,
     );
     if (requestId === null) {
@@ -167,29 +187,16 @@ function ExamDetailPage() {
     );
   }
 
-  const canEnter = confirmed && connectionStatus === "connected" && !starting;
+  const canResume = confirmed && connectionStatus === "connected" && !starting && !waitingForOpening;
+  const canEnter = canResume && !entryClosed;
+  const entryUnavailableMessage = entryClosed
+    ? 'Entry has closed. New attempts can no longer be started.'
+    : waitingForOpening
+      ? 'This examination is not open yet.'
+      : connectionStatus !== 'connected'
+        ? 'Waiting for the examination server connection. Please try again when connected.'
+        : null;
   const examCode = `EX-${String(exam.id).padStart(4, "0")}`;
-
-  const environmentChecks = [
-    {
-      label: "Activity monitoring",
-      detail: "Tab changes and focus interruptions will be recorded",
-      icon: "shield" as const,
-      ready: true,
-    },
-    {
-      label: "Exam recovery",
-      detail: "Saved answers can be restored after reconnecting",
-      icon: "refresh" as const,
-      ready: true,
-    },
-    {
-      label: "Network connection",
-      detail: "A stable WebSocket connection is required",
-      icon: "globe" as const,
-      ready: connectionStatus === "connected",
-    },
-  ];
 
   return (
     <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
@@ -202,7 +209,7 @@ function ExamDetailPage() {
           <Icon name="arrow-right" size={11} />
           <span className="text-[#35454b]">Pre-exam check</span>
         </div>
-        {feedback && (
+        {feedback && !entryDialogOpen && (
           <div className="mt-4">
             <FeedbackMessage
               feedback={feedback}
@@ -268,62 +275,16 @@ function ExamDetailPage() {
           </div>
         </section>
 
-        <div className="mt-5 grid grid-cols-[minmax(0,1fr)_360px] items-start gap-5 max-lg:grid-cols-1">
-          <section className="rounded-xl border border-[#dce7ea] bg-white p-6">
-            <div className="flex items-center gap-3">
-              <span className="grid h-9 w-9 place-items-center rounded-full bg-[#edf7f8] text-[#00778b]">
-                <Icon name="monitor" size={17} />
-              </span>
-              <div>
-                <h2 className="text-base font-bold">
-                  Exam environment check
-                </h2>
-
-                <p className="mt-0.5 text-xs text-[#819096]">
-                  Confirm that monitoring and the server connection are ready.
-                </p>
-              </div>
-            </div>
-            <div className="mt-5 grid gap-3">
-              {environmentChecks.map((check) => (
-                <div
-                  className="flex items-center justify-between gap-4 rounded-lg border border-[#e0e8eb] p-4 text-left"
-                  key={check.label}
-                >
-                  <span className="flex items-center gap-3">
-                    <span className="grid h-8 w-8 place-items-center rounded-full bg-[#f0f5f6] text-[#52666d]">
-                      <Icon name={check.icon} size={15} />
-                    </span>
-
-                    <span>
-                      <strong className="block text-sm text-[#34444a]">
-                        {check.label}
-                      </strong>
-
-                      <small className="mt-1 text-xs text-[#819096]">
-                        {check.detail}
-                      </small>
-                    </span>
-                  </span>
-
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold ${
-                      check.ready
-                        ? "bg-[#eaf7f8] text-[#00778b]"
-                        : "bg-[#fff0f0] text-[#b62d34]"
-                    }`}
-                  >
-                    <Icon name={check.ready ? "check" : "alert"} size={11} />
-
-                    {check.ready ? "Ready" : "Waiting"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <aside className="rounded-xl border border-[#dce7ea] bg-white p-5">
-            <h2 className="text-base font-bold">Before you begin</h2>
+        <div className="mx-auto mt-6 w-full max-w-2xl">
+          <section aria-labelledby="before-you-begin-title" className="rounded-xl border border-[#dce7ea] bg-white p-7 shadow-sm max-sm:p-5">
+            <h2 className="text-center text-xl font-bold" id="before-you-begin-title">Before you begin</h2>
+            <dl className="mt-5 grid grid-cols-2 gap-4 rounded-lg bg-[#f5f9fb] p-4 max-sm:grid-cols-1">
+              <div><dt className="text-sm font-semibold text-[#66767c]">Entry opens</dt><dd className="mt-1 text-base font-semibold">{exam.scheduledAt ? new Date(exam.scheduledAt).toLocaleString('en-GB') : 'Not scheduled'}</dd></div>
+              <div><dt className="text-sm font-semibold text-[#66767c]">Entry closes</dt><dd className="mt-1 text-base font-semibold">{exam.entryClosesAt ? new Date(exam.entryClosesAt).toLocaleString('en-GB') : 'Not configured'}</dd></div>
+            </dl>
+            <p className="mt-3 text-center text-sm leading-6 text-[#66767c]">You receive the full {exam.durationMinutes} minutes from your own starting time.</p>
+            {entryClosed && <p className="mt-4 rounded-lg border border-[#ead8b7] bg-[#fff7e8] p-3 text-sm text-[#855b17]" role="status">Entry has closed. You cannot start a new attempt, but you can resume an already verified attempt until its own deadline.</p>}
+            {waitingForOpening && <p className="mt-4 rounded-lg border border-[#ead8b7] bg-[#fff7e8] p-3 text-sm text-[#855b17]" role="status">This examination opens on {new Date(opensAt ?? 0).toLocaleString('en-GB')}. Entry is not available yet.</p>}
             <ul className="mt-4 grid gap-3 text-base leading-6 text-[#66767c]">
               {examRules.map((rule) => (
                 <li className="flex gap-2" key={rule}>
@@ -352,12 +313,17 @@ function ExamDetailPage() {
             <button
               className="mt-4 inline-flex h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#00778b] text-base font-semibold text-white hover:bg-[#006273] disabled:cursor-not-allowed disabled:bg-[#a8bec3]"
               disabled={!canEnter}
-              onClick={startExam}
+              onClick={() => {
+                if (!canEnter) return;
+                setFeedback(null);
+                setEntryDialogOpen(true);
+              }}
               type="button"
             >
               {starting ? "Starting examination…" : "Enter secure exam"}{" "}
               {!starting && <Icon name="arrow-right" size={14} />}
             </button>
+            <button className="mt-3 inline-flex min-h-10 w-full items-center justify-center rounded-lg border border-[#b8d7dd] px-4 py-2 text-sm font-semibold text-[#00778b] disabled:cursor-not-allowed disabled:opacity-50" disabled={!canResume} onClick={() => startExam('')} type="button">Resume existing attempt</button>
             {!confirmed && !starting && (
               <p className="mt-3 text-center text-xs text-[#8a979c]">
                 Confirm the examination rules to continue.
@@ -369,9 +335,25 @@ function ExamDetailPage() {
                 Waiting for the examination server connection.
               </p>
             )}
-          </aside>
+          </section>
         </div>
       </div>
+      {entryDialogOpen && (
+        <ExamEntryDialog
+          canStart={canEnter}
+          examTitle={exam.title}
+          feedback={feedback}
+          isPending={starting}
+          onCancel={() => {
+            if (starting) return;
+            setEntryDialogOpen(false);
+            setFeedback(null);
+          }}
+          onConfirm={startExam}
+          onDismissFeedback={() => setFeedback(null)}
+          unavailableMessage={entryUnavailableMessage}
+        />
+      )}
     </main>
   );
 }

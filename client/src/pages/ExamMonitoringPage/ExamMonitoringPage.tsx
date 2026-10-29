@@ -14,8 +14,6 @@ import { useWebSocket } from '../../websocket/useWebSocket';
 
 type Filter = 'ALL' | 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED' | 'WARNINGS';
 
-const REVIEW_NOTICE = 'Monitoring signals require teacher review and do not prove cheating.';
-
 function isSeverity(value: unknown): value is MonitoringSeverity {
   return value === 'INFO' || value === 'WARNING';
 }
@@ -159,11 +157,9 @@ function ExamMonitoringPage() {
   return (
     <div>
       <section className="flex items-center justify-between gap-5 max-md:flex-col max-md:items-start">
-        <div><p className="text-sm font-bold uppercase tracking-[.12em] text-[#00778b]">Live review workspace</p><h1 className="mt-2 text-2xl font-bold tracking-[-.04em]">Exam Monitoring{numericExamId === null ? '' : ` · #${numericExamId}`}</h1></div>
+        <div><p className="text-sm font-bold uppercase tracking-[.12em] text-[#00778b]">Live review workspace</p><h1 className="mt-2 text-3xl font-bold tracking-[-.04em]">Exam Monitoring{numericExamId === null ? '' : ` · #${numericExamId}`}</h1></div>
         {numericExamId !== null && <button className="inline-flex h-10 items-center gap-2 rounded-lg border border-[#b8dbe1] bg-white px-4 text-sm font-semibold text-[#00778b] disabled:opacity-50" disabled={loading || connectionStatus !== 'connected'} onClick={loadMonitoring} type="button"><Icon name="refresh" size={14} />{loading ? 'Syncing…' : 'Sync data'}</button>}
       </section>
-
-      <section className="mt-5 flex items-start gap-3 rounded-xl border border-[#b8dbe1] bg-[#eff9fa] p-4 text-[#31555d]" role="note"><Icon className="mt-0.5 shrink-0 text-[#00778b]" name="shield" size={17} /><div><p className="text-sm font-bold">Human review required</p><p className="mt-1 text-sm leading-5">{REVIEW_NOTICE}</p></div></section>
 
       {numericExamId === null ? (
         <section className="mt-5 rounded-xl border border-dashed border-[#cddadd] bg-white p-12 text-center"><h2 className="text-base font-bold">Select an examination</h2><p className="mt-2 text-sm text-[#718087]">Open monitoring from an examination to review its active and completed attempts.</p><Link className="mt-4 inline-flex text-sm font-semibold text-[#00778b]" to="/teacher/exams">View examinations</Link></section>

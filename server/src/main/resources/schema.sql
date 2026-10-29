@@ -107,6 +107,11 @@ CREATE TABLE IF NOT EXISTS exams (
         CHECK (status IN ('DRAFT', 'PUBLISHED', 'CLOSED'))
 );
 
+-- Existing exams remain unconfigured until their owning teacher sets a draft key.
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS enrollment_key_hash VARCHAR(255);
+-- Admission window only; individual attempt deadlines may extend beyond this.
+ALTER TABLE exams ADD COLUMN IF NOT EXISTS entry_closes_at TIMESTAMP WITH TIME ZONE;
+
 CREATE INDEX IF NOT EXISTS idx_exams_created_by
     ON exams (created_by);
 
@@ -242,6 +247,9 @@ ALTER TABLE exam_attempts
 
 ALTER TABLE exam_attempts
     ADD COLUMN IF NOT EXISTS total_questions INT;
+
+-- Never mark legacy attempts as verified without a successful key check.
+ALTER TABLE exam_attempts ADD COLUMN IF NOT EXISTS enrollment_verified_at TIMESTAMP WITH TIME ZONE;
 
 CREATE INDEX IF NOT EXISTS idx_exam_attempts_exam_id
     ON exam_attempts (exam_id);

@@ -8,5 +8,9 @@ public record UpdateExamPayload(
         String description,
         int durationMinutes,
         OffsetDateTime scheduledAt,
-        String assessmentType
-) {}
+        String assessmentType,
+        String enrollmentKey,
+        OffsetDateTime entryClosesAt
+) {
+    @Override public String toString() { return "UpdateExamPayload[enrollmentKey=REDACTED]"; }
+}
