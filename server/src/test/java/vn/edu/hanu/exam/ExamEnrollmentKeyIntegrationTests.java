@@ -342,6 +342,27 @@ class ExamEnrollmentKeyIntegrationTests {
                         new CreateExamCommand("Invalid window", null, 60, opens, KEY, opens.minusMinutes(1)))).code());
     }
 
+    @Test
+    void completedResultAndHistoryIncludeCourseAndDescriptionEvenAfterExamCloses() throws Exception {
+        Fixture f = fixture();
+        String description = "Java fundamentals examination";
+        jdbc.update("UPDATE exams SET description=:description WHERE id=:id",
+                Map.of("id", f.exam(), "description", description));
+        exams.publishExam(f.exam(), f.teacher());
+        var started = attempts.startExam(f.exam(), f.student(), KEY);
+        attempts.submitExam(started.attemptId(), f.student());
+        exams.closeExam(f.exam(), f.teacher());
+        var result = attempts.getAttemptResult(started.attemptId(), f.student());
+        assertEquals("Key test course", result.courseName());
+        assertEquals(description, result.description());
+        assertEquals(result, attempts.getAttemptHistory(f.student()).attempts().getFirst());
+        assertEquals("ATTEMPT_RESULT_NOT_FOUND", assertThrows(AttemptException.class,
+                () -> attempts.getAttemptResult(started.attemptId(), user("STUDENT"))).code());
+        var json = mapper.writeValueAsString(result);
+        assertFalse(json.contains(KEY));
+        assertFalse(json.contains(hash(f.exam())));
+    }
+
     private void setClosing(long exam, OffsetDateTime closes) {
         jdbc.update("UPDATE exams SET entry_closes_at=:closes WHERE id=:id", Map.of("id", exam, "closes", closes));
     }

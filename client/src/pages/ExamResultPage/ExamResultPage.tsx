@@ -171,6 +171,12 @@ function ExamResultPage() {
                 <h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">
                   {result.examTitle}
                 </h1>
+                <p className="mt-1 break-words text-sm font-semibold text-[#00778b]">
+                  Course: {result.courseName?.trim() || 'Not assigned'}
+                </p>
+                <p className="mt-1 whitespace-pre-line break-words text-base text-[#6e7d83]">
+                  {result.description?.trim() || 'No description was provided.'}
+                </p>
               </div>
 
               <div className={`grid h-28 w-28 shrink-0 place-items-center rounded-full border-[8px] text-center ${expired ? 'border-[#ead8b7] text-[#a26b16]' : 'border-[#bce2e7] text-[#00778b]'}`}>
