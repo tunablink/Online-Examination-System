@@ -47,6 +47,8 @@ export interface StudentAttemptResult {
   attemptId: number;
   examId: number;
   examTitle: string;
+  courseName?: string | null;
+  description?: string | null;
   status: 'SUBMITTED' | 'EXPIRED';
   startedAt: string;
   submittedAt: string;
@@ -131,6 +133,8 @@ export function isStudentAttemptResult(value: unknown): value is StudentAttemptR
   return typeof result.attemptId === 'number'
     && typeof result.examId === 'number'
     && typeof result.examTitle === 'string'
+    && (result.courseName === undefined || result.courseName === null || typeof result.courseName === 'string')
+    && (result.description === undefined || result.description === null || typeof result.description === 'string')
     && (result.status === 'SUBMITTED' || result.status === 'EXPIRED')
     && typeof result.startedAt === 'string'
     && typeof result.submittedAt === 'string'

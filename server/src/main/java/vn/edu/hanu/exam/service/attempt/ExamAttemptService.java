@@ -417,7 +417,9 @@ public class ExamAttemptService {
                 entry.score(),
                 entry.maxScore(),
                 entry.correctAnswers(),
-                entry.totalQuestions());
+                entry.totalQuestions(),
+                entry.courseName(),
+                entry.description());
     }
 
     private static void validateExamContent(List<Question> questions, List<Choice> choices) {

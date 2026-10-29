@@ -6,6 +6,7 @@ import FeedbackMessage, {
 } from "../../components/common/FeedbackMessage";
 import Icon from "../../components/common/Icon";
 import StudentPortalHeader from "../../components/layout/StudentPortalHeader";
+import StudentPortalNavigation from "../../components/layout/StudentPortalNavigation";
 import { isExamAttempt } from "../../types/attempt";
 import type {
   AvailableExamDetailsData,
@@ -162,7 +163,10 @@ function ExamDetailPage() {
   if (loading || exam === null) {
     return (
       <main className="min-h-screen bg-[#f5f9fb]">
-        <StudentPortalHeader currentSection="Exam details" />
+        <StudentPortalHeader currentSection="Exam details" showNavigation={false} />
+        <div className="mx-auto w-full max-w-[1180px] px-6 pt-7 max-sm:px-4">
+          <StudentPortalNavigation />
+        </div>
         <div className="mx-auto max-w-3xl px-6 py-20 text-center">
           {feedback ? (
             <FeedbackMessage
@@ -200,9 +204,10 @@ function ExamDetailPage() {
 
   return (
     <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
-      <StudentPortalHeader currentSection={`${examCode} · ${exam.title}`} />
+      <StudentPortalHeader currentSection={`${examCode} · ${exam.title}`} showNavigation={false} />
       <div className="mx-auto w-full max-w-[1180px] px-6 py-7 max-sm:px-4">
-        <div className="flex items-center gap-2 text-sm font-semibold text-[#75848a]">
+        <StudentPortalNavigation />
+        <div className="mt-5 flex items-center gap-2 text-sm font-semibold text-[#75848a]">
           <Link className="hover:text-[#00778b]" to="/student/exams">
             Examinations
           </Link>

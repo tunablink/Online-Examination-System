@@ -458,6 +458,8 @@ public class JdbcAttemptRepository implements AttemptRepository {
                                 SELECT a.id AS attempt_id,
                                        a.exam_id,
                                        e.title AS exam_title,
+                                       e.description,
+                                       c.name AS course_name,
                                        a.status,
                                        a.started_at,
                                        a.submitted_at,
@@ -468,6 +470,7 @@ public class JdbcAttemptRepository implements AttemptRepository {
                                 FROM exam_attempts a
                                 INNER JOIN exams e
                                         ON e.id = a.exam_id
+                                LEFT JOIN courses c ON c.id = e.course_id
                                 WHERE a.student_id = :studentId
                                   AND a.status IN (
                                         :submittedStatus,
@@ -499,6 +502,8 @@ public class JdbcAttemptRepository implements AttemptRepository {
                                 SELECT a.id AS attempt_id,
                                        a.exam_id,
                                        e.title AS exam_title,
+                                       e.description,
+                                       c.name AS course_name,
                                        a.status,
                                        a.started_at,
                                        a.submitted_at,
@@ -509,6 +514,7 @@ public class JdbcAttemptRepository implements AttemptRepository {
                                 FROM exam_attempts a
                                 INNER JOIN exams e
                                         ON e.id = a.exam_id
+                                LEFT JOIN courses c ON c.id = e.course_id
                                 WHERE a.id = :attemptId
                                   AND a.student_id = :studentId
                                   AND a.status IN (
@@ -605,6 +611,8 @@ public class JdbcAttemptRepository implements AttemptRepository {
                                 resultSet.getInt("score"),
                                 resultSet.getInt("max_score"),
                                 resultSet.getInt("correct_answers"),
-                                resultSet.getInt("total_questions"));
+                                resultSet.getInt("total_questions"),
+                                resultSet.getString("course_name"),
+                                resultSet.getString("description"));
         }
 }
