@@ -194,6 +194,58 @@ class CourseFlowIntegrationTests {
     }
 
     @Test
+    void courseRosterAddsExistingAccountAndRemovalKeepsAccountAndOtherCourse() {
+        long teacher = insertTeacher();
+        var first = courses.create(teacher, "ROSTER1", "First course");
+        var second = courses.create(teacher, "ROSTER2", "Second course");
+        var student = accounts.create(studentCommand("roster"), "IT");
+
+        assertTrue(courses.enrollByIdentity(first.id(), teacher, student.username(), student.fullName(), student.email()));
+        assertFalse(courses.enrollByIdentity(first.id(), teacher, student.username(), student.fullName(), student.email()));
+        assertTrue(courses.enrollByIdentity(second.id(), teacher, student.username(), student.fullName(), student.email()));
+        assertEquals("STUDENT_IDENTITY_CONFLICT", assertThrows(CourseException.class,
+                () -> courses.enrollByIdentity(first.id(), teacher, student.username(), "Wrong Name", student.email())).code());
+
+        courses.updateStudentIdentity(first.id(), teacher, student.id(), "edited_" + student.username(),
+                "Edited Student", "edited_" + student.email());
+        var updated = courses.students(second.id(), teacher).getFirst();
+        assertEquals("Edited Student", updated.fullName());
+        assertEquals("IT", updated.department());
+        assertEquals("edited_" + student.username(), updated.username());
+        assertEquals("edited_" + student.email(), updated.email());
+        assertTrue(jdbc.queryForObject("SELECT password_hash <> '' FROM users WHERE id = :id",
+                Map.of("id", student.id()), Boolean.class));
+
+        assertTrue(courses.unenroll(first.id(), teacher, student.id()));
+        assertEquals(0, courses.students(first.id(), teacher).size());
+        assertEquals(1, courses.students(second.id(), teacher).size());
+        assertTrue(jdbc.queryForObject("SELECT active FROM users WHERE id = :id",
+                Map.of("id", student.id()), Boolean.class));
+    }
+
+    @Test
+    void rosterExcelAddsOnlyExistingAccountsAndSkipsInvalidRows() throws IOException {
+        long teacher = insertTeacher();
+        var course = courses.create(teacher, "ROSTERX", "Roster import");
+        var existing = accounts.create(studentCommand("excel"), "Science");
+        String file = workbook(new String[][] {
+                {"studentId", "fullName", "email"},
+                {existing.username(), existing.fullName(), existing.email()},
+                {"missing_student", "Missing Student", "missing_student@example.com"},
+                {"bad_id", "Bad Student", "not-an-email"},
+                {existing.username(), existing.fullName(), existing.email()}
+        });
+
+        var result = courses.importRoster(course.id(), teacher, file);
+        assertEquals(0, result.createdCount());
+        assertEquals(1, result.enrolledCount());
+        assertEquals(3, result.skippedCount());
+        assertEquals(1, courses.students(course.id(), teacher).size());
+        assertEquals(0L, jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE username = 'missing_student'",
+                Map.of(), Long.class));
+    }
+
+    @Test
     void importCreatesNewStudentsAndReusesExistingStudent() throws IOException {
         long teacher = insertTeacher();
         var first = courses.create(teacher, "IMPORT1", "First");

@@ -27,6 +27,8 @@ import vn.edu.hanu.exam.service.student.StudentDetails;
 public class CourseService {
     private static final Pattern CODE = Pattern.compile("[A-Za-z0-9._-]{2,50}");
     private static final Pattern YEAR = Pattern.compile("(\\d{4})-(\\d{4})");
+    private static final Pattern STUDENT_ID = Pattern.compile("[A-Za-z0-9._-]{3,50}");
+    private static final Pattern EMAIL = Pattern.compile("[^\\s@]+@[^\\s@]+\\.[^\\s@]+");
     private final CourseRepository courses;
     private final UserRepository users;
     private final StudentAccountService accounts;
@@ -141,6 +143,72 @@ public class CourseService {
                 .orElseThrow(() -> new CourseException("STUDENT_NOT_FOUND", "Student was not found."));
         return courses.enroll(courseId, student.id());
     }
+
+    public boolean enrollByIdentity(long courseId, long teacherId, String studentId, String fullName, String email) {
+        requireOwned(courseId, teacherId);
+        StudentIdentity identity = validateStudentIdentity(studentId, fullName, email);
+        User student = users.findByUsername(identity.studentId())
+                .filter(user -> user.role() == UserRole.STUDENT && user.active())
+                .orElseThrow(() -> new CourseException("STUDENT_NOT_FOUND", "Create this student account on the Students page first."));
+        if (!student.fullName().equalsIgnoreCase(identity.fullName())
+                || !student.email().equalsIgnoreCase(identity.email())) {
+            throw new CourseException("STUDENT_IDENTITY_CONFLICT", "Student ID, full name, and email must match the existing account.");
+        }
+        return courses.enroll(courseId, student.id());
+    }
+
+    public void updateStudentIdentity(long courseId, long teacherId, long studentId,
+            String username, String fullName, String email) {
+        requireOwned(courseId, teacherId);
+        StudentIdentity identity = validateStudentIdentity(username, fullName, email);
+        try {
+            if (!courses.updateStudentIdentity(courseId, studentId, identity.studentId(),
+                    identity.fullName(), identity.email())) {
+                throw new CourseException("STUDENT_NOT_FOUND", "Student is not enrolled in this course.");
+            }
+        } catch (DuplicateKeyException exception) {
+            throw new CourseException("USER_ALREADY_EXISTS", "Student ID or email already exists.");
+        }
+    }
+
+    public boolean unenroll(long courseId, long teacherId, long studentId) {
+        requireOwned(courseId, teacherId);
+        return courses.unenroll(courseId, studentId);
+    }
+
+    public ImportResult importRoster(long courseId, long teacherId, String contentBase64) {
+        requireOwned(courseId, teacherId);
+        StudentAccountService.RosterRows parsed = accounts.parseRosterRows(contentBase64);
+        int enrolled = 0;
+        int skipped = parsed.skippedCount();
+        for (var row : parsed.rows()) {
+            try {
+                if (enrollByIdentity(courseId, teacherId, row.studentId(), row.fullName(), row.email())) enrolled++;
+                else skipped++;
+            } catch (CourseException exception) {
+                skipped++;
+            }
+        }
+        return new ImportResult(0, enrolled, skipped);
+    }
+
+    private static StudentIdentity validateStudentIdentity(String studentId, String fullName, String email) {
+        String normalizedId = studentId == null ? "" : studentId.trim().toLowerCase(Locale.ROOT);
+        String name = fullName == null ? "" : fullName.trim();
+        String normalizedEmail = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
+        if (!STUDENT_ID.matcher(normalizedId).matches()) {
+            throw new CourseException("INVALID_STUDENT_ID", "Student ID must contain 3 to 50 letters, numbers, dots, underscores, or hyphens.");
+        }
+        if (name.length() < 2 || name.length() > 100) {
+            throw new CourseException("INVALID_FULL_NAME", "Full name must contain 2 to 100 characters.");
+        }
+        if (normalizedEmail.length() > 255 || !EMAIL.matcher(normalizedEmail).matches()) {
+            throw new CourseException("INVALID_EMAIL", "Email format is invalid.");
+        }
+        return new StudentIdentity(normalizedId, name, normalizedEmail);
+    }
+
+    private record StudentIdentity(String studentId, String fullName, String email) {}
 
     @Transactional
     public RegisteredUser createStudent(long courseId, long teacherId, RegisterUserCommand command, String department) {
