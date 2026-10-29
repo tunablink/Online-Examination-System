@@ -126,6 +126,25 @@ public class JdbcCourseRepository implements CourseRepository {
     }
 
     @Override
+    public boolean unenroll(long courseId, long studentId) {
+        return jdbc.update("""
+                DELETE FROM course_students WHERE course_id = :courseId AND student_id = :studentId
+                """, Map.of("courseId", courseId, "studentId", studentId)) == 1;
+    }
+
+    @Override
+    public boolean updateStudentIdentity(long courseId, long studentId, String username, String fullName, String email) {
+        return jdbc.update("""
+                UPDATE users u SET username = :username, full_name = :fullName, email = :email,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE u.id = :studentId AND u.role = 'STUDENT' AND u.active = TRUE
+                  AND EXISTS (SELECT 1 FROM course_students cs
+                              WHERE cs.course_id = :courseId AND cs.student_id = u.id)
+                """, Map.of("courseId", courseId, "studentId", studentId,
+                        "username", username, "fullName", fullName, "email", email)) == 1;
+    }
+
+    @Override
     public boolean isEnrolled(long courseId, long studentId) {
         Boolean enrolled = jdbc.queryForObject("""
                 SELECT EXISTS (SELECT 1 FROM course_students WHERE course_id = :courseId AND student_id = :studentId)

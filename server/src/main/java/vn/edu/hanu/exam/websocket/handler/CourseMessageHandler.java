@@ -61,6 +61,20 @@ public class CourseMessageHandler {
                 }
                 case "ENROLL_STUDENT" -> ServerMessage.success(requestId, "STUDENT_ENROLLED", Map.of(
                         "enrolled", courses.enroll(number(payload, "courseId"), teacher.id(), number(payload, "studentId"))));
+                case "ENROLL_STUDENT_BY_IDENTITY" -> ServerMessage.success(requestId, "STUDENT_ENROLLED", Map.of(
+                        "enrolled", courses.enrollByIdentity(number(payload, "courseId"), teacher.id(),
+                                string(payload, "studentId"), string(payload, "fullName"), string(payload, "email"))));
+                case "UPDATE_COURSE_STUDENT" -> {
+                    long courseId = number(payload, "courseId");
+                    long studentId = number(payload, "studentId");
+                    courses.updateStudentIdentity(courseId, teacher.id(), studentId,
+                            string(payload, "username"), string(payload, "fullName"), string(payload, "email"));
+                    yield ServerMessage.success(requestId, "COURSE_STUDENT_UPDATED", Map.of("studentId", studentId));
+                }
+                case "UNENROLL_STUDENT" -> ServerMessage.success(requestId, "STUDENT_UNENROLLED", Map.of(
+                        "unenrolled", courses.unenroll(number(payload, "courseId"), teacher.id(), number(payload, "studentId"))));
+                case "IMPORT_COURSE_ROSTER" -> ServerMessage.success(requestId, "COURSE_STUDENTS_IMPORTED",
+                        courses.importRoster(number(payload, "courseId"), teacher.id(), string(payload, "contentBase64")));
                 case "CREATE_COURSE_STUDENT" -> {
                     String password = string(payload, "password");
                     if (!password.equals(string(payload, "confirmPassword"))) {
