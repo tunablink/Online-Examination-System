@@ -19,5 +19,7 @@ public interface CourseRepository {
     List<StudentDetails> findStudents(long courseId);
     CourseStatistics statistics(long courseId);
     boolean enroll(long courseId, long studentId);
+    boolean unenroll(long courseId, long studentId);
+    void lockEnrollment(long courseId, long studentId);
     boolean isEnrolled(long courseId, long studentId);
 }

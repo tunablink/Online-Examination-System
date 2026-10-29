@@ -20,15 +20,15 @@ public class LoginService {
 
     public LoggedInUser login(LoginCommand command) {
         if (command == null) {
-            throw new AuthenticationException("INVALID_CREDENTIALS", "Invalid username or password.");
+            throw new AuthenticationException("INVALID_CREDENTIALS", "Invalid Student ID / Teacher ID or password.");
         }
 
         User user = userRepository.findByUsername(command.username())
                 .orElseThrow(() -> new AuthenticationException(
-                        "INVALID_CREDENTIALS", "Invalid username or password."));
+                        "INVALID_CREDENTIALS", "Invalid Student ID / Teacher ID or password."));
 
         if (!passwordEncoder.matches(command.password(), user.passwordHash())) {
-            throw new AuthenticationException("INVALID_CREDENTIALS", "Invalid username or password.");
+            throw new AuthenticationException("INVALID_CREDENTIALS", "Invalid Student ID / Teacher ID or password.");
         }
 
         if (!user.active()) {

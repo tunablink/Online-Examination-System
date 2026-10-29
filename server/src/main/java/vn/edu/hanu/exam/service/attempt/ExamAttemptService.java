@@ -87,8 +87,11 @@ public class ExamAttemptService {
             if (exam.status() != ExamStatus.PUBLISHED) {
                 throw examNotAvailable();
             }
-            if (exam.courseId() != null && (courseRepository == null || !courseRepository.isEnrolled(exam.courseId(), studentId))) {
-                throw examNotAvailable();
+            if (exam.courseId() != null) {
+                if (courseRepository == null) throw examNotAvailable();
+                // Serialize starting an attempt against removing its membership.
+                courseRepository.lockEnrollment(exam.courseId(), studentId);
+                if (!courseRepository.isEnrolled(exam.courseId(), studentId)) throw examNotAvailable();
             }
             requireExamOpen(exam);
 

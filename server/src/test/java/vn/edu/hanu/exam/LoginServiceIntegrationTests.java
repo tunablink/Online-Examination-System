@@ -29,6 +29,8 @@ public class LoginServiceIntegrationTests {
 
     @Autowired
     private RegistrationService registrationService;
+    @Autowired private org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate jdbc;
+    @Autowired private org.springframework.security.crypto.password.PasswordEncoder passwords;
 
     // ── helpers ────────────────────────────────────────────────────────────────
 
@@ -64,6 +66,24 @@ public class LoginServiceIntegrationTests {
                 () -> loginService.login(new LoginCommand(username, "WrongPassword_456!")));
 
         assertEquals("INVALID_CREDENTIALS", ex.code());
+        assertEquals("Invalid Student ID / Teacher ID or password.", ex.getMessage());
+    }
+
+    @Test
+    void teacherUsesIssuedTeacherIdWithRoleDeterminedByServer() {
+        String teacherId = "gv_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        String password = "TeacherIdLogin123!";
+        long databaseId = jdbc.queryForObject("""
+                INSERT INTO users(username,password_hash,full_name,email,role)
+                VALUES(:loginId,:hash,'Teacher ID test',:email,'TEACHER') RETURNING id
+                """, java.util.Map.of("loginId", teacherId, "hash", passwords.encode(password),
+                "email", teacherId + "@example.com"), Long.class);
+        var authenticated = loginService.login(new LoginCommand(teacherId, password));
+        assertEquals(databaseId, authenticated.id());
+        assertEquals(teacherId, authenticated.username());
+        assertEquals(UserRole.TEACHER, authenticated.role());
+        assertEquals("INVALID_CREDENTIALS", assertThrows(AuthenticationException.class,
+                () -> loginService.login(new LoginCommand(teacherId, "WrongPassword123!"))).code());
     }
 
     @Test

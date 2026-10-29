@@ -20,7 +20,7 @@ function LoginPage() {
   const location = useLocation();
   const { login, user, recovering, sessionNotice, clearSessionNotice } =
     useAuth();
-  const [form, setForm] = useState({ username: "", password: "" });
+  const [form, setForm] = useState({ loginId: "", password: "" });
   const [showPassword, setShowPassword] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [pending, setPending] = useState(false);
@@ -89,10 +89,10 @@ function LoginPage() {
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFeedback(null);
-    if (!form.username.trim() || !form.password)
+    if (!form.loginId.trim() || !form.password)
       return setFeedback({
         type: "error",
-        message: "Enter both username and password.",
+        message: "Enter your Student ID or Teacher ID and password.",
       });
     if (connectionStatus !== "connected")
       return setFeedback({
@@ -103,7 +103,7 @@ function LoginPage() {
     setPending(true);
     const requestId = sendMessage(
       "LOGIN",
-      { username: form.username.trim(), password: form.password },
+      { username: form.loginId.trim(), password: form.password },
       handleResponse,
     );
     if (requestId === null) {
@@ -151,7 +151,7 @@ function LoginPage() {
             <form className="mt-6 grid gap-5" onSubmit={submit}>
               <label className="grid gap-2">
                 <span className="text-sm font-semibold text-[#405057]">
-                  Username or student ID
+                  Student ID / Teacher ID
                 </span>
                 <div className="relative">
                   <Icon
@@ -163,10 +163,10 @@ function LoginPage() {
                     autoComplete="username"
                     autoFocus
                     className={`${inputClass} pl-10`}
-                    name="username"
+                    name="loginId"
                     onChange={change}
-                    placeholder="Enter your username"
-                    value={form.username}
+                    placeholder="Enter your Student ID or Teacher ID"
+                    value={form.loginId}
                   />
                 </div>
               </label>

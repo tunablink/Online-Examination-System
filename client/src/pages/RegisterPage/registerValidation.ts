@@ -20,7 +20,7 @@ export function validateRegisterForm(form: RegisterFormState): string | null {
     const normalizedEmail = form.email.trim();
 
     if (!/^[a-zA-Z0-9._-]{3,50}$/.test(normalizedUsername)){
-        return 'Username must be 3–50 characters long and contain only letters, digits, dots, underscores, or hyphens.';
+        return 'Student ID must be 3–50 characters long and contain only letters, digits, dots, underscores, or hyphens.';
     }
 
     if (normalizedFullName.length < 2 || normalizedFullName.length > 100){

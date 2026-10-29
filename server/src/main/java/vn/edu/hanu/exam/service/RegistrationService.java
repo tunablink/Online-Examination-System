@@ -44,7 +44,7 @@ public class RegistrationService {
         String password = validatePassword(command.password());
 
         if (userRepository.existsByUsername(username)) {
-            throw new RegistrationException("USERNAME_ALREADY_EXISTS", "Username already exists.");
+            throw new RegistrationException("USERNAME_ALREADY_EXISTS", "Student ID already exists.");
         }
 
         if (userRepository.existsByEmail(email)){
@@ -59,20 +59,20 @@ public class RegistrationService {
             User createdUser = userRepository.create(newUser);
             return RegisteredUser.from(createdUser);
         } catch (DuplicateKeyException exception){
-            throw new RegistrationException("USER_ALREADY_EXISTS", "Username or email already exists.", exception);
+            throw new RegistrationException("USER_ALREADY_EXISTS", "Student ID or email already exists.", exception);
         }
 
     }
 
     private static String validateAndNormalizeUsername(String value){
         if (value == null){
-            throw new RegistrationException( "INVALID_USERNAME", "Username is required.");
+            throw new RegistrationException( "INVALID_USERNAME", "Student ID is required.");
         }
 
         String username = value.trim();
 
         if (!USERNAME_PATTERN.matcher(username).matches()){
-            throw new RegistrationException("INVALID_USERNAME", "Username must contain 3 to 50 characters " + "and use only letters, numbers, " + "dot, underscore, or hyphen.");
+            throw new RegistrationException("INVALID_USERNAME", "Student ID must contain 3 to 50 characters " + "and use only letters, numbers, " + "dot, underscore, or hyphen.");
         }
 
         return username.toLowerCase(Locale.ROOT);

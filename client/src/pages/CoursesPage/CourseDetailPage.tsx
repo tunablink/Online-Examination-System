@@ -5,7 +5,8 @@ import FeedbackMessage, { type Feedback } from '../../components/common/Feedback
 import Icon from '../../components/common/Icon';
 import type { CourseData, CourseStatisticsData, ServerExam, StudentDirectoryData } from '../../websocket/protocol';
 import { useWebSocket } from '../../websocket/useWebSocket';
-import { EMPTY_REGISTER_FORM, validateRegisterForm, type RegisterFormState } from '../RegisterPage/registerValidation';
+import ExistingStudentSearch from './components/ExistingStudentSearch';
+import RemoveEnrolledStudentDialog from './components/RemoveEnrolledStudentDialog';
 
 type Tab = 'exams' | 'students';
 type ExamFilter = 'ALL' | 'DRAFT' | 'PUBLISHED' | 'CLOSED';
@@ -86,9 +87,15 @@ export default function CourseDetailPage() {
   const [query, setQuery] = useState('');
   const [examFilter, setExamFilter] = useState<ExamFilter>('ALL');
   const [studentQuery, setStudentQuery] = useState('');
-  const [existingStudentId, setExistingStudentId] = useState('');
-  const [studentForm, setStudentForm] = useState<RegisterFormState>(EMPTY_REGISTER_FORM);
-  const [department, setDepartment] = useState('');
+  const [existingStudentQuery, setExistingStudentQuery] = useState('');
+  const [addingStudentId, setAddingStudentId] = useState<number | null>(null);
+  const enrollmentInFlight = useRef(false);
+  const [studentToRemove, setStudentToRemove] = useState<StudentDirectoryData | null>(null);
+  const [removalError, setRemovalError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState(false);
+  const removalInFlight = useRef(false);
+  const [directoryLoading, setDirectoryLoading] = useState(false);
+  const [directoryError, setDirectoryError] = useState<string | null>(null);
   const [file, setFile] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const studentSection = useRef<HTMLDivElement>(null);
@@ -98,9 +105,9 @@ export default function CourseDetailPage() {
   const [loading, setLoading] = useState(true);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
 
-  const loadCourse = useCallback(() => {
+  const loadCourse = useCallback((showLoading = true) => {
     if (!validId || status !== 'connected') return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     const requestId = sendMessage('GET_COURSE', { courseId: id }, (message) => {
       setLoading(false);
       const item = message.data?.course;
@@ -129,10 +136,21 @@ export default function CourseDetailPage() {
 
   const loadStudents = useCallback(() => {
     if (status !== 'connected') return;
-    sendMessage('GET_STUDENTS', {}, (message) => {
+    setDirectoryLoading(true);
+    setDirectoryError(null);
+    const requestId = sendMessage('GET_STUDENTS', {}, (message) => {
+      setDirectoryLoading(false);
       const items = message.data?.students;
       if (message.type === 'STUDENTS' && Array.isArray(items) && items.every(isStudent)) setAllStudents(items);
+      else {
+        setAllStudents([]);
+        setDirectoryError(message.error?.message ?? 'Could not load registered students. Please retry.');
+      }
     });
+    if (requestId === null) {
+      setDirectoryLoading(false);
+      setDirectoryError('The student directory request could not be sent.');
+    }
   }, [sendMessage, status]);
 
   useEffect(() => {
@@ -163,39 +181,54 @@ export default function CourseDetailPage() {
     if (requestId === null) { setPending(false); setFeedback({ type: 'error', message: 'The update request could not be sent.' }); }
   };
 
-  const enrollExisting = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!existingStudentId) return;
+  const enrollExisting = (student: StudentDirectoryData) => {
+    if (!validId || pending || enrollmentInFlight.current || status !== 'connected'
+      || student.active === false || students.some((member) => member.id === student.id)) return;
+    enrollmentInFlight.current = true;
+    setAddingStudentId(student.id);
     setPending(true);
-    const requestId = sendMessage('ENROLL_STUDENT', { courseId: id, studentId: Number(existingStudentId) }, (message) => {
+    const requestId = sendMessage('ENROLL_STUDENT', { courseId: id, studentId: student.id }, (message) => {
+      enrollmentInFlight.current = false;
+      setAddingStudentId(null);
       setPending(false);
       if (message.type === 'STUDENT_ENROLLED') {
-        setExistingStudentId(''); loadCourse();
+        setStudents((current) => current.some((member) => member.id === student.id) ? current : [...current, student]);
+        loadCourse(false);
         setFeedback({ type: 'success', message: message.data?.enrolled ? 'Student added to course.' : 'Student is already enrolled.' });
       } else setFeedback({ type: 'error', message: message.error?.message ?? 'Could not add student.' });
     });
-    if (requestId === null) { setPending(false); setFeedback({ type: 'error', message: 'The enrollment request could not be sent.' }); }
+    if (requestId === null) {
+      enrollmentInFlight.current = false;
+      setAddingStudentId(null);
+      setPending(false);
+      setFeedback({ type: 'error', message: 'The enrollment request could not be sent.' });
+    }
   };
 
-  const createStudent = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const error = validateRegisterForm(studentForm);
-    if (error || !department.trim()) {
-      setFeedback({ type: 'error', message: error ?? 'Department is required.' }); return;
-    }
+  const removeEnrolledStudent = () => {
+    if (!studentToRemove || !validId || pending || removalInFlight.current || status !== 'connected') return;
+    const student = studentToRemove;
+    removalInFlight.current = true;
+    setRemoving(true);
     setPending(true);
-    const requestId = sendMessage('CREATE_COURSE_STUDENT', {
-      courseId: id, username: studentForm.username.trim(), fullName: studentForm.fullName.trim(),
-      email: studentForm.email.trim(), password: studentForm.password,
-      confirmPassword: studentForm.confirmPassword, department: department.trim(),
-    }, (message) => {
+    setRemovalError(null);
+    const requestId = sendMessage('UNENROLL_STUDENT', { courseId: id, studentId: student.id }, (message) => {
+      removalInFlight.current = false;
+      setRemoving(false);
       setPending(false);
-      if (message.type === 'COURSE_STUDENT_CREATED') {
-        setStudentForm(EMPTY_REGISTER_FORM); setDepartment(''); loadCourse(); loadStudents();
-        setFeedback({ type: 'success', message: 'Student account created and added to course.' });
-      } else setFeedback({ type: 'error', message: message.error?.message ?? 'Could not create student.' });
+      if (message.type === 'STUDENT_UNENROLLED' && message.data?.courseId === id && message.data.studentId === student.id) {
+        setStudents((current) => current.filter((member) => member.id !== student.id));
+        setStudentToRemove(null);
+        loadCourse(false);
+        setFeedback({ type: 'success', message: `${student.fullName} was removed from this course. Their account and results were kept.` });
+      } else setRemovalError(message.error?.message ?? 'Could not remove this student. Please try again.');
     });
-    if (requestId === null) { setPending(false); setFeedback({ type: 'error', message: 'The student request could not be sent.' }); }
+    if (requestId === null) {
+      removalInFlight.current = false;
+      setRemoving(false);
+      setPending(false);
+      setRemovalError('The removal request could not be sent.');
+    }
   };
 
   const importStudents = async () => {
@@ -266,12 +299,14 @@ export default function CourseDetailPage() {
       </section>}
 
       {tab === 'students' && <section className="mt-5 grid gap-4" ref={studentSection}>
-        <div className="rounded-xl border border-[#dce7ea] bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e7edef] p-4"><div><h2 className="text-base font-bold">Enrolled Students</h2><p className="mt-1 text-sm text-[#718087]">{students.length} student accounts in this course</p></div><label className="relative"><Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#829096]" name="search" size={14} /><input className="h-9 w-[260px] rounded-lg bg-[#f1f5f6] pl-9 pr-3 text-sm outline-none" onChange={(event) => setStudentQuery(event.target.value)} placeholder="Search name, ID, or email..." value={studentQuery} /></label></div><div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead className="bg-[#f1f5f6] text-xs uppercase text-[#718087]"><tr><th className="px-4 py-3">Student name</th><th className="px-4 py-3">Student ID</th><th className="px-4 py-3">Email</th></tr></thead><tbody>{visibleStudents.map((student) => <tr className="border-t border-[#edf1f2]" key={student.id}><td className="px-4 py-3 font-semibold">{student.fullName}</td><td className="px-4 py-3">{student.username}</td><td className="px-4 py-3 text-[#53646a]">{student.email}</td></tr>)}{visibleStudents.length === 0 && <tr><td className="px-4 py-7 text-center text-[#718087]" colSpan={3}>No students found.</td></tr>}</tbody></table></div></div>
-        <div className="grid grid-cols-2 gap-4 max-md:grid-cols-1"><form className="rounded-xl border border-[#dce7ea] bg-white p-5" onSubmit={enrollExisting}><h3 className="text-base font-bold">Add existing student</h3><p className="mt-1 text-sm text-[#718087]">A student can be enrolled in more than one course.</p><div className="mt-4 flex gap-2"><select aria-label="Existing student" className={inputClass} onChange={(event) => setExistingStudentId(event.target.value)} value={existingStudentId}><option value="">Select a student</option>{allStudents.filter((student) => !students.some((member) => member.id === student.id)).map((student) => <option key={student.id} value={student.id}>{student.fullName} ({student.username})</option>)}</select><button className="rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white disabled:opacity-50" disabled={!existingStudentId || pending || status !== 'connected'} type="submit">Add</button></div></form><div className="rounded-xl border border-[#dce7ea] bg-white p-5"><h3 className="text-base font-bold">Import Excel into this course</h3><p className="mt-1 text-sm leading-5 text-[#718087]">First worksheet: studentId, fullName, email, password, confirmPassword, department. Maximum 500 rows and 1 MB; valid rows are imported.</p><div className="mt-3 flex flex-wrap items-center gap-2"><label className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold ${file ? 'border-[#70b2be] bg-[#eef9fa] text-[#00778b]' : 'border-[#d5e0e3] bg-[#f1f5f6] text-[#405057]'}`}><Icon name="document" size={13} />Choose File<input ref={fileRef} accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Course student Excel file" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} type="file" /></label><span className="max-w-[130px] truncate text-sm text-[#849197]">{file?.name ?? 'No file chosen'}</span><button className="h-9 rounded-lg bg-[#00778b] px-3 text-sm font-semibold text-white disabled:bg-[#a8bec3]" disabled={!file || pending || status !== 'connected'} onClick={() => void importStudents()} type="button">Import Excel</button></div></div></div>
-        <form className="rounded-xl border border-[#dce7ea] bg-white p-5" onSubmit={createStudent}><h3 className="text-base font-bold">Create student in course</h3><div className="mt-4 grid grid-cols-2 gap-4 max-sm:grid-cols-1">{(['fullName', 'username', 'email', 'password', 'confirmPassword'] as const).map((name) => <label className={labelClass} key={name}>{name === 'username' ? 'Student ID' : name === 'fullName' ? 'Full name' : name === 'email' ? 'Institutional email' : name === 'confirmPassword' ? 'Confirm password' : 'Password'}<input className={inputClass} onChange={(event) => setStudentForm((current) => ({ ...current, [name]: event.target.value }))} required type={name.toLowerCase().includes('password') ? 'password' : name === 'email' ? 'email' : 'text'} value={studentForm[name]} /></label>)}<label className={labelClass}>Department<input className={inputClass} onChange={(event) => setDepartment(event.target.value)} required value={department} /></label></div><div className="mt-5 flex justify-end border-t border-[#e7edef] pt-4"><button className="inline-flex h-10 items-center gap-2 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white disabled:opacity-50" disabled={pending || status !== 'connected'} type="submit"><Icon name="plus" size={14} />Create and add student</button></div></form>
+        <div className="rounded-xl border border-[#dce7ea] bg-white"><div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#e7edef] p-4"><div><h2 className="text-base font-bold">Enrolled Students</h2><p className="mt-1 text-sm text-[#718087]">{students.length} student accounts in this course</p></div><label className="relative"><Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#829096]" name="search" size={14} /><input className="h-9 w-[260px] rounded-lg bg-[#f1f5f6] pl-9 pr-3 text-sm outline-none" onChange={(event) => setStudentQuery(event.target.value)} placeholder="Search name, ID, or email..." value={studentQuery} /></label></div><div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead className="bg-[#f1f5f6] text-xs uppercase text-[#718087]"><tr><th className="px-4 py-3">Student name</th><th className="px-4 py-3">Student ID</th><th className="px-4 py-3">Email</th><th className="px-4 py-3 text-right">Action</th></tr></thead><tbody>{visibleStudents.map((student) => <tr className="border-t border-[#edf1f2]" key={student.id}><td className="px-4 py-3 font-semibold">{student.fullName}</td><td className="px-4 py-3">{student.username}</td><td className="px-4 py-3 text-[#53646a]">{student.email}</td><td className="px-4 py-3 text-right"><button aria-label={`Remove ${student.fullName} (${student.username}) from course`} className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-lg border border-[#edcdd0] bg-[#fff5f5] px-3 text-sm font-semibold text-[#b32c33] hover:bg-[#ffe5e7] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#b32c33] disabled:cursor-not-allowed disabled:opacity-50" disabled={pending || status !== 'connected'} onClick={() => { setRemovalError(null); setStudentToRemove(student); }} type="button"><Icon name="trash" size={17} />Remove</button></td></tr>)}{visibleStudents.length === 0 && <tr><td className="px-4 py-7 text-center text-[#718087]" colSpan={4}>No students found.</td></tr>}</tbody></table></div></div>
+        <div className="grid grid-cols-2 items-start gap-4 max-lg:grid-cols-1">
+          <ExistingStudentSearch students={allStudents} enrolledStudentIds={new Set(students.map((student) => student.id))} query={existingStudentQuery} onQueryChange={setExistingStudentQuery} onAdd={enrollExisting} addingStudentId={addingStudentId} disabled={pending || status !== 'connected'} loading={directoryLoading} error={directoryError} onReload={loadStudents} />
+          <div className="rounded-xl border border-[#dce7ea] bg-white p-5"><h3 className="text-base font-bold">Import Excel into this course</h3><p className="mt-1 text-sm leading-5 text-[#718087]">First worksheet: studentId, fullName, email, password, confirmPassword, department. Maximum 500 rows and 1 MB; valid rows are imported.</p><div className="mt-3 flex flex-wrap items-center gap-2"><label className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold ${file ? 'border-[#70b2be] bg-[#eef9fa] text-[#00778b]' : 'border-[#d5e0e3] bg-[#f1f5f6] text-[#405057]'}`}><Icon name="document" size={13} />Choose File<input ref={fileRef} accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" aria-label="Course student Excel file" className="sr-only" onChange={(event) => setFile(event.target.files?.[0] ?? null)} type="file" /></label><span className="max-w-[130px] truncate text-sm text-[#849197]">{file?.name ?? 'No file chosen'}</span><button className="h-9 rounded-lg bg-[#00778b] px-3 text-sm font-semibold text-white disabled:bg-[#a8bec3]" disabled={!file || pending || status !== 'connected'} onClick={() => void importStudents()} type="button">Import Excel</button></div></div></div>
       </section>}
 
       {editing && editForm && <div className="fixed inset-0 z-50 grid place-items-center bg-[#172126]/50 p-4"><section aria-label="Edit course" aria-modal="true" className="max-h-[90vh] w-full max-w-[600px] overflow-y-auto rounded-xl bg-white p-6 shadow-xl" role="dialog"><h2 className="text-xl font-bold">Edit Course Info</h2><p className="mt-1 text-sm text-[#718087]">{course.code}</p><form className="mt-5 grid grid-cols-2 gap-4 max-sm:grid-cols-1" onSubmit={saveCourse}>{(['name', 'subject', 'department', 'academicYear', 'semester', 'description'] as const).map((name) => <label className={`${labelClass} ${name === 'name' || name === 'description' ? 'col-span-2 max-sm:col-span-1' : ''}`} key={name}>{name === 'academicYear' ? 'Academic Year' : name === 'name' ? 'Course Name' : name.charAt(0).toUpperCase() + name.slice(1)}{name === 'semester' ? <select className={inputClass} onChange={(event) => setEditForm((current) => current && ({ ...current, semester: event.target.value }))} value={editForm.semester ?? ''}><option>Semester 1</option><option>Semester 2</option><option>Summer</option></select> : name === 'description' ? <textarea className={`${inputClass} h-20 py-2`} onChange={(event) => setEditForm((current) => current && ({ ...current, description: event.target.value }))} value={editForm.description ?? ''} /> : <input className={inputClass} onChange={(event) => setEditForm((current) => current && ({ ...current, [name]: event.target.value }))} required={name === 'name' || name === 'subject' || name === 'academicYear'} value={editForm[name] ?? ''} />}</label>)}<div className="col-span-2 flex justify-end gap-2 border-t border-[#e7edef] pt-4 max-sm:col-span-1"><button className={mutedButton} onClick={() => setEditing(false)} type="button">Cancel</button><button className="h-9 rounded-lg bg-[#00778b] px-4 text-sm font-semibold text-white disabled:opacity-50" disabled={pending || status !== 'connected'} type="submit">Save changes</button></div></form></section></div>}
+      {studentToRemove && <RemoveEnrolledStudentDialog studentName={studentToRemove.fullName} username={studentToRemove.username} courseName={course.name} pending={removing} connected={status === 'connected'} error={removalError} onCancel={() => { if (!removalInFlight.current) { setStudentToRemove(null); setRemovalError(null); } }} onConfirm={removeEnrolledStudent} />}
     </>}
   </div>;
 }

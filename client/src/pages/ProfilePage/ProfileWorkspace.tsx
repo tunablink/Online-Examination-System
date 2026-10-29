@@ -144,7 +144,7 @@ function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
     if (requestId === null) setChangingPassword(false);
   };
 
-  const identityLabel = expectedRole === 'STUDENT' ? 'Student ID' : 'Staff username';
+  const identityLabel = expectedRole === 'STUDENT' ? 'Student ID' : 'Teacher ID';
   const initials = profile?.fullName.trim().split(/\s+/).slice(-2).map((part) => part[0]).join('').toUpperCase() ?? '--';
   const passwordControls = <>
     {passwordFeedback && <div className="mt-5"><FeedbackMessage feedback={passwordFeedback} onClose={() => setPasswordFeedback(null)} /></div>}

@@ -7,7 +7,6 @@ import { useWebSocket } from '../../websocket/useWebSocket';
 import { EMPTY_REGISTER_FORM, validateRegisterForm, type RegisterFormState } from './registerValidation';
 
 const inputClass = 'h-11 w-full rounded-lg border border-[#d6e1e4] bg-white px-3.5 text-base outline-none placeholder:text-[#9aa6aa] focus:border-[#70b2be] focus:ring-4 focus:ring-[#00849a]/10';
-const studentId = (id: number) => `ST-${String(id).padStart(5, '0')}`;
 
 const isStudent = (value: unknown): value is StudentDirectoryData => {
   if (typeof value !== 'object' || value === null) return false;
@@ -173,7 +172,7 @@ function RegisterPage() {
   };
 
   const deleteStudent = (student: StudentDirectoryData) => {
-    if (busyStudentId !== null || !window.confirm(`Remove ${student.fullName} (${studentId(student.id)}) from active student accounts?`)) return;
+    if (busyStudentId !== null || !window.confirm(`Remove ${student.fullName} (${student.username}) from active student accounts?`)) return;
     if (connectionStatus !== 'connected') return setFeedback({ type: 'error', message: 'The WebSocket connection is not ready.' });
     setBusyStudentId(student.id);
     const requestId = sendMessage('DELETE_STUDENT', { studentId: student.id }, (message) => {
@@ -189,7 +188,7 @@ function RegisterPage() {
   };
 
   const normalizedSearch = search.trim().toLowerCase();
-  const visibleStudents = students.filter((student) => !normalizedSearch || [student.fullName, studentId(student.id), student.username, student.email]
+  const visibleStudents = students.filter((student) => !normalizedSearch || [student.fullName, student.username, student.email]
     .some((value) => value.toLowerCase().includes(normalizedSearch)));
 
   return (
@@ -230,7 +229,7 @@ function RegisterPage() {
           <table className="w-full min-w-[720px] text-left">
             <thead className="bg-[#f9fbfc] text-xs font-bold uppercase tracking-[.06em] text-[#6f7e83]"><tr><th className="px-5 py-3">Student name</th><th className="px-5 py-3">Student ID</th><th className="px-5 py-3">Email</th><th className="px-5 py-3">Created</th><th className="px-5 py-3 text-right">Modify</th></tr></thead>
             <tbody className="divide-y divide-[#edf1f2]">
-              {visibleStudents.map((student) => <tr className="text-sm text-[#53646a]" key={student.id}><td className="px-5 py-3 font-semibold text-[#26353a]">{student.fullName}</td><td className="px-5 py-3 font-mono text-sm">{studentId(student.id)}</td><td className="px-5 py-3">{student.email}</td><td className="px-5 py-3">{new Date(student.createdAt).toLocaleDateString('en-US')}</td><td className="px-5 py-3"><div className="flex justify-end gap-2"><button aria-label={`Edit ${student.fullName}`} className="grid h-8 w-8 place-items-center rounded-lg border border-[#b9d8de] text-[#2f9bb1] disabled:opacity-40" disabled={busyStudentId !== null || connectionStatus !== 'connected'} onClick={() => openEdit(student)} title="Edit student" type="button"><Icon name="edit" size={14} /></button><button aria-label={`Remove ${student.fullName}`} className="grid h-8 w-8 place-items-center rounded-lg border border-[#b9d8de] text-[#819096] disabled:opacity-40" disabled={busyStudentId !== null || connectionStatus !== 'connected'} onClick={() => deleteStudent(student)} title="Remove student" type="button"><Icon name="trash" size={14} /></button></div></td></tr>)}
+              {visibleStudents.map((student) => <tr className="text-sm text-[#53646a]" key={student.id}><td className="px-5 py-3 font-semibold text-[#26353a]">{student.fullName}</td><td className="px-5 py-3 font-mono text-sm">{student.username}</td><td className="px-5 py-3">{student.email}</td><td className="px-5 py-3">{new Date(student.createdAt).toLocaleDateString('en-US')}</td><td className="px-5 py-3"><div className="flex justify-end gap-2"><button aria-label={`Edit ${student.fullName}`} className="grid h-8 w-8 place-items-center rounded-lg border border-[#b9d8de] text-[#2f9bb1] disabled:opacity-40" disabled={busyStudentId !== null || connectionStatus !== 'connected'} onClick={() => openEdit(student)} title="Edit student" type="button"><Icon name="edit" size={14} /></button><button aria-label={`Remove ${student.fullName}`} className="grid h-8 w-8 place-items-center rounded-lg border border-[#b9d8de] text-[#819096] disabled:opacity-40" disabled={busyStudentId !== null || connectionStatus !== 'connected'} onClick={() => deleteStudent(student)} title="Remove student" type="button"><Icon name="trash" size={14} /></button></div></td></tr>)}
             </tbody>
           </table>
           {loadingStudents && <p className="py-10 text-center text-sm text-[#7b898e]">Loading students through WebSocket…</p>}
@@ -241,7 +240,7 @@ function RegisterPage() {
       {editingStudent && <div className="fixed inset-0 z-50 grid place-items-center bg-[#172126]/50 p-4">
         <section aria-label="Edit student account" aria-modal="true" className="max-h-[90vh] w-full max-w-[620px] overflow-y-auto rounded-xl border border-[#dce7ea] bg-white p-6 shadow-xl" role="dialog">
           <h2 className="text-base font-bold">Edit student account</h2>
-          <p className="mt-1 text-sm text-[#718087]">{studentId(editingStudent.id)}</p>
+          <p className="mt-1 text-sm text-[#718087]">Student ID: {editingStudent.username}</p>
           {feedback && <div className="mt-4"><FeedbackMessage feedback={feedback} onClose={() => setFeedback(null)} /></div>}
           <form className="mt-5 grid grid-cols-2 gap-4 max-sm:grid-cols-1" onSubmit={saveStudent}>
             <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Full name</span><input className={inputClass} disabled={busyStudentId !== null} onChange={(event) => setEditForm((current) => ({ ...current, fullName: event.target.value }))} required value={editForm.fullName} /></label>

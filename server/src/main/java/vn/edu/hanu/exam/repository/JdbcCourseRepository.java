@@ -126,6 +126,27 @@ public class JdbcCourseRepository implements CourseRepository {
     }
 
     @Override
+    public void lockEnrollment(long courseId, long studentId) {
+        jdbc.query("""
+                SELECT student_id FROM course_students
+                WHERE course_id=:courseId AND student_id=:studentId FOR UPDATE
+                """, Map.of("courseId", courseId, "studentId", studentId), (rs, row) -> rs.getLong("student_id"));
+    }
+
+    @Override
+    public boolean unenroll(long courseId, long studentId) {
+        return jdbc.update("""
+                DELETE FROM course_students cs
+                WHERE cs.course_id = :courseId AND cs.student_id = :studentId
+                  AND NOT EXISTS (
+                    SELECT 1 FROM exam_attempts a JOIN exams e ON e.id = a.exam_id
+                    WHERE e.course_id = :courseId AND a.student_id = :studentId
+                      AND a.status = 'IN_PROGRESS'
+                  )
+                """, Map.of("courseId", courseId, "studentId", studentId)) == 1;
+    }
+
+    @Override
     public boolean isEnrolled(long courseId, long studentId) {
         Boolean enrolled = jdbc.queryForObject("""
                 SELECT EXISTS (SELECT 1 FROM course_students WHERE course_id = :courseId AND student_id = :studentId)

@@ -22,6 +22,47 @@ import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
 
 class CourseMessageHandlerTests {
     @Test
+    void removalRequiresTeacherAndPreservesRequestCorrelation() {
+        CourseService courses = mock(CourseService.class);
+        var sessions = new AuthenticatedSessionRegistry();
+        var handler = new CourseMessageHandler(courses, sessions);
+        var socket = mock(WebSocketSession.class);
+        when(socket.getId()).thenReturn("remove-session");
+        var request = new ClientMessage("remove-1", "UNENROLL_STUDENT", Map.of("courseId", 3, "studentId", 4));
+        assertEquals("AUTHENTICATION_REQUIRED", handler.handle(socket, request).error().code());
+        sessions.authenticate("remove-session", new LoggedInUser(4, "student", "Student", "s@example.com", UserRole.STUDENT));
+        assertEquals("FORBIDDEN", handler.handle(socket, request).error().code());
+        verify(courses, never()).unenroll(anyLong(), anyLong(), anyLong());
+        sessions.authenticate("remove-session", new LoggedInUser(1, "teacher", "Teacher", "t@example.com", UserRole.TEACHER));
+        when(courses.unenroll(3, 1, 4)).thenReturn(true);
+        var response = handler.handle(socket, request);
+        assertEquals("remove-1", response.requestId());
+        assertEquals("STUDENT_UNENROLLED", response.type());
+        assertEquals(Map.of("courseId", 3L, "studentId", 4L, "removed", true), response.data());
+        verify(courses).unenroll(3, 1, 4);
+    }
+
+    @Test
+    void removalRejectsInvalidPayloadAndReturnsSafeActiveAttemptError() {
+        CourseService courses = mock(CourseService.class);
+        var sessions = new AuthenticatedSessionRegistry();
+        var handler = new CourseMessageHandler(courses, sessions);
+        var socket = mock(WebSocketSession.class);
+        when(socket.getId()).thenReturn("remove-session");
+        sessions.authenticate("remove-session", new LoggedInUser(1, "teacher", "Teacher", "t@example.com", UserRole.TEACHER));
+        for (var payload : java.util.List.of(Map.of("courseId", 3), Map.of("courseId", 3, "studentId", -1),
+                Map.of("courseId", 3, "studentId", "4"))) {
+            assertEquals("INVALID_PAYLOAD", handler.handle(socket,
+                    new ClientMessage("bad", "UNENROLL_STUDENT", new java.util.HashMap<>(payload))).error().code());
+        }
+        verify(courses, never()).unenroll(anyLong(), anyLong(), anyLong());
+        when(courses.unenroll(3, 1, 4)).thenThrow(new vn.edu.hanu.exam.service.course.CourseException(
+                "STUDENT_HAS_ACTIVE_ATTEMPT", "An exam is still in progress."));
+        assertEquals("STUDENT_HAS_ACTIVE_ATTEMPT", handler.handle(socket,
+                new ClientMessage("active", "UNENROLL_STUDENT", Map.of("courseId", 3, "studentId", 4))).error().code());
+    }
+
+    @Test
     void onlyAuthenticatedTeacherCanCreateCourse() {
         CourseService courses = mock(CourseService.class);
         AuthenticatedSessionRegistry sessions = new AuthenticatedSessionRegistry();

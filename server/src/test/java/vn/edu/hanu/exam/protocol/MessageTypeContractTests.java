@@ -68,6 +68,7 @@ class MessageTypeContractTests {
                 "GET_COURSES", "COURSES",
                 "GET_COURSE", "COURSE_DETAILS",
                 "ENROLL_STUDENT", "STUDENT_ENROLLED",
+                "UNENROLL_STUDENT", "STUDENT_UNENROLLED",
                 "CREATE_COURSE_STUDENT", "COURSE_STUDENT_CREATED",
                 "IMPORT_COURSE_STUDENTS", "COURSE_STUDENTS_IMPORTED",
 
@@ -333,6 +334,7 @@ class MessageTypeContractTests {
                 MessageType.GET_COURSES,
                 MessageType.GET_COURSE,
                 MessageType.ENROLL_STUDENT,
+                MessageType.UNENROLL_STUDENT,
                 MessageType.CREATE_COURSE_STUDENT,
                 MessageType.IMPORT_COURSE_STUDENTS,
 
@@ -411,6 +413,7 @@ class MessageTypeContractTests {
                 MessageType.COURSES,
                 MessageType.COURSE_DETAILS,
                 MessageType.STUDENT_ENROLLED,
+                MessageType.STUDENT_UNENROLLED,
                 MessageType.COURSE_STUDENT_CREATED,
                 MessageType.COURSE_STUDENTS_IMPORTED,
 

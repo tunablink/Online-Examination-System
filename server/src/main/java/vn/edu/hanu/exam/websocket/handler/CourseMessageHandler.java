@@ -61,6 +61,13 @@ public class CourseMessageHandler {
                 }
                 case "ENROLL_STUDENT" -> ServerMessage.success(requestId, "STUDENT_ENROLLED", Map.of(
                         "enrolled", courses.enroll(number(payload, "courseId"), teacher.id(), number(payload, "studentId"))));
+                case "UNENROLL_STUDENT" -> {
+                    long courseId = number(payload, "courseId");
+                    long studentId = number(payload, "studentId");
+                    yield ServerMessage.success(requestId, "STUDENT_UNENROLLED", Map.of(
+                            "courseId", courseId, "studentId", studentId,
+                            "removed", courses.unenroll(courseId, teacher.id(), studentId)));
+                }
                 case "CREATE_COURSE_STUDENT" -> {
                     String password = string(payload, "password");
                     if (!password.equals(string(payload, "confirmPassword"))) {

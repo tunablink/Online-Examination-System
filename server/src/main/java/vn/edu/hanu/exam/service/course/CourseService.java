@@ -134,6 +134,19 @@ public class CourseService {
         return courses.statistics(courseId);
     }
 
+    @Transactional
+    public boolean unenroll(long courseId, long teacherId, long studentId) {
+        requireOwned(courseId, teacherId);
+        if (studentId <= 0) throw new CourseException("INVALID_STUDENT", "A valid student ID is required.");
+        courses.lockEnrollment(courseId, studentId);
+        boolean removed = courses.unenroll(courseId, studentId);
+        if (!removed && courses.isEnrolled(courseId, studentId)) {
+            throw new CourseException("STUDENT_HAS_ACTIVE_ATTEMPT",
+                    "This student has an in-progress exam in this course. Wait until the attempt is finalized before removing them.");
+        }
+        return removed;
+    }
+
     public boolean enroll(long courseId, long teacherId, long studentId) {
         requireOwned(courseId, teacherId);
         User student = users.findById(studentId)

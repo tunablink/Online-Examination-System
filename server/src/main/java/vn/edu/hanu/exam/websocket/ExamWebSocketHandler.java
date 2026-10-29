@@ -365,7 +365,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                     sendMessage(session, studentManagementMessageHandler.handleDelete(session, clientMessage));
 
             case CREATE_COURSE, UPDATE_COURSE, ARCHIVE_COURSE, RESTORE_COURSE,
-                    GET_COURSES, GET_COURSE, ENROLL_STUDENT,
+                    GET_COURSES, GET_COURSE, ENROLL_STUDENT, UNENROLL_STUDENT,
                     CREATE_COURSE_STUDENT, IMPORT_COURSE_STUDENTS ->
                     sendMessage(session, courseMessageHandler.handle(session, clientMessage));
 

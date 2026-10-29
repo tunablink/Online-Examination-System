@@ -4,6 +4,10 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 
 **Cập nhật: 29/10/2026.** Đây là hiện trạng source, thay thế các bản tiến độ cũ trong README. Có source hoặc build/test pass không đồng nghĩa đã nghiệm thu đầy đủ.
 
+### Định danh đăng nhập
+
+**Định danh tài khoản:** giao diện đăng nhập dùng **Student ID / Teacher ID** và mật khẩu, không có một Username riêng. Student ID trong trang cấp tài khoản, danh sách, tìm kiếm và hồ sơ là cùng mã được cấp khi tạo tài khoản; không tự tạo mã `ST-xxxxx` từ primary key. Teacher ID hiển thị ở hồ sơ teacher. Role do server xác định sau đăng nhập, không do người dùng tự chọn. Để tương thích tài khoản cũ, cột/field kỹ thuật `username` vẫn lưu/truyền mã đăng nhập này; `users.id` và các foreign key vẫn là ID nội bộ, không thay thế mã đăng nhập. Không đổi mã hay mật khẩu của dữ liệu cũ.
+
 ### Enrollment key theo từng đề thi
 
 - Teacher nhập key khi tạo đề, hoặc đặt/thay key trong Edit của draft. `CREATE_EXAM` yêu cầu key ở cả client và backend; khi sửa draft, để trống giữ key đã có.
@@ -60,7 +64,7 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 | Results | Student xem lịch sử/kết quả của mình; teacher review bài nộp của đề mình sở hữu |
 | Monitoring | Snapshot push sau commit start/report/finalize; dashboard/activity reports dùng dữ liệu thật |
 | UI | EZAM, logo dùng chung, Tailwind, typography dễ đọc, font Outfit ở tên thương hiệu student header |
-| Checks | Full backend gần nhất **302 tests pass**; frontend lint/build pass |
+| Checks | Full backend gần nhất **309 tests pass**; frontend lint/build pass |
 | Acceptance/load | Chưa hoàn tất browser checklist, fresh-install verification hoặc benchmark multi-user |
 
 Một số search/notification/language controls có thể mới là giao diện, chưa phải nghiệp vụ hoàn chỉnh. Protocol có student list/detail, nhưng route `/teacher/students/new` hiện là **tạo sinh viên**, không phải cam kết có màn hình quản trị sinh viên đầy đủ.
@@ -334,7 +338,7 @@ git diff --check
 
 | Kiểm tra | Bằng chứng |
 |---|---|
-| Full backend sau vá key sai khi đã có attempt | **302 tests, 0 failures, 0 errors, 0 skipped — BUILD SUCCESS** |
+| Full backend sau bổ sung xoá enrollment và thống nhất Student ID / Teacher ID | **309 tests, 0 failures, 0 errors, 0 skipped — BUILD SUCCESS** |
 | Enrollment key và khoảng vào thi | 19 PostgreSQL/Spring integration tests; key/course/opening guards, không lộ bí mật, lưu giờ đóng khi tạo/sửa, từ chối sau giờ đóng, vào muộn vẫn đủ phút, verified resume/save/submit sau giờ đóng, chặn legacy chưa xác thực; key sai trên attempt đã xác thực bị chặn ở service và WebSocket; contract tests CREATE_EXAM thiếu key/giờ đóng |
 | Registration authorization | 3 integration tests: anonymous/student bị chặn; teacher tạo student/hash đúng; payload role không nâng quyền |
 | Attempt integration | 9 tests; deadline, idempotence, concurrent submit/finalizer có điều khiển |

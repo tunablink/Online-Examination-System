@@ -60,6 +60,8 @@ public enum MessageType {
     COURSE_DETAILS(false),
     ENROLL_STUDENT(true),
     STUDENT_ENROLLED(false),
+    UNENROLL_STUDENT(true),
+    STUDENT_UNENROLLED(false),
     CREATE_COURSE_STUDENT(true),
     COURSE_STUDENT_CREATED(false),
     IMPORT_COURSE_STUDENTS(true),

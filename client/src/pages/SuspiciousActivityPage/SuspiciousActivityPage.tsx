@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { useTeacherMonitoring } from "../../websocket/useTeacherMonitoring";
 
 function SuspiciousActivityPage() {
-  const { data, loading, error, refresh } = useTeacherMonitoring();
+  const { data, loading, error } = useTeacherMonitoring();
   const [examId, setExamId] = useState("ALL");
   const [severity, setSeverity] = useState("ALL");
   const [query, setQuery] = useState("");
@@ -34,14 +34,6 @@ function SuspiciousActivityPage() {
         <div>
           <h1 className="mt-2 text-3xl font-bold tracking-[-.04em]">Activity reports</h1>
         </div>
-        <button
-          className="rounded-lg border border-[#bdd9df] bg-white px-4 py-2 text-base text-[#00778b] disabled:opacity-50"
-          disabled={loading}
-          onClick={refresh}
-          type="button"
-        >
-          Refresh
-        </button>
       </section>
       {error && (
         <p
