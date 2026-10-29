@@ -19,7 +19,5 @@ public interface CourseRepository {
     List<StudentDetails> findStudents(long courseId);
     CourseStatistics statistics(long courseId);
     boolean enroll(long courseId, long studentId);
-    boolean unenroll(long courseId, long studentId);
-    boolean updateStudentIdentity(long courseId, long studentId, String username, String fullName, String email);
     boolean isEnrolled(long courseId, long studentId);
 }

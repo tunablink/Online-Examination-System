@@ -93,54 +93,6 @@ public class StudentAccountService {
         return new AccountRows(parsed.rows(), parsed.skippedCount());
     }
 
-    public RosterRows parseRosterRows(String contentBase64) {
-        try (XSSFWorkbook workbook = new XSSFWorkbook(new ByteArrayInputStream(decodeFile(contentBase64)))) {
-            if (workbook.getNumberOfSheets() == 0) throw invalidFile("Excel file has no worksheet.");
-            Sheet sheet = workbook.getSheetAt(0);
-            if (sheet.getLastRowNum() - sheet.getFirstRowNum() > 5000) throw invalidFile("Excel worksheet has too many rows.");
-            Row header = sheet.getRow(sheet.getFirstRowNum());
-            if (header == null) throw invalidFile("Excel header row is missing.");
-            Map<String, Integer> columns = new HashMap<>();
-            for (Cell cell : header) {
-                String name = cell.toString().trim().replace(" ", "").toLowerCase(Locale.ROOT);
-                if (name.equals("studentid")) name = "username";
-                if (name.equals("fullname")) name = "fullName";
-                if (columns.putIfAbsent(name, cell.getColumnIndex()) != null) throw invalidFile("Excel headers must be unique.");
-            }
-            if (!columns.keySet().containsAll(List.of("username", "fullName", "email"))) {
-                throw invalidFile("Excel requires studentId, fullName, and email headers.");
-            }
-            List<RosterRow> rows = new ArrayList<>();
-            int skipped = 0;
-            int processed = 0;
-            for (int index = sheet.getFirstRowNum() + 1; index <= sheet.getLastRowNum(); index++) {
-                Row row = sheet.getRow(index);
-                if (row == null || rowIsEmpty(row)) continue;
-                if (++processed > MAX_STUDENTS) throw invalidFile("Excel file may contain at most 500 students.");
-                try {
-                    String studentId = value(row, columns, "username");
-                    String fullName = value(row, columns, "fullName");
-                    String email = value(row, columns, "email");
-                    if (!USERNAME_PATTERN.matcher(studentId).matches() || fullName.length() < 2
-                            || fullName.length() > 100 || email.length() > 255
-                            || !EMAIL_PATTERN.matcher(email).matches()) {
-                        skipped++;
-                        continue;
-                    }
-                    rows.add(new RosterRow(studentId, fullName, email));
-                } catch (RegistrationException exception) {
-                    skipped++;
-                }
-            }
-            if (processed == 0) throw invalidFile("Excel file contains no students.");
-            return new RosterRows(rows, skipped);
-        } catch (RegistrationException exception) {
-            throw exception;
-        } catch (IOException | RuntimeException exception) {
-            throw new RegistrationException("INVALID_EXCEL_FILE", "Excel file could not be read.", exception);
-        }
-    }
-
     private static byte[] decodeFile(String contentBase64) {
         if (contentBase64 == null || contentBase64.isBlank() || contentBase64.length() > MAX_FILE_BYTES * 4 / 3 + 8) {
             throw invalidFile("Excel file is required and must be at most 1 MB.");
@@ -256,8 +208,6 @@ public class StudentAccountService {
     }
 
     public record NewStudentRow(int rowNumber, RegisterUserCommand command, String department) {}
-    public record RosterRow(String studentId, String fullName, String email) {}
-    public record RosterRows(List<RosterRow> rows, int skippedCount) {}
     public record AccountRows(List<NewStudentRow> rows, int skippedCount) {}
 
     private record ParsedRows(List<NewStudentRow> rows, int skippedCount) {}

@@ -6,7 +6,6 @@ import { useWebSocket } from '../../websocket/useWebSocket';
 import type { CourseData } from '../../websocket/protocol';
 import type { QuestionEditorQuestion } from '../../types/questionEditor';
 import QuestionEditorForm from '../QuestionManagementPage/components/QuestionEditorForm';
-import QuestionListItem from '../QuestionManagementPage/components/QuestionListItem';
 import { enrollmentKeyError } from '../../utils/enrollmentKey';
 import EnrollmentKeyField from '../../components/exam/EnrollmentKeyField';
 
@@ -47,6 +46,7 @@ function CreateExamPage() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [questions, setQuestions] = useState<QuestionEditorQuestion[]>([]);
+  const [showQuestionEditor, setShowQuestionEditor] = useState(false);
   const [editingQuestionId, setEditingQuestionId] = useState<string | null>(null);
   const [editorVersion, setEditorVersion] = useState(0);
 
@@ -126,20 +126,9 @@ function CreateExamPage() {
       ? current.map((item) => item.id === editingQuestionId ? { ...question, id: editingQuestionId } : item)
       : [...current, { ...question, displayOrder: current.length }]);
     setEditingQuestionId(null);
+    setShowQuestionEditor(false);
     setEditorVersion((value) => value + 1);
     setError(null);
-  };
-
-  const moveQuestion = (questionId: string, direction: -1 | 1) => {
-    setQuestions((current) => {
-      const from = current.findIndex((question) => question.id === questionId);
-      const to = from + direction;
-      if (from < 0 || to < 0 || to >= current.length) return current;
-      const reordered = [...current];
-      const [question] = reordered.splice(from, 1);
-      reordered.splice(to, 0, question);
-      return reordered;
-    });
   };
 
   return (
@@ -175,44 +164,9 @@ function CreateExamPage() {
             </div>
           </section>
 
-          <div id="question-editor">
-            <QuestionEditorForm
-              initialQuestion={questions.find((question) => question.id === editingQuestionId) ?? null}
-              key={editingQuestionId ?? `new-${editorVersion}`}
-              onCancel={() => setEditingQuestionId(null)}
-              onSave={saveQuestion}
-            />
-          </div>
-          <section>
-            <div className="mb-3">
-              <h2 className="text-base font-bold">Examination questions</h2>
-              <p className="mt-1 text-sm text-[#7c898e]">{questions.length} question{questions.length === 1 ? '' : 's'} ready for this draft</p>
-            </div>
-            <div className="grid gap-3">
-              {questions.map((question, index) => (
-                <QuestionListItem
-                  index={index}
-                  isFirst={index === 0}
-                  isLast={index === questions.length - 1}
-                  key={question.id}
-                  onDelete={(selected) => {
-                    setQuestions((current) => current.filter((item) => item.id !== selected.id));
-                    if (editingQuestionId === selected.id) {
-                      setEditingQuestionId(null);
-                      setEditorVersion((value) => value + 1);
-                    }
-                  }}
-                  onEdit={(selected) => {
-                    setEditingQuestionId(selected.id);
-                    document.getElementById('question-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                  }}
-                  onMoveDown={(id) => moveQuestion(id, 1)}
-                  onMoveUp={(id) => moveQuestion(id, -1)}
-                  question={question}
-                />
-              ))}
-            </div>
-          </section>
+          <section className="rounded-xl border border-[#dce7ea] bg-white p-5"><div className="flex items-center justify-between gap-3"><div><h2 className="text-base font-bold text-[#29373c]">Assessment Questions</h2><p className="mt-1 text-sm text-[#718087]">{questions.length} question{questions.length === 1 ? '' : 's'} ready for this draft.</p></div></div>{questions.length > 0 && <div className="mt-4 grid gap-2">{questions.map((question, index) => <div className="flex items-start justify-between gap-3 rounded-lg border border-[#e2eaed] p-3" key={question.id}><div className="min-w-0"><p className="text-sm font-semibold">{index + 1}. {question.content}</p><p className="mt-1 text-xs text-[#718087]">{question.points} pt · {question.choices.length} choices</p></div><div className="flex shrink-0 gap-2"><button aria-label={`Edit question ${index + 1}`} className="text-[#00778b]" onClick={() => { setEditingQuestionId(question.id); setShowQuestionEditor(true); }} type="button"><Icon name="edit" size={14} /></button><button aria-label={`Remove question ${index + 1}`} className="text-[#b32c33]" onClick={() => setQuestions((current) => current.filter((item) => item.id !== question.id))} type="button"><Icon name="trash" size={14} /></button></div></div>)}</div>}</section>
+          {showQuestionEditor && <QuestionEditorForm initialQuestion={questions.find((question) => question.id === editingQuestionId) ?? null} key={editingQuestionId ?? `new-${editorVersion}`} onCancel={() => { setEditingQuestionId(null); setShowQuestionEditor(false); }} onSave={saveQuestion} />}
+          <div className="flex justify-end rounded-xl border border-[#dce7ea] bg-white px-5 py-4"><button className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-[#00778b] px-5 text-sm font-semibold text-white" onClick={() => { setEditingQuestionId(null); setShowQuestionEditor(true); }} type="button"><Icon name="plus" size={14} />Add Question</button></div>
         </div>
       </div>
     </div>
