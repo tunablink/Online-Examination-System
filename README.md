@@ -32,6 +32,8 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 - Phòng thi `/student/exams/:examId/room/:attemptId` chỉ còn một cặp **thời gian + Submit** ở thanh thông tin đề, thay cho cặp thời gian/**Review & submit** cũ; không lặp lại trên header thương hiệu.
 - **Submit** mở popup xác nhận, chưa gửi bài ngay. Popup hiển thị số câu đã trả lời/chưa trả lời, cảnh báo còn câu trống và hai lựa chọn **Return to examination** / **Confirm submission**. Quay lại giữ nguyên bài làm; đồng hồ vẫn chạy khi popup mở.
 - Xác nhận nộp chờ đáp án đang lưu được ACK; bị khoá khi mất kết nối, hết giờ hoặc đang gửi bài. Chặn gửi lặp bằng trạng thái/ref in-flight; lỗi hiển thị trong popup. Chỉ chuyển sang trang kết quả sau `EXAM_SUBMITTED` hợp lệ từ server. Khi hết giờ vẫn dùng deadline worker, không tự chấm ở client.
+- **Tự kết thúc khi hết giờ:** đồng hồ về 00:00 khoá thao tác và hiển thị màn chờ; client đọc trạng thái ngay rồi kiểm tra lại mỗi 2 giây. Chỉ tự chuyển đến `/student/attempts/:attemptId/result` khi server trả `SUBMITTED`/`EXPIRED` kèm kết quả hợp lệ, khớp exam ID, attempt ID và trạng thái. Điều hướng dùng `replace`, đồng nhất với submit thủ công, không giữ phòng thi vừa kết thúc trong history entry đó.
+- Refresh/reconnect vào phòng đã hoàn tất cũng theo xác nhận server rồi chuyển kết quả. Đồng hồ browser hết giờ không tự tạo điểm hoặc đủ điều kiện điều hướng; mất mạng/chưa có kết quả vẫn giữ phòng bị khoá và thông báo đang chờ. Callback đến trễ sau khi rời trang bị bỏ qua.
 
 ### Khoảng vào thi và thời lượng riêng của sinh viên
 
@@ -66,11 +68,11 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 | Entry window | Giờ mở/đóng nhận lượt mới do teacher đặt; sinh viên bắt đầu hợp lệ vẫn có đủ duration riêng, kể cả sau giờ đóng nhận lượt |
 | Answers | `SAVE_ANSWER`; UI chỉ báo lưu thành công sau ACK |
 | Submission/grading | Popup xác nhận/tiếp tục thi, chờ save ACK, chống gửi lặp; server chấm dữ liệu đã lưu trong transaction, row lock và submit idempotent |
-| Deadline | Worker server hoàn tất attempt quá hạn kể cả khi student offline |
+| Deadline | Worker server hoàn tất attempt quá hạn kể cả khi student offline; phòng thi tự chuyển kết quả sau snapshot kết thúc hợp lệ, không chỉ dựa vào timer |
 | Results | Student xem lịch sử/kết quả của mình; teacher review bài nộp của đề mình sở hữu |
-| Monitoring | Snapshot push sau commit start/report/finalize; dashboard/activity reports dùng dữ liệu thật |
+| Monitoring | Danh sách đề publish còn hạn, tìm kiếm và tự ẩn khi đóng nhận lượt; giám sát từng đề qua snapshot push sau commit, lọc/phân trang, reconnect và đối chiếu định kỳ |
 | UI | EZAM, logo dùng chung, Tailwind, typography dễ đọc, font Outfit ở tên thương hiệu student header |
-| Checks | Full backend gần nhất **328 tests pass trên schema test tách biệt**; frontend lint/build pass |
+| Checks | Full backend gần nhất **328 tests pass trên schema test tách biệt**; frontend lint/build pass và **16 tests helpers client pass** (11 monitoring + 5 completion) |
 | Acceptance/load | Chưa hoàn tất browser checklist, fresh-install verification hoặc benchmark multi-user |
 
 Một số search/notification/language controls có thể mới là giao diện, chưa phải nghiệp vụ hoàn chỉnh. Protocol có student list/detail, nhưng route `/teacher/students/new` hiện là **tạo sinh viên**, không phải cam kết có màn hình quản trị sinh viên đầy đủ.
@@ -269,9 +271,32 @@ Output: `server/target`, `client/dist`. `vite preview` không tự được serv
 | Submissions | `/teacher/exams/:examId/submissions`, `/teacher/submissions/:attemptId` |
 | Tạo student | `/teacher/students/new` |
 | Monitoring | `/teacher/monitoring`, `/teacher/monitoring/:examId`, `/teacher/activities` |
-
-Trang `/teacher/monitoring` chỉ hiển thị đề PUBLISHED chưa đến giờ đóng nhận lượt thi (gồm đề sắp mở), tìm kiếm theo tên/course/ID; tự ẩn khi đến giờ đóng và cập nhật khi quay lại tab. Không hiện Draft/CLOSED/đề hết hạn; đề legacy chưa cấu hình giờ đóng giữ quy tắc không tự suy đoán hạn. Đường dẫn giám sát từng đề vẫn dùng được để xem lượt đang làm sau giờ đóng hoặc xem lại. Trang từng đề hiển thị tên đề/course, số lượt theo trạng thái, deadline, cảnh báo và tín hiệu gần nhất; tìm kiếm student/attempt, lọc trạng thái và phân trang 10 lượt. Dữ liệu nhận qua WebSocket push, đồng bộ lại mỗi 30 giây/khi focus và tự đăng ký lại sau reconnect. Có trạng thái kết nối, thời điểm nhận snapshot, Sync data và xử lý ID không hợp lệ; không dùng số liệu mock, không suy diễn IN_PROGRESS thành online. Kiểm tra helpers bằng `npm run test:monitoring` tại `client` (11 tests).
 | Profile | `/student/profile`, `/teacher/profile` |
+
+### Teacher monitoring
+
+- `/teacher/monitoring` lấy danh sách đề thật thuộc teacher đang đăng nhập. Chỉ hiển thị đề **PUBLISHED chưa đến `entryClosesAt`**, bao gồm đề sắp mở. Không hiện Draft, CLOSED hoặc đề đã đóng nhận lượt mới.
+- Đúng mốc đóng, thẻ đề tự ẩn bằng timer; cập nhật lại khi focus/quay về tab. Đề legacy chưa cấu hình giờ đóng giữ chính sách không tự suy đoán hạn. Tìm kiếm chỉ áp dụng trên danh sách còn hiển thị, theo tên đề, course hoặc exam ID.
+- Thẻ đề hiển thị tên/course, giờ mở, giờ đóng nhận lượt và duration. Không dùng nhãn Published để khẳng định đề đang mở hoặc student đang online.
+- `/teacher/monitoring/:examId` có tên đề/course, thống kê total/in progress/submitted/expired/warnings, bảng student với deadline và tín hiệu gần nhất. Tìm kiếm theo tên/mã sinh viên/attempt ID, lọc trạng thái/có cảnh báo; ưu tiên lượt đang làm, sau đó số cảnh báo; phân trang **10 lượt/trang**.
+- Màn từng đề có **All examinations**, **Exam details**, **Submissions** và **Sync data**. Đường dẫn trực tiếp vẫn xem được đề đã đóng entry để theo dõi attempt còn thời gian riêng hoặc xem lại dữ liệu, với quyền sở hữu do backend kiểm tra.
+- Snapshot cập nhật qua WebSocket push; đối chiếu lại mỗi **30 giây**, khi focus và đăng ký lại sau reconnect. Hiển thị trạng thái kết nối và thời điểm nhận snapshot; có loading/empty/error/retry và xử lý exam ID không hợp lệ.
+- Chuyển đề không tái sử dụng snapshot/filter của đề trước; callback sau khi rời route bị bỏ qua. Response request đến trễ không ghi đè push hợp lệ đã nhận mới hơn trong lúc chờ.
+- **IN_PROGRESS là trạng thái lượt thi, không phải online status.** Sinh viên chưa bắt đầu không xuất hiện trong bảng. Không quay camera/ghi màn hình; signals cần teacher xem xét, không tự chứng minh gian lận.
+- Logic UI, kết nối và validation được tách trong [ExamMonitoringPage.tsx](client/src/pages/ExamMonitoringPage/ExamMonitoringPage.tsx), [MonitoringExamPicker.tsx](client/src/pages/ExamMonitoringPage/MonitoringExamPicker.tsx), [useExamMonitoring.ts](client/src/pages/ExamMonitoringPage/useExamMonitoring.ts) và [monitoringData.ts](client/src/pages/ExamMonitoringPage/monitoringData.ts). Contract/checklist: [Live monitoring](docs/monitoring-live-review.md).
+
+### Bài nộp và kết quả bên teacher
+
+- `/teacher/exams/:examId/submissions`: danh sách lượt thi/bài nộp của **một đề cụ thể**, ở [TeacherSubmissionPage.tsx](client/src/pages/TeacherSubmissionPage/TeacherSubmissionPage.tsx).
+- `/teacher/submissions/:attemptId`: kết quả chi tiết một lượt thi, ở [TeacherSubmissionResultPage.tsx](client/src/pages/TeacherSubmissionResultPage/TeacherSubmissionResultPage.tsx).
+- Teacher đi từ nút **Submissions** trong monitoring của đề. Đây không phải trang lịch sử chung của toàn bộ sinh viên/tất cả đề; student xem lịch sử cá nhân tại `/student/history`.
+
+### Các nút đã tinh gọn
+
+- `/teacher/exams`: bỏ **Refresh** cạnh **Create exam**.
+- `/teacher/exams/:examId/submissions`: bỏ **Refresh**, giữ ô **Total attempts**.
+- `/teacher/monitoring`: bỏ **Sync examinations** và bộ lọc Draft/Closed; giữ tìm kiếm, **Open monitoring** và **Try again** khi request lỗi.
+- Việc bỏ các nút này không bỏ cơ chế tải dữ liệu khi vào trang/kết nối lại. Nút **Sync data** ở màn monitoring từng đề vẫn được giữ, cùng push và đối chiếu định kỳ.
 
 React protected routes hỗ trợ điều hướng; server vẫn kiểm tra quyền dữ liệu. Không có `/admin/students/new`.
 
@@ -305,6 +330,7 @@ Response minh hoạ, không phải dữ liệu thực nghiệm:
 | Question | `CREATE_QUESTION → QUESTION_CREATED`, `UPDATE_QUESTION → QUESTION_UPDATED`, `DELETE_QUESTION → QUESTION_DELETED`, `GET_EXAM_QUESTIONS → EXAM_QUESTIONS` |
 | Catalog | `GET_AVAILABLE_EXAMS → AVAILABLE_EXAMS`, `GET_AVAILABLE_EXAM → AVAILABLE_EXAM_DETAILS` |
 | Attempt | `START_EXAM → EXAM_STARTED`, `GET_EXAM_ATTEMPT → EXAM_ATTEMPT_DETAILS`, `SAVE_ANSWER → ANSWER_SAVED`, `SUBMIT_EXAM → EXAM_SUBMITTED` |
+| Attempt ownership | `HEARTBEAT_ATTEMPT → ATTEMPT_HEARTBEAT`, `RELEASE_ATTEMPT → ATTEMPT_RELEASED`; backend kiểm tra socket giữ quyền |
 | Student results | `GET_ATTEMPT_HISTORY → ATTEMPT_HISTORY`, `GET_ATTEMPT_RESULT → ATTEMPT_RESULT` |
 | Teacher review | `GET_EXAM_SUBMISSIONS → EXAM_SUBMISSIONS`, `GET_SUBMISSION_RESULT → SUBMISSION_RESULT` |
 | Integrity | `REPORT_ACTIVITY → ACTIVITY_RECORDED`, `GET_EXAM_MONITORING → EXAM_MONITORING`, `GET_TEACHER_MONITORING → TEACHER_MONITORING` |
@@ -340,6 +366,8 @@ PowerShell cần nháy toàn đối số `-Dtest=...,...`; không ghép hai lệ
 # Tại client
 npm.cmd run lint
 npm.cmd run build
+# Guards của monitoring và điều hướng khi bài thi hoàn tất
+node --test tests/monitoringData.test.mjs tests/attemptCompletion.test.mjs
 # Tại repository root
 git diff --check
 ```
@@ -351,12 +379,16 @@ git diff --check
 | Kiểm tra | Bằng chứng |
 |---|---|
 | Full backend sau ID-only, ẩn đề hết hạn và single-session attempt | **328 tests, 0 failures, 0 errors, 0 skipped — BUILD SUCCESS** trên schema test riêng |
+| Phạm vi bằng chứng backend | 328 là lần chạy backend đầy đủ gần nhất trước các chỉnh sửa UI mới; không phải báo cáo chạy lại Maven cho từng lần sửa giao diện/README |
 | Enrollment key và khoảng vào thi | 19 PostgreSQL/Spring integration tests; key/course/opening guards, không lộ bí mật, lưu giờ đóng khi tạo/sửa, từ chối sau giờ đóng, vào muộn vẫn đủ phút, verified resume/save/submit sau giờ đóng, chặn legacy chưa xác thực; key sai trên attempt đã xác thực bị chặn ở service và WebSocket; contract tests CREATE_EXAM thiếu key/giờ đóng |
 | Registration authorization | 3 integration tests: anonymous/student bị chặn; teacher tạo student/hash đúng; payload role không nâng quyền |
 | Attempt integration | 9 tests; deadline, idempotence, concurrent submit/finalizer có điều khiển |
 | Monitoring | Owner-only push, identity/subscription, after-commit và rollback không push |
 | Session | Expiry/revocation/disabled/password change; login/disconnect/resume/logout qua Spring router |
-| Client | Lint và production build pass sau căn giữa pre-exam, chuyển key vào popup và gộp timer/Submit kèm popup xác nhận nộp; còn cảnh báo bundle lớn hơn 500 kB, không phải lỗi build |
+| Client hiện tại | Full lint và production build pass sau hoàn thiện monitoring, lọc đề còn hạn, bỏ nút refresh/sync theo yêu cầu và điều hướng kết quả khi hết giờ; còn cảnh báo bundle lớn hơn 500 kB, không phải lỗi build |
+| Monitoring helpers | **11 tests pass**: validation snapshot/activity, chống nhầm exam, ID legacy, tìm kiếm/lọc/sắp xếp, draft/closed/hết hạn, đúng mốc đóng và timezone |
+| Attempt completion helpers | **5 tests pass**: server xác nhận EXPIRED/SUBMITTED mới chuyển, timer browser không đủ điều kiện, thiếu/sai result bị từ chối, khớp exam/attempt và trạng thái trong result |
+| Client regression gần nhất | Chạy hai file tests trên cùng lệnh: **16 tests, 16 pass, 0 fail**. Đây là unit tests helpers, không phải browser navigation/E2E tests |
 | Whitespace | Diff check không lỗi trong đợt kiểm tra; LF/CRLF warning không phải compile error |
 
 Mock socket routing không tương đương browser/load test qua socket thật. Chỉnh font/logo đã build, chưa visual QA mọi viewport. Không dùng số modules build làm tiêu chí hoàn thành.
@@ -372,7 +404,11 @@ Mock socket routing không tương đương browser/load test qua socket thật.
 | Popup nộp → Confirm submission | Chờ save ACK, không gửi lặp, lỗi tại chỗ; ACK nộp hợp lệ mới chuyển kết quả | Lint/build pass; cần browser nghiệm thu, gồm mất mạng/hết giờ khi popup mở |
 | Refresh sau save | Cùng attempt/deadline/order/answer | Có tests thành phần; browser chưa hoàn tất |
 | Mất mạng/reconnect | Resume trước commands; không báo save giả | Cần browser verification |
+| Cùng student mở một attempt ở hai tab/session | Chỉ một socket được đọc phòng/ghi đáp án/nộp/gửi activity; socket khác nhận ATTEMPT_IN_USE; reconnect cùng credential sau close khôi phục, socket cũ không ghi sau takeover | Có registry/concurrency/WebSocket integration tests trong lần chạy backend 328 tests; cần browser nghiệm thu grace/TTL |
 | Offline quá deadline | Server finalize, recover thấy result | Có integration tests; cần browser nghiệm thu |
+| Hết giờ khi đang ở phòng thi | Khoá thao tác; đợi snapshot terminal/result đúng rồi tự chuyển trang kết quả, không chờ student bấm Submit | 5 completion helper tests + lint/build pass; cần browser nghiệm thu |
+| Refresh/reconnect phòng đã hoàn tất | Nhận kết quả từ server rồi replace sang trang result; không reset deadline hoặc tạo attempt mới | Source đã triển khai; cần browser nghiệm thu, gồm offline/chưa có kết quả |
+| Teacher monitoring | Chỉ đề publish chưa đóng entry trong danh sách; đúng mốc tự ẩn; start/report/finalize cập nhật màn từng đề và reconnect đăng ký lại | 11 helper tests, backend monitoring tests ở lần chạy trước; cần browser nghiệm thu hai phiên |
 | Restart | Login lại, dữ liệu đã lưu không mất | Cần manual checklist |
 | Teacher khác truy cập đề/bài nộp | Từ chối, không rò dữ liệu | Có ownership tests; cần demo |
 | Nhiều student cùng thi | Không lẫn identity/answers/results | Chưa benchmark multi-user |
@@ -402,6 +438,9 @@ Benchmark cần WebSocket clients tự động login/start/save/submit với bar
 | [ExamRoomPage.tsx](client/src/pages/ExamRoomPage/ExamRoomPage.tsx) | Phòng thi dùng chung exam/attempt ID; timer theo deadline, save/submit, monitoring và điều hướng kết quả |
 | [SubmitExamDialog.tsx](client/src/pages/ExamRoomPage/components/SubmitExamDialog.tsx) | Popup xác nhận nộp; số câu đã/chưa trả lời, quay lại, pending/error và khoá xác nhận khi chưa thể nộp |
 | [QuestionPanel.tsx](client/src/pages/ExamRoomPage/components/QuestionPanel.tsx) | Hiển thị câu hỏi, choices, lựa chọn đáp án và flag; không hiện nhãn Single Choice hoặc icon check bổ sung cho lựa chọn |
+| [attempt.ts](client/src/types/attempt.ts) | Types/validation; getConfirmedAttemptResult chỉ chấp nhận snapshot terminal và nested result khớp đề, lượt thi và trạng thái trước điều hướng |
+| [useAttemptSession.ts](client/src/pages/ExamRoomPage/useAttemptSession.ts) | Heartbeat quyền làm bài, xử lý xung đột và release khi rời attempt; không release chỉ vì loading/reconnect thay đổi |
+| [attemptCompletion.test.mjs](client/tests/attemptCompletion.test.mjs) | 5 unit tests guards hoàn tất bài thi; không thay thế browser navigation tests |
 
 Hai popup dùng native `<dialog>` và khoá cuộn nền khi mở; không đóng bằng Cancel/Esc trong lúc request tương ứng đang pending. Đã kiểm tra lint/build, chưa coi đây là bằng chứng visual/accessibility QA trên mọi browser/viewport. Các thay đổi UI không thay thế quyền truy cập, kiểm tra key, deadline hay grading ở Java server.
 
