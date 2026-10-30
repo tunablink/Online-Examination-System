@@ -84,7 +84,7 @@ function TeacherSubmissionResultPage() {
             <div>
               <p className="text-xs font-bold uppercase tracking-[.12em] text-[#00778b]">Finalized submission · {result.status}</p>
               <h1 className="mt-2 text-[25px] font-bold tracking-[-.04em]">{result.examTitle}</h1>
-              <p className="mt-2 text-sm font-semibold text-[#526269]">{result.studentFullName} · @{result.username}</p>
+              <p className="mt-2 text-sm font-semibold text-[#526269]">{result.studentFullName} · Student ID: {result.institutionalId ?? 'Not assigned'}</p>
               <p className="mt-1 text-xs text-[#819096]">Student {result.studentId} · Attempt {result.attemptId}</p>
             </div>
             <div className="grid h-28 w-28 shrink-0 place-items-center rounded-full border-[8px] border-[#bce2e7] text-center text-[#00778b]"><span><strong className="block text-[27px]">{percentage}%</strong><small className="text-xs font-bold uppercase">Final score</small></span></div>

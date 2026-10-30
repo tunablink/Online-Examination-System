@@ -41,7 +41,7 @@ class StudentAccountServiceTests {
         assertEquals(2, accounts.importXlsx(file).importedCount());
         ArgumentCaptor<RegisterUserCommand> commands = ArgumentCaptor.forClass(RegisterUserCommand.class);
         verify(registration, times(2)).registerStudent(commands.capture());
-        assertEquals("student1", commands.getAllValues().get(0).username());
+        assertEquals("student1", commands.getAllValues().get(0).institutionalId());
         assertEquals("StrongPassword456", commands.getAllValues().get(1).password());
         verify(users).updateDepartment(1, "Math");
         verify(users).updateDepartment(1, "Science");
@@ -52,7 +52,7 @@ class StudentAccountServiceTests {
         when(registration.registerStudent(any())).thenReturn(new RegisteredUser(1, "student2", "Student Two",
                 "student2@example.com", UserRole.STUDENT, true, OffsetDateTime.now()));
         String file = workbook(new String[][] {
-                {"username", "fullName", "email", "password", "confirmPassword", "department"},
+                {"institutionalId", "fullName", "email", "password", "confirmPassword", "department"},
                 {"student1", "Student One", "", "StrongPassword123", "StrongPassword123", "Math"},
                 {"student2", "Student Two", "student2@example.com", "StrongPassword123", "StrongPassword123", "Science"}
         });
@@ -67,10 +67,10 @@ class StudentAccountServiceTests {
     void importSkipsDuplicateAccountAndContinuesWithNextRow() throws IOException {
         when(registration.registerStudent(any())).thenAnswer(invocation -> {
             RegisterUserCommand command = invocation.getArgument(0);
-            if (command.username().equals("student1")) {
-                throw new RegistrationException("USERNAME_ALREADY_EXISTS", "Username already exists.");
+            if (command.institutionalId().equals("student1")) {
+                throw new RegistrationException("INSTITUTIONAL_ID_ALREADY_EXISTS", "InstitutionalId already exists.");
             }
-            return new RegisteredUser(2, command.username(), command.fullName(), command.email(),
+            return new RegisteredUser(2, command.institutionalId(), command.fullName(), command.email(),
                     UserRole.STUDENT, true, OffsetDateTime.now());
         });
         String file = workbook(new String[][] {

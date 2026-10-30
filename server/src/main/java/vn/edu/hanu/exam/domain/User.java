@@ -4,7 +4,7 @@ import java.time.OffsetDateTime;
 
 public record User (
     long id,
-    String username,
+    String institutionalId,
     String passwordHash,
     String fullName,
     String email,

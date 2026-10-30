@@ -66,7 +66,7 @@ class StudentManagementServiceIntegrationTests {
         StudentDetails details = studentService.findStudentById(studentId);
 
         assertEquals(studentId, details.id());
-        assertTrue(details.username().startsWith("detail_student_"));
+        assertTrue(details.institutionalId().startsWith("detail_student_"));
         assertEquals("Directory Test User", details.fullName());
         assertTrue(details.email().endsWith("@directory.example.com"));
         assertFalse(details.active());
@@ -94,17 +94,17 @@ class StudentManagementServiceIntegrationTests {
         long studentId = insertUser("STUDENT", "editable_student", true, createdAt);
         long teacherId = insertUser("TEACHER", "protected_teacher", true, createdAt);
 
-        String originalUsername = studentService.findStudentById(studentId).username();
+        String originalInstitutionalId = studentService.findStudentById(studentId).institutionalId();
         StudentManagementException missingDepartment = assertThrows(StudentManagementException.class,
-                () -> studentService.updateStudent(studentId, originalUsername, "Updated Student",
+                () -> studentService.updateStudent(studentId, originalInstitutionalId, "Updated Student",
                         "updated@example.com", "", "", ""));
         assertEquals("INVALID_DEPARTMENT", missingDepartment.code());
         assertEquals("Directory Test User", studentService.findStudentById(studentId).fullName());
 
-        String newUsername = "edited_" + studentId;
-        StudentDetails updated = studentService.updateStudent(studentId, newUsername, "Updated Student",
+        String newInstitutionalId = "edited_" + studentId;
+        StudentDetails updated = studentService.updateStudent(studentId, newInstitutionalId, "Updated Student",
                 "UPDATED@EXAMPLE.COM", "Computer Science", "NewPassword123", "NewPassword123");
-        assertEquals(newUsername, updated.username());
+        assertEquals(newInstitutionalId, updated.institutionalId());
         assertEquals("Updated Student", updated.fullName());
         assertEquals("updated@example.com", updated.email());
         assertEquals("Computer Science", updated.department());
@@ -113,7 +113,7 @@ class StudentManagementServiceIntegrationTests {
                 new MapSqlParameterSource().addValue("id", studentId), String.class);
         assertTrue(passwordEncoder.matches("NewPassword123", passwordHash));
 
-        StudentDetails renamed = studentService.updateStudent(studentId, newUsername, "Renamed Student",
+        StudentDetails renamed = studentService.updateStudent(studentId, newInstitutionalId, "Renamed Student",
                 "updated@example.com", "Computer Science", "", "");
         assertEquals("Renamed Student", renamed.fullName());
         assertEquals(passwordHash, jdbcTemplate.queryForObject("SELECT password_hash FROM users WHERE id = :id",
@@ -137,13 +137,13 @@ class StudentManagementServiceIntegrationTests {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         String sql = """
                 INSERT INTO users
-                    (username, password_hash, full_name, email, role, active, created_at, updated_at)
+                    (institutional_id, password_hash, full_name, email, role, active, created_at, updated_at)
                 VALUES
-                    (:username, :passwordHash, :fullName, :email, :role, :active, :createdAt, :createdAt)
+                    (:institutionalId, :passwordHash, :fullName, :email, :role, :active, :createdAt, :createdAt)
                 RETURNING id
                 """;
         MapSqlParameterSource parameters = new MapSqlParameterSource()
-                .addValue("username", prefix + "_" + suffix)
+                .addValue("institutionalId", prefix + "_" + suffix)
                 .addValue("passwordHash", "sensitive-test-hash")
                 .addValue("fullName", "Directory Test User")
                 .addValue("email", suffix + "@directory.example.com")

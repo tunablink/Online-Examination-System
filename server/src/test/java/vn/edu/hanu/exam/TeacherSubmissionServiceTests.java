@@ -99,7 +99,7 @@ class TeacherSubmissionServiceTests {
                 .collect(Collectors.toSet());
 
         assertEquals(Set.of(
-                "attemptId", "examId", "examTitle", "studentId", "username",
+                "attemptId", "examId", "examTitle", "studentId", "institutionalId",
                 "studentFullName", "status", "startedAt", "deadline", "submittedAt",
                 "score", "maxScore", "correctAnswers", "totalQuestions"), fields);
         assertFalse(fields.contains("passwordHash"));

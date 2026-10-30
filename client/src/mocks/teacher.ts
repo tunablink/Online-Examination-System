@@ -2,7 +2,7 @@ import type { TeacherExam, TeacherProfile } from "../types/teacher";
 
 export const MOCK_TEACHER: TeacherProfile = {
   id: 2,
-  username: "lecturer01",
+  institutionalId: "lecturer01",
   fullName: "Dr. Minh Tran",
   email: "minh.tran@sis.edu.vn",
   staffId: "GV-JSD-001",

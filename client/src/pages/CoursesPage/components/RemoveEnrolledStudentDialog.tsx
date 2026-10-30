@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 
 interface Props {
   studentName: string;
-  username: string;
+  institutionalId: string | null;
   courseName: string;
   pending: boolean;
   connected: boolean;
@@ -11,7 +11,7 @@ interface Props {
   onConfirm: () => void;
 }
 
-export default function RemoveEnrolledStudentDialog({ studentName, username, courseName, pending, connected, error, onCancel, onConfirm }: Props) {
+export default function RemoveEnrolledStudentDialog({ studentName, institutionalId, courseName, pending, connected, error, onCancel, onConfirm }: Props) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   useEffect(() => {
     const dialog = dialogRef.current;
@@ -23,7 +23,7 @@ export default function RemoveEnrolledStudentDialog({ studentName, username, cou
   return (
     <dialog aria-labelledby="remove-enrolled-student-title" aria-describedby="remove-enrolled-student-description" aria-modal="true" className="fixed inset-0 m-auto max-h-[90dvh] w-[calc(100%_-_2rem)] max-w-md overflow-y-auto rounded-xl border border-[#dce7ea] bg-white p-6 text-[#172126] shadow-2xl backdrop:bg-[#10272e]/55" onCancel={(event) => { event.preventDefault(); if (!pending) onCancel(); }} ref={dialogRef}>
       <h2 className="text-xl font-bold" id="remove-enrolled-student-title">Remove student from course?</h2>
-      <p className="mt-3 break-words text-base leading-6 text-[#607178]" id="remove-enrolled-student-description">Remove <strong>{studentName} ({username})</strong> from <strong>{courseName}</strong>? Their account and submitted results will be kept. They will no longer see this course's exams until added again.</p>
+      <p className="mt-3 break-words text-base leading-6 text-[#607178]" id="remove-enrolled-student-description">Remove <strong>{studentName} ({institutionalId ?? 'ID not assigned'})</strong> from <strong>{courseName}</strong>? Their account and submitted results will be kept. They will no longer see this course's exams until added again.</p>
       <p className="mt-3 text-sm leading-6 text-[#718087]">A student with an in-progress exam in this course cannot be removed.</p>
       {error && <p className="mt-4 rounded-lg border border-[#edc9cc] bg-[#fff4f4] p-3 text-sm text-[#99282e]" role="alert">{error}</p>}
       {!connected && <p className="mt-4 text-sm text-[#855b17]" role="status">Reconnect to the server before removing this student.</p>}

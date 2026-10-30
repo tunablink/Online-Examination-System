@@ -87,12 +87,12 @@ class ExamManagementServiceIntegrationTests {
         private long insertUser(String role) {
                 String suffix = UUID.randomUUID().toString().replace("-", "");
                 String sql = """
-                                INSERT INTO users (username, password_hash, full_name, email, role)
-                                VALUES (:username, :passwordHash, :fullName, :email, :role)
+                                INSERT INTO users (institutional_id, password_hash, full_name, email, role)
+                                VALUES (:institutionalId, :passwordHash, :fullName, :email, :role)
                                 RETURNING id
                                 """;
                 Long id = jdbcTemplate.queryForObject(sql, Map.of(
-                                "username", "user_" + suffix,
+                                "institutionalId", "user_" + suffix,
                                 "passwordHash", "test-hash",
                                 "fullName", "Exam Test User",
                                 "email", suffix + "@example.com",

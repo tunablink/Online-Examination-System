@@ -5,7 +5,7 @@ import type {
 export interface AuthenticatedUser {
   id: number;
 
-  username: string;
+  institutionalId: string;
   fullName: string;
   email: string;
 

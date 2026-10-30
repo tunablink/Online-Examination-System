@@ -79,14 +79,14 @@ class TeacherSubmissionServiceIntegrationTests {
     private long insertUser(String role, String prefix) {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         String sql = """
-                INSERT INTO users (username, password_hash, full_name, email, role, active)
-                VALUES (:username, :passwordHash, :fullName, :email, :role, TRUE)
+                INSERT INTO users (institutional_id, password_hash, full_name, email, role, active)
+                VALUES (:institutionalId, :passwordHash, :fullName, :email, :role, TRUE)
                 RETURNING id
                 """;
         Long id = jdbcTemplate.queryForObject(
                 sql,
                 new MapSqlParameterSource()
-                        .addValue("username", prefix + "_" + suffix)
+                        .addValue("institutionalId", prefix + "_" + suffix)
                         .addValue("passwordHash", "sensitive-hash")
                         .addValue("fullName", "Submission Test User")
                         .addValue("email", suffix + "@submission.example.com")

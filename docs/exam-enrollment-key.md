@@ -67,6 +67,13 @@ New admission is allowed in the half-open interval
 rejects new attempts with `EXAM_ENTRY_CLOSED`, including requests with a correct
 key. The closing check is repeated after BCrypt verification, before insertion.
 
+At closing, the student dashboard catalog excludes the exam (NULL legacy closing
+times remain visible). The client also schedules a check at the nearest closing
+boundary and rechecks when returning to the tab, so a displayed card disappears
+without a reload. Search and Upcoming use the same filtered list. This does not
+delete an exam or close its status: direct details and verified room recovery
+remain available, while a new start is still rejected by the server.
+
 An attempt's deadline remains `startedAt + durationMinutes`, never the minimum of
 that value and the entry closing time. For an entry window of 09:00–10:00 and a
 60-minute duration, starting at 09:50 gives a deadline of 10:50. Closing admission

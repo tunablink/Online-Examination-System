@@ -23,7 +23,7 @@ public class LoginService {
             throw new AuthenticationException("INVALID_CREDENTIALS", "Invalid Student ID / Teacher ID or password.");
         }
 
-        User user = userRepository.findByUsername(command.username())
+        User user = userRepository.findByInstitutionalId(command.institutionalId())
                 .orElseThrow(() -> new AuthenticationException(
                         "INVALID_CREDENTIALS", "Invalid Student ID / Teacher ID or password."));
 

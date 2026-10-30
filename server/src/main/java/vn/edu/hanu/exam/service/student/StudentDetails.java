@@ -4,14 +4,14 @@ import java.time.OffsetDateTime;
 
 public record StudentDetails(
         long id,
-        String username,
+        String institutionalId,
         String fullName,
         String email,
         String department,
         boolean active,
         OffsetDateTime createdAt) {
-    public StudentDetails(long id, String username, String fullName, String email,
+    public StudentDetails(long id, String institutionalId, String fullName, String email,
             boolean active, OffsetDateTime createdAt) {
-        this(id, username, fullName, email, null, active, createdAt);
+        this(id, institutionalId, fullName, email, null, active, createdAt);
     }
 }

@@ -10,7 +10,7 @@ public record TeacherMonitoringOverview(
 
     public record Activity(
             long id, long attemptId, long examId, String examTitle,
-            long studentId, String studentName, String username,
+            long studentId, String studentName, String institutionalId,
             String rule, String severity, String description,
             OffsetDateTime occurredAt, OffsetDateTime recordedAt) {
     }

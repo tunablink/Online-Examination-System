@@ -78,17 +78,17 @@ class ProfileManagementServiceIntegrationTests {
 
     private long insertUser(UserRole role, String department, String rawPassword) {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-        String username = role.name().toLowerCase() + "_profile_" + suffix;
+        String institutionalId = role.name().toLowerCase() + "_profile_" + suffix;
 
         return jdbcClient.sql("""
-                INSERT INTO users (username, password_hash, full_name, email, department, role)
-                VALUES (:username, :passwordHash, :fullName, :email, :department, :role)
+                INSERT INTO users (institutional_id, password_hash, full_name, email, department, role)
+                VALUES (:institutionalId, :passwordHash, :fullName, :email, :department, :role)
                 RETURNING id
                 """)
-                .param("username", username)
+                .param("institutionalId", institutionalId)
                 .param("passwordHash", passwordEncoder.encode(rawPassword))
                 .param("fullName", role == UserRole.TEACHER ? "Integration Teacher" : "Integration Student")
-                .param("email", username + "@university.edu")
+                .param("email", institutionalId + "@university.edu")
                 .param("department", department)
                 .param("role", role.name())
                 .query(Long.class)

@@ -34,7 +34,14 @@ The React room sends one answer save at a time, disables answer selection while
 waiting, and prevents submission while that save is pending. Manual submission
 opens `/student/attempts/:attemptId/result` only after a valid server response.
 At zero remaining time, the room locks answers and requests attempt details every
-two seconds until a terminal result arrives. These requests do not grade the exam;
+two seconds until a terminal result arrives, starting with an immediate request.
+It then replaces the room URL with `/student/attempts/:attemptId/result`, just as
+manual submission does. A zero browser timer alone never triggers navigation:
+the server snapshot must be SUBMITTED or EXPIRED, carry a valid final result, and
+match the current exam/attempt IDs and terminal status. Refresh or reconnect into
+an already-completed room follows the same rule. While offline or awaiting server
+finalization, the room stays locked and keeps its waiting message. Late callbacks
+after leaving the route are ignored. These requests do not grade the exam;
 the server worker does. This narrow result check is not server-push monitoring.
 
 ## Existing database upgrade
@@ -55,6 +62,12 @@ Run only for an existing database with the known old constraint/index. Current
 startup; it intentionally does not drop old constraints using the application role.
 
 ## Verification
+
+Frontend completion guards: from `client`, run
+`node --test tests/attemptCompletion.test.mjs` (5 tests). This covers terminal
+results, active attempts with past browser deadlines, missing/malformed results,
+wrong attempt/exam IDs and inconsistent nested results. Browser navigation and
+offline/reconnect checks below remain a separate acceptance gate.
 
 ```powershell
 cd server

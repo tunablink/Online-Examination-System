@@ -2,11 +2,15 @@
 
 Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java server qua WebSocket → PostgreSQL**. Giáo viên quản lý đề/câu hỏi, cấp tài khoản sinh viên, giám sát và xem bài nộp; sinh viên làm bài, lưu đáp án, nộp bài và xem kết quả server.
 
-**Cập nhật: 29/10/2026.** Đây là hiện trạng source, thay thế các bản tiến độ cũ trong README. Có source hoặc build/test pass không đồng nghĩa đã nghiệm thu đầy đủ.
+**Cập nhật: 30/10/2026.** Đây là hiện trạng source, thay thế các bản tiến độ cũ trong README. Có source hoặc build/test pass không đồng nghĩa đã nghiệm thu đầy đủ.
 
 ### Định danh đăng nhập
 
-**Định danh tài khoản:** giao diện đăng nhập dùng **Student ID / Teacher ID** và mật khẩu, không có một Username riêng. Student ID trong trang cấp tài khoản, danh sách, tìm kiếm và hồ sơ là cùng mã được cấp khi tạo tài khoản; không tự tạo mã `ST-xxxxx` từ primary key. Teacher ID hiển thị ở hồ sơ teacher. Role do server xác định sau đăng nhập, không do người dùng tự chọn. Để tương thích tài khoản cũ, cột/field kỹ thuật `username` vẫn lưu/truyền mã đăng nhập này; `users.id` và các foreign key vẫn là ID nội bộ, không thay thế mã đăng nhập. Không đổi mã hay mật khẩu của dữ liệu cũ.
+- Chỉ đăng nhập bằng **mã sinh viên/mã giáo viên do nhà trường cấp + mật khẩu**. Database dùng `users.institutional_id`; request/response dùng `institutionalId`. Không còn cột `users.username`, không có fallback bằng username, email hay ID số nội bộ.
+- Student ID trong form cấp/sửa tài khoản, danh sách, tìm kiếm, hồ sơ, monitoring và bài nộp dùng cùng định danh. `users.id` và các foreign key giữ nguyên để bảo toàn enrollment/bài làm. Role do server xác định, không do client chọn.
+- Tài khoản cũ chưa gán mã giữ nguyên hồ sơ, mật khẩu, trạng thái và dữ liệu liên quan nhưng **chưa đăng nhập được**. Teacher gán Student ID thật tại trang quản lý sinh viên; để trống mật khẩu khi sửa sẽ giữ mật khẩu cũ. Không tự coi username cũ là mã nhà trường.
+- Migration local đã xác nhận `teacher.demo` (user 95) → **TC4305**; student cũ chờ gán mã. Mật khẩu teacher không đổi. Restart và đăng nhập lại sau thay đổi contract; client/server cũ không tương thích.
+- Đọc [ID-only login và migration](docs/institutional-id-login.md) trước khi chuyển database cũ. Hai script 005/006 chạy thủ công sau backup, không tự chạy bằng Flyway/Liquibase. `legacy_account_identifiers` chỉ lưu ánh xạ cũ phục vụ khôi phục, không được dùng để xác thực.
 
 ### Enrollment key theo từng đề thi
 
@@ -35,6 +39,7 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 - Backend chỉ cho bắt đầu lượt mới khi `scheduledAt <= serverNow < entryClosesAt`, đồng thời vẫn yêu cầu course membership và enrollment key. Trước giờ mở trả `EXAM_NOT_OPEN`; tới giờ đóng trả `EXAM_ENTRY_CLOSED`.
 - Deadline mỗi sinh viên = **thời điểm server tạo attempt + durationMinutes**; không lấy giờ đóng nhận lượt để cắt thời gian làm bài. Ví dụ mở 09:00–10:00, duration 60 phút, bắt đầu 09:50 thì deadline 10:50.
 - Đóng nhận lượt mới **không tự chuyển đề sang CLOSED**. Attempt đã xác thực key được resume/lưu đáp án/nộp bài sau giờ đóng đến deadline riêng; refresh/reconnect không reset deadline. Attempt legacy chưa xác thực không được xác thực lần đầu sau giờ đóng.
+- Tới `entryClosesAt`, đề tự ẩn khỏi dashboard và Upcoming của student. Backend lọc danh sách theo giờ database; frontend hẹn giờ mốc đóng gần nhất và kiểm tra lại khi quay về tab, không cần reload để ẩn. Chi tiết đề/phòng thi vẫn cho khôi phục lượt đã xác thực, không xoá bài làm hoặc cắt deadline riêng. Đề legacy chưa có giờ đóng không được tự suy đoán là hết hạn.
 - Trang chi tiết student hiển thị khoảng vào thi và chặn Enter ngoài khoảng; Resume được tách riêng. Backend vẫn là nơi quyết định, không dựa vào đồng hồ hay nút trên browser để cấp quyền.
 - Auto-init bổ sung cột nullable `exams.entry_closes_at`. Có [migration thủ công 004](server/src/main/resources/db/migrations/004_exam_entry_window.sql). Đề legacy NULL không được tự gán giờ đóng; sửa draft hoặc tạo đề mới có khoảng rõ ràng trước khi dùng flow mới. Không thay deadline hay xoá bài làm hiện có.
 
@@ -51,6 +56,7 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 | Authentication | BCrypt, active account, identity theo socket, role/ownership checks |
 | Registration | Chỉ teacher gửi được `REGISTER`; payload không thể tạo role teacher |
 | Session recovery | Token tám giờ theo tab, refresh/reconnect, `RESUME_SESSION`, server-side `LOGOUT` |
+| Single-writer attempt | Backend chặn nhiều tab/session thao tác cùng lượt thi; heartbeat, reconnect grace và thu hồi quyền socket cũ |
 | Profile | Xem/cập nhật hồ sơ và đổi mật khẩu |
 | Exam lifecycle | Tạo/xem/sửa draft, publish readiness, publish, close, xoá draft |
 | Questions | Tạo/xem/sửa/xoá câu hỏi và choices; ownership/status validation |
@@ -64,7 +70,7 @@ Hệ thống thi trắc nghiệm trực tuyến: **React web client → Java ser
 | Results | Student xem lịch sử/kết quả của mình; teacher review bài nộp của đề mình sở hữu |
 | Monitoring | Snapshot push sau commit start/report/finalize; dashboard/activity reports dùng dữ liệu thật |
 | UI | EZAM, logo dùng chung, Tailwind, typography dễ đọc, font Outfit ở tên thương hiệu student header |
-| Checks | Full backend gần nhất **309 tests pass**; frontend lint/build pass |
+| Checks | Full backend gần nhất **328 tests pass trên schema test tách biệt**; frontend lint/build pass |
 | Acceptance/load | Chưa hoàn tất browser checklist, fresh-install verification hoặc benchmark multi-user |
 
 Một số search/notification/language controls có thể mới là giao diện, chưa phải nghiệp vụ hoàn chỉnh. Protocol có student list/detail, nhưng route `/teacher/students/new` hiện là **tạo sinh viên**, không phải cam kết có màn hình quản trị sinh viên đầy đủ.
@@ -208,12 +214,12 @@ new BCryptPasswordEncoder().encode("<your-teacher-password>");
 Dùng **hash BCrypt đã sinh**, không phải password thô, trong SQL quản trị trên database `online_exam`:
 
 ```sql
-INSERT INTO public.users (username, password_hash, full_name, email, role)
-VALUES ('teacher_demo', '<generated-bcrypt-hash>',
-        'Demo Teacher', 'teacher_demo@example.com', 'TEACHER');
+INSERT INTO public.users (institutional_id, password_hash, full_name, email, role)
+VALUES ('<school-issued-teacher-id>', '<generated-bcrypt-hash>',
+        '<teacher-full-name>', '<teacher-email>', 'TEACHER');
 ```
 
-Dùng username/email chưa tồn tại và password demo riêng. Terminal/JShell history có thể giữ nội dung nhập; không dùng production password hoặc đưa hash/password vào Git/ảnh báo cáo. Đây là hướng dẫn provisioning thủ công; fresh-install trọn vẹn vẫn cần nghiệm thu.
+Dùng Teacher ID thật/email chưa tồn tại và password demo riêng. Terminal/JShell history có thể giữ nội dung nhập; không dùng production password hoặc đưa hash/password vào Git/ảnh báo cáo. Đây là hướng dẫn provisioning thủ công; fresh-install trọn vẹn vẫn cần nghiệm thu.
 
 Sau đó teacher đăng nhập tạo student tại `/teacher/students/new`.
 
@@ -263,6 +269,8 @@ Output: `server/target`, `client/dist`. `vite preview` không tự được serv
 | Submissions | `/teacher/exams/:examId/submissions`, `/teacher/submissions/:attemptId` |
 | Tạo student | `/teacher/students/new` |
 | Monitoring | `/teacher/monitoring`, `/teacher/monitoring/:examId`, `/teacher/activities` |
+
+Trang `/teacher/monitoring` chỉ hiển thị đề PUBLISHED chưa đến giờ đóng nhận lượt thi (gồm đề sắp mở), tìm kiếm theo tên/course/ID; tự ẩn khi đến giờ đóng và cập nhật khi quay lại tab. Không hiện Draft/CLOSED/đề hết hạn; đề legacy chưa cấu hình giờ đóng giữ quy tắc không tự suy đoán hạn. Đường dẫn giám sát từng đề vẫn dùng được để xem lượt đang làm sau giờ đóng hoặc xem lại. Trang từng đề hiển thị tên đề/course, số lượt theo trạng thái, deadline, cảnh báo và tín hiệu gần nhất; tìm kiếm student/attempt, lọc trạng thái và phân trang 10 lượt. Dữ liệu nhận qua WebSocket push, đồng bộ lại mỗi 30 giây/khi focus và tự đăng ký lại sau reconnect. Có trạng thái kết nối, thời điểm nhận snapshot, Sync data và xử lý ID không hợp lệ; không dùng số liệu mock, không suy diễn IN_PROGRESS thành online. Kiểm tra helpers bằng `npm run test:monitoring` tại `client` (11 tests).
 | Profile | `/student/profile`, `/teacher/profile` |
 
 React protected routes hỗ trợ điều hướng; server vẫn kiểm tra quyền dữ liệu. Không có `/admin/students/new`.
@@ -305,6 +313,9 @@ Errors giữ requestId, type `ERROR`; client không gửi server-only types. Mon
 
 ## 8. Session/deadline
 
+- Mỗi attempt đang làm chỉ có một WebSocket giữ quyền đọc phòng/lưu đáp án/nộp bài/gửi activity. Tab khác nhận `ATTEMPT_IN_USE`: “This examination is already open in another tab/session.”
+- Room gửi `HEARTBEAT_ATTEMPT` mỗi 10 giây; lease sống 45 giây không renew. Socket đã đóng có grace 30 giây; reconnect cùng credential hợp lệ khôi phục ngay khi backend đã nhận close. Credential khác phải chờ grace/TTL rồi retry. Tab cũ bị chặn ghi sau takeover.
+- Rời phòng gửi `RELEASE_ATTEMPT` best-effort; submit/logout giải phóng quyền. Refresh/reconnect giữ attempt, đáp án đã lưu và deadline gốc. Registry hiện dành cho một Java server, không phải distributed lock. Chi tiết và checklist: [Single-session attempt](docs/attempt-single-session.md).
 - Token ngẫu nhiên 32 byte Base64URL, expiry tám giờ; server giữ SHA-256 digest, user ID, password fingerprint và expiry trong memory.
 - Client dùng `sessionStorage`; resume xác minh identity trước business commands; disconnect không revoke.
 - Logout thành công revoke credential kể cả socket khác dùng chung token.
@@ -312,6 +323,7 @@ Errors giữ requestId, type `ERROR`; client không gửi server-only types. Mon
 - Disable/password change kiểm tra khi resume, chưa revoke tức thời toàn bộ active sockets.
 - Deadline worker mặc định mỗi 5 giây, batch 100; config `exam.deadline.enabled`, `exam.deadline.interval-ms`.
 - Timer browser chỉ hiển thị; UI đọc lại attempt khi hết giờ. Finalize không hứa đúng tức thời timer về 0 vì có worker interval/thời gian xử lý.
+- Hết giờ: khoá thao tác, chờ server trả snapshot SUBMITTED/EXPIRED kèm kết quả khớp exam/attempt/status rồi tự chuyển sang `/student/attempts/:attemptId/result` bằng replace, đồng nhất với submit thủ công. Refresh/reconnect vào phòng đã kết thúc cũng chuyển theo xác nhận server; mất mạng hoặc chưa có kết quả thì giữ màn chờ, không điều hướng chỉ vì timer về 0. Guards được kiểm tra bằng `node --test tests/attemptCompletion.test.mjs` tại client (5 tests).
 
 ## 9. Kiểm thử và bằng chứng
 
@@ -334,11 +346,11 @@ git diff --check
 
 **Không chạy integration suite trên production/dữ liệu quan trọng.** Tests dùng PostgreSQL datasource; nên dùng database test riêng. Toàn suite chưa nghiệm thu trên database mới hoàn toàn. Fixture rollback/cleanup không phải lý do dùng dữ liệu thật tuỳ tiện.
 
-### Kết quả ghi nhận gần nhất ngày 29/10/2026
+### Kết quả ghi nhận gần nhất ngày 30/10/2026
 
 | Kiểm tra | Bằng chứng |
 |---|---|
-| Full backend sau bổ sung xoá enrollment và thống nhất Student ID / Teacher ID | **309 tests, 0 failures, 0 errors, 0 skipped — BUILD SUCCESS** |
+| Full backend sau ID-only, ẩn đề hết hạn và single-session attempt | **328 tests, 0 failures, 0 errors, 0 skipped — BUILD SUCCESS** trên schema test riêng |
 | Enrollment key và khoảng vào thi | 19 PostgreSQL/Spring integration tests; key/course/opening guards, không lộ bí mật, lưu giờ đóng khi tạo/sửa, từ chối sau giờ đóng, vào muộn vẫn đủ phút, verified resume/save/submit sau giờ đóng, chặn legacy chưa xác thực; key sai trên attempt đã xác thực bị chặn ở service và WebSocket; contract tests CREATE_EXAM thiếu key/giờ đóng |
 | Registration authorization | 3 integration tests: anonymous/student bị chặn; teacher tạo student/hash đúng; payload role không nâng quyền |
 | Attempt integration | 9 tests; deadline, idempotence, concurrent submit/finalizer có điều khiển |

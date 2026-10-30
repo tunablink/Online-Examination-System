@@ -64,7 +64,7 @@ public class RegistrationMessageHandler {
 
         try {
             RegisterUserCommand command = new RegisterUserCommand(
-                    registerPayload.username(),
+                    registerPayload.institutionalId(),
                     registerPayload.password(),
                     registerPayload.fullName(),
                     registerPayload.email());

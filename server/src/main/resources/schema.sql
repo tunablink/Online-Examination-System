@@ -1,7 +1,9 @@
+-- Existing username-based databases must run manual identity migration 005/006
+-- before this schema is initialized. Never copy legacy logins into school IDs.
 CREATE TABLE IF NOT EXISTS users (
     id BIGINT GENERATED ALWAYS AS IDENTITY,
 
-    username VARCHAR(50) NOT NULL,
+    institutional_id VARCHAR(50), -- NULL only for legacy accounts awaiting an assigned school ID
     password_hash VARCHAR(255) NOT NULL,
     full_name VARCHAR(100) NOT NULL,
     email VARCHAR(255) NOT NULL,
@@ -19,8 +21,8 @@ CREATE TABLE IF NOT EXISTS users (
     CONSTRAINT pk_users
         PRIMARY KEY (id),
 
-    CONSTRAINT ck_users_username_not_blank
-        CHECK (BTRIM(username) <> ''),
+    CONSTRAINT ck_users_institutional_id_not_blank
+        CHECK (BTRIM(institutional_id) <> ''),
 
     CONSTRAINT ck_users_password_hash_not_blank
         CHECK (BTRIM(password_hash) <> ''),
@@ -35,8 +37,8 @@ CREATE TABLE IF NOT EXISTS users (
         CHECK (role IN ('STUDENT', 'TEACHER'))
 );
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_users_username_lower
-    ON users (LOWER(username));
+CREATE UNIQUE INDEX IF NOT EXISTS uq_users_institutional_id_lower
+    ON users (LOWER(institutional_id));
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email_lower
     ON users (LOWER(email));

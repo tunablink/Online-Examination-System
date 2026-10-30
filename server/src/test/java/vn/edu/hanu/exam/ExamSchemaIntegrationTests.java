@@ -55,15 +55,15 @@ public class ExamSchemaIntegrationTests {
     // ----------------------------------------------------------------
     private long insertTeacher() {
         String suffix   = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-        String username = "teacher_" + suffix;
-        String email    = username + "@example.com";
+        String institutionalId = "teacher_" + suffix;
+        String email    = institutionalId + "@example.com";
 
         return jdbcClient.sql("""
-                INSERT INTO users (username, password_hash, full_name, email, role)
-                VALUES (:username, :hash, :fullName, :email, 'TEACHER')
+                INSERT INTO users (institutional_id, password_hash, full_name, email, role)
+                VALUES (:institutionalId, :hash, :fullName, :email, 'TEACHER')
                 RETURNING id
                 """)
-            .param("username", username)
+            .param("institutionalId", institutionalId)
             .param("hash",     "$2a$10$fakehashfortest")
             .param("fullName", "Integration Teacher")
             .param("email",    email)

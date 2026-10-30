@@ -6,7 +6,7 @@ import type {
 export const MOCK_STUDENT: StudentProfile = {
   id: 1,
   studentId: '22010482',
-  username: 'student01',
+  institutionalId: 'student01',
   fullName: 'Alex Nguyen',
   email: 'alex.22010482@sis.edu.vn',
 };

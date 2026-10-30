@@ -36,6 +36,36 @@ deployment. It is not a distributed message broker or durable event log.
 
 ## UI data
 
+`/teacher/monitoring` loads the authenticated teacher's exam list using
+`GET_TEACHER_EXAMS`. Its picker shows only PUBLISHED exams whose entry closing
+time has not been reached, including upcoming exams. Draft, CLOSED and expired
+exams are omitted before searching by title/course/ID. Closing is exclusive: at
+exactly entryClosesAt the card disappears, with an expiry timer and focus/visibility
+checks so a manual refresh is not required. Legacy exams without entryClosesAt
+retain the existing no-configured-expiry policy. Published is not an online indicator.
+Direct per-exam monitoring remains accessible to the owning teacher for review
+and for attempts whose personal deadlines extend beyond the entry window.
+
+`/teacher/monitoring/:examId` fetches exam metadata and the owned exam snapshot.
+It subscribes before loading, accepts server pushes and reconciles every 30
+seconds and on window focus. Reconnect registers a new subscription. Request
+callbacks are ignored after leaving the route; switching exams remounts detail
+state so another exam's rows cannot leak into the new view. A valid push received
+while a request is pending takes precedence over that request's late response.
+The screen shows connection state and the local time the snapshot was received,
+not a fabricated server heartbeat or student-online indicator.
+
+Attempt search covers full name, school-issued student ID and attempt ID. Status
+and warning filters use the server snapshot. Active attempts sort first, then
+warning count, and the table paginates locally in groups of 10. Missing school IDs
+on legacy accounts remain supported. No attempts is a real empty state; malformed
+responses, foreign exams, invalid URLs, disconnects and request failures have
+explicit states. Sync data and retry use the same guarded request lifecycle.
+
+Run `npm run test:monitoring` in `client` for 11 automated helper tests covering
+snapshot validation, wrong-exam data, duplicate attempts, activity identities,
+legacy IDs, search, sorting and filters. These are not browser end-to-end tests.
+
 Teacher Dashboard uses real active/completed attempt counts and warning counts.
 Activity Reports uses server records, student/exam identity and server timestamps.
 Search, exam and severity filters apply to the latest loaded 500 records. A visible

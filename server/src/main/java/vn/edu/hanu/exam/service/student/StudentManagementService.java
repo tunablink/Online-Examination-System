@@ -18,7 +18,7 @@ public class StudentManagementService {
     public static final String STUDENT_NOT_FOUND = "STUDENT_NOT_FOUND";
     public static final String DATABASE_ERROR = "DATABASE_ERROR";
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
-    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9._-]{3,50}$");
+    private static final Pattern INSTITUTIONAL_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9._-]{3,50}$");
 
     private final StudentDirectoryRepository studentRepository;
     private final PasswordEncoder passwordEncoder;
@@ -54,15 +54,15 @@ public class StudentManagementService {
         }
     }
 
-    public StudentDetails updateStudent(long studentId, String username, String fullName, String email,
+    public StudentDetails updateStudent(long studentId, String institutionalId, String fullName, String email,
             String department, String password, String confirmPassword) {
         if (studentId <= 0) throw notFound();
-        String normalizedUsername = username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
+        String normalizedInstitutionalId = institutionalId == null ? "" : institutionalId.trim().toLowerCase(Locale.ROOT);
         String name = fullName == null ? "" : fullName.trim();
         String normalizedEmail = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
         String normalizedDepartment = department == null ? "" : department.trim();
-        if (!USERNAME_PATTERN.matcher(normalizedUsername).matches()) {
-            throw new StudentManagementException("INVALID_USERNAME", "Student ID must contain 3 to 50 letters, numbers, dots, underscores or hyphens.");
+        if (!INSTITUTIONAL_ID_PATTERN.matcher(normalizedInstitutionalId).matches()) {
+            throw new StudentManagementException("INVALID_INSTITUTIONAL_ID", "Student ID must contain 3 to 50 letters, numbers, dots, underscores or hyphens.");
         }
         if (name.length() < 2 || name.length() > 100) {
             throw new StudentManagementException("INVALID_FULL_NAME", "Full name must contain 2 to 100 characters.");
@@ -86,7 +86,7 @@ public class StudentManagementService {
             throw new StudentManagementException("PASSWORD_MISMATCH", "Enter a new password before confirming it.");
         }
         try {
-            return studentRepository.updateStudent(studentId, normalizedUsername, name, normalizedEmail,
+            return studentRepository.updateStudent(studentId, normalizedInstitutionalId, name, normalizedEmail,
                     normalizedDepartment, passwordHash)
                     .orElseThrow(StudentManagementService::notFound);
         } catch (DuplicateKeyException exception) {

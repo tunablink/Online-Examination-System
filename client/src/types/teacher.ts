@@ -9,7 +9,7 @@ export type TeacherExamStatus =
 
 export interface TeacherProfile {
   id: number;
-  username: string;
+  institutionalId: string;
   fullName: string;
   email: string;
   staffId: string;

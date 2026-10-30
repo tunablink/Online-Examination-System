@@ -24,7 +24,7 @@ function AccountMenu({ profilePath, fallbackName, fallbackAccountLabel, compact 
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const displayName = user?.fullName ?? fallbackName;
-  const accountLabel = user?.username ?? fallbackAccountLabel;
+  const accountLabel = user?.institutionalId ?? fallbackAccountLabel;
 
   useEffect(() => {
     if (!open) return;

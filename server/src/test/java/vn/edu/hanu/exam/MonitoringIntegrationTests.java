@@ -288,14 +288,14 @@ class MonitoringIntegrationTests {
 
         Long id = jdbcTemplate.queryForObject("""
                 INSERT INTO users (
-                    username,
+                    institutional_id,
                     password_hash,
                     full_name,
                     email,
                     role
                 )
                 VALUES (
-                    :username,
+                    :institutionalId,
                     'test-hash',
                     :fullName,
                     :email,
@@ -304,7 +304,7 @@ class MonitoringIntegrationTests {
                 RETURNING id
                 """,
                 Map.of(
-                        "username", "monitor_" + suffix,
+                        "institutionalId", "monitor_" + suffix,
                         "fullName", "Monitoring User",
                         "email", suffix + "@example.com",
                         "role", role),

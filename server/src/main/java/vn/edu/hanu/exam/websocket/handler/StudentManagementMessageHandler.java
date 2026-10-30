@@ -84,7 +84,7 @@ public class StudentManagementMessageHandler {
     public ServerMessage handleCreate(String sessionId, String requestId, Map<String, Object> payload) {
         return withTeacher(sessionId, requestId, teacher -> {
             if (payload == null) throw new InvalidPayloadException();
-            String username = stringField(payload, "username");
+            String institutionalId = stringField(payload, "institutionalId");
             String fullName = stringField(payload, "fullName");
             String email = stringField(payload, "email");
             String password = stringField(payload, "password");
@@ -93,7 +93,7 @@ public class StudentManagementMessageHandler {
             String department = stringField(payload, "department");
             if (department.isBlank()) throw new RegistrationException("INVALID_DEPARTMENT", "Department is required.");
             return ServerMessage.success(requestId, "STUDENT_CREATED", accountService.create(
-                    new RegisterUserCommand(username, password, fullName, email), department));
+                    new RegisterUserCommand(institutionalId, password, fullName, email), department));
         });
     }
 
@@ -111,7 +111,7 @@ public class StudentManagementMessageHandler {
             long studentId = ((Number) payload.get("studentId")).longValue();
             String department = stringField(payload, "department");
             return ServerMessage.success(requestId, "STUDENT_UPDATED", studentService.updateStudent(studentId,
-                    stringField(payload, "username"), stringField(payload, "fullName"), stringField(payload, "email"),
+                    stringField(payload, "institutionalId"), stringField(payload, "fullName"), stringField(payload, "email"),
                     department, stringField(payload, "password"), stringField(payload, "confirmPassword")));
         });
     }

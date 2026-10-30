@@ -20,6 +20,8 @@ import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.monitoring.MonitoringService;
 import vn.edu.hanu.exam.service.monitoring.ReportActivityCommand;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
+import vn.edu.hanu.exam.session.AttemptSessionRegistry;
+import vn.edu.hanu.exam.exception.AttemptException;
 import vn.edu.hanu.exam.websocket.dto.GetExamMonitoringPayload;
 import vn.edu.hanu.exam.websocket.dto.ReportActivityPayload;
 
@@ -33,14 +35,22 @@ public class MonitoringMessageHandler {
     private final MonitoringService monitoringService;
     private final AuthenticatedSessionRegistry sessionRegistry;
     private final JsonMapper jsonMapper;
+    private final AttemptSessionRegistry leases;
 
     public MonitoringMessageHandler(
             MonitoringService monitoringService,
             AuthenticatedSessionRegistry sessionRegistry,
             JsonMapper jsonMapper) {
+        this(monitoringService, sessionRegistry, jsonMapper, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MonitoringMessageHandler(MonitoringService monitoringService, AuthenticatedSessionRegistry sessionRegistry,
+            JsonMapper jsonMapper, AttemptSessionRegistry leases) {
         this.monitoringService = monitoringService;
         this.sessionRegistry = sessionRegistry;
         this.jsonMapper = jsonMapper;
+        this.leases = leases;
     }
 
     public ServerMessage handleReportActivity(WebSocketSession session, ClientMessage message) {
@@ -70,10 +80,13 @@ public class MonitoringMessageHandler {
             return ServerMessage.success(
                     requestId,
                     TYPE_ACTIVITY_RECORDED,
-                    monitoringService.reportActivity(
-                            user.id(), new ReportActivityCommand(input.attemptId(), activityType)));
+                    leases == null ? monitoringService.reportActivity(user.id(), new ReportActivityCommand(input.attemptId(), activityType))
+                            : leases.withOwner(input.attemptId(), user.id(), sessionId,
+                                    () -> monitoringService.reportActivity(user.id(), new ReportActivityCommand(input.attemptId(), activityType)), false));
         } catch (InvalidPayloadException | IllegalArgumentException exception) {
             return invalidPayload(requestId);
+        } catch (AttemptException exception) {
+            return ServerMessage.error(requestId, exception.code(), exception.getMessage());
         } catch (MonitoringException exception) {
             return monitoringError(requestId, exception);
         } catch (RuntimeException exception) {

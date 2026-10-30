@@ -79,7 +79,7 @@ public class CourseMessageHandler {
                     }
                     yield ServerMessage.success(requestId, "COURSE_STUDENT_CREATED",
                             courses.createStudent(number(payload, "courseId"), teacher.id(),
-                                    new RegisterUserCommand(string(payload, "username"), password,
+                                    new RegisterUserCommand(string(payload, "institutionalId"), password,
                                             string(payload, "fullName"), string(payload, "email")), department));
                 }
                 case "IMPORT_COURSE_STUDENTS" -> ServerMessage.success(requestId, "COURSE_STUDENTS_IMPORTED",

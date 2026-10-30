@@ -38,10 +38,10 @@ function WebSocketProvider({ children }: WebSocketProviderProps) {
         if (disposed) return;
         const data = message.data;
         if (message.type === 'SESSION_RESUMED' && data && Number.isSafeInteger(data.id)
-          && typeof data.id === 'number' && data.id > 0 && typeof data.username === 'string'
+          && typeof data.id === 'number' && data.id > 0 && typeof data.institutionalId === 'string'
           && typeof data.fullName === 'string' && typeof data.email === 'string'
           && (data.role === 'STUDENT' || data.role === 'TEACHER') && typeof data.sessionToken === 'string') {
-          login({ id: data.id, username: data.username, fullName: data.fullName, email: data.email, role: data.role }, data.sessionToken);
+          login({ id: data.id, institutionalId: data.institutionalId, fullName: data.fullName, email: data.email, role: data.role }, data.sessionToken);
         } else if (message.error?.code !== 'CONNECTION_CLOSED') {
           logout(message.error?.message ?? 'Your session could not be restored. Please sign in again.');
         }

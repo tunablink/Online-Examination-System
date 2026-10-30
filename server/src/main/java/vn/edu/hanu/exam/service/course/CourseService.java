@@ -186,7 +186,7 @@ public class CourseService {
 
     private RowResult importRow(long courseId, StudentAccountService.NewStudentRow row) {
         RegisterUserCommand command = row.command();
-        User existing = users.findByUsername(command.username().trim()).orElse(null);
+        User existing = users.findByInstitutionalId(command.institutionalId().trim()).orElse(null);
         long studentId;
         boolean created = false;
         if (existing == null) {

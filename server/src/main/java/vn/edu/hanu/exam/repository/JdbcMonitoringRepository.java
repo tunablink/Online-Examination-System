@@ -105,7 +105,7 @@ public class JdbcMonitoringRepository implements MonitoringRepository {
         String sql = """
                 SELECT a.id AS attempt_id,
                        u.id AS student_id,
-                       u.username AS student_username,
+                       u.institutional_id AS student_institutional_id,
                        u.full_name AS student_full_name,
                        a.status AS attempt_status,
                        a.deadline_at AS deadline,
@@ -130,7 +130,7 @@ public class JdbcMonitoringRepository implements MonitoringRepository {
                     LIMIT 1
                 ) latest ON TRUE
                 WHERE a.exam_id = :examId
-                GROUP BY a.id, u.id, u.username, u.full_name, a.status, a.deadline_at,
+                GROUP BY a.id, u.id, u.institutional_id, u.full_name, a.status, a.deadline_at,
                          latest.id, latest.rule_code, latest.severity, latest.description,
                          latest.occurred_at, latest.created_at
                 ORDER BY a.id DESC
@@ -159,7 +159,7 @@ public class JdbcMonitoringRepository implements MonitoringRepository {
                 resultSet.getObject("latest_created_at", OffsetDateTime.class));
         return new MonitoringAttemptSnapshot(
                 resultSet.getLong("attempt_id"), resultSet.getLong("student_id"),
-                resultSet.getString("student_username"), resultSet.getString("student_full_name"),
+                resultSet.getString("student_institutional_id"), resultSet.getString("student_full_name"),
                 resultSet.getString("attempt_status"),
                 resultSet.getObject("deadline", OffsetDateTime.class),
                 resultSet.getLong("warning_count"), latest);

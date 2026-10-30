@@ -68,18 +68,18 @@ class RegistrationMessageHandlerTests {
         ArgumentCaptor<RegisterUserCommand> captor = ArgumentCaptor.forClass(RegisterUserCommand.class);
         verify(registrationService).registerStudent(captor.capture());
         RegisterUserCommand command = captor.getValue();
-        assertEquals("student01", command.username());
+        assertEquals("student01", command.institutionalId());
         assertEquals(RAW_PASSWORD, command.password());
         assertEquals("Student One", command.fullName());
         assertEquals("student01@example.com", command.email());
     }
 
     @Test
-    void duplicateUsernameReturnsUsernameAlreadyExists() {
+    void duplicateInstitutionalIdReturnsInstitutionalIdAlreadyExists() {
         when(registrationService.registerStudent(any(RegisterUserCommand.class)))
-                .thenThrow(new RegistrationException("USERNAME_ALREADY_EXISTS", "Username already exists."));
+                .thenThrow(new RegistrationException("INSTITUTIONAL_ID_ALREADY_EXISTS", "InstitutionalId already exists."));
 
-        assertErrorResponse(handler.handle(REQUEST_ID, validPayload()), "USERNAME_ALREADY_EXISTS");
+        assertErrorResponse(handler.handle(REQUEST_ID, validPayload()), "INSTITUTIONAL_ID_ALREADY_EXISTS");
     }
 
     @Test
@@ -99,7 +99,7 @@ class RegistrationMessageHandlerTests {
     @Test
     void missingFieldsAreRejectedByServiceAndReturnedAsError() {
         Map<String, Object> incomplete = new HashMap<>();
-        incomplete.put("username", "student01");
+        incomplete.put("institutionalId", "student01");
         when(registrationService.registerStudent(any(RegisterUserCommand.class)))
                 .thenThrow(new RegistrationException("INVALID_PASSWORD", "Password is required."));
 
@@ -141,7 +141,7 @@ class RegistrationMessageHandlerTests {
 
     private Map<String, Object> validPayload() {
         Map<String, Object> payload = new HashMap<>();
-        payload.put("username", "student01");
+        payload.put("institutionalId", "student01");
         payload.put("password", RAW_PASSWORD);
         payload.put("fullName", "Student One");
         payload.put("email", "student01@example.com");

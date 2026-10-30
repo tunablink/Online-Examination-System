@@ -47,19 +47,19 @@ class RegistrationAuthorizationIntegrationTests {
         try {
             if (role != null) {
                 jdbc.update("""
-                        INSERT INTO users(username,password_hash,full_name,email,role)
+                        INSERT INTO users(institutional_id,password_hash,full_name,email,role)
                         VALUES(:name,:hash,'Registration Actor',:email,:role)
                         """, Map.of("name", actor, "hash", passwords.encode("RegisterTest123!"),
                         "email", actor + "@example.com", "role", role));
                 assertEquals("LOGGED_IN", command(socket, "LOGIN",
-                        Map.of("username", actor, "password", "RegisterTest123!")).type());
+                        Map.of("institutionalId", actor, "password", "RegisterTest123!")).type());
             }
             ServerMessage response = command(socket, "REGISTER", Map.of(
-                    "username", student, "password", "StudentTest123!",
+                    "institutionalId", student, "password", "StudentTest123!",
                     "fullName", "Registration Student", "email", student + "@example.com",
                     "role", "TEACHER")); // Untrusted role must never elevate the created user.
             assertEquals("registration-auth", response.requestId());
-            int count = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE username=:name",
+            int count = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE institutional_id=:name",
                     Map.of("name", student), Integer.class);
             if (expectedError != null) {
                 assertEquals("ERROR", response.type());
@@ -69,7 +69,7 @@ class RegistrationAuthorizationIntegrationTests {
                 assertEquals("REGISTERED", response.type());
                 assertEquals(1, count);
                 Map<String, Object> stored = jdbc.queryForMap(
-                        "SELECT role,password_hash FROM users WHERE username=:name", Map.of("name", student));
+                        "SELECT role,password_hash FROM users WHERE institutional_id=:name", Map.of("name", student));
                 assertEquals("STUDENT", stored.get("role"));
                 assertTrue(passwords.matches("StudentTest123!", (String) stored.get("password_hash")));
                 Map<?, ?> data = (Map<?, ?>) response.data();
@@ -88,23 +88,23 @@ class RegistrationAuthorizationIntegrationTests {
 
     @Test void anonymousCannotRegisterTeacher() throws Exception {
         String suffix = UUID.randomUUID().toString().replace("-", "");
-        String username = "teacher_" + suffix;
+        String institutionalId = "teacher_" + suffix;
         var socket = mock(WebSocketSession.class);
         when(socket.getId()).thenReturn("teacher_registration_" + suffix);
         when(socket.isOpen()).thenReturn(true);
 
         ServerMessage response = command(socket, "REGISTER", Map.of(
-                "username", username,
+                "institutionalId", institutionalId,
                 "password", "TeacherTest123!",
                 "fullName", "New Teacher",
-                "email", username + "@example.com",
+                "email", institutionalId + "@example.com",
                 "role", "TEACHER",
                 "acceptedPolicy", true));
 
         assertEquals("ERROR", response.type());
         assertEquals("AUTHENTICATION_REQUIRED", response.error().code());
-        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE username=:name",
-                Map.of("name", username), Integer.class));
+        assertEquals(0, jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE institutional_id=:name",
+                Map.of("name", institutionalId), Integer.class));
     }
 
     @Test void studentCannotCreateStudent() throws Exception {

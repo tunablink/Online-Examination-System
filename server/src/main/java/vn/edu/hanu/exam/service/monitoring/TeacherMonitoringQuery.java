@@ -38,7 +38,7 @@ public class TeacherMonitoringQuery {
                 """, params, Long.class);
         var activities = jdbc.query("""
                 SELECT sa.id, sa.attempt_id, a.exam_id, e.title, a.student_id,
-                       u.full_name, u.username, sa.rule_code, sa.severity,
+                       u.full_name, u.institutional_id, sa.rule_code, sa.severity,
                        sa.description, sa.occurred_at, sa.created_at
                 FROM suspicious_activities sa
                 JOIN exam_attempts a ON a.id=sa.attempt_id
@@ -48,7 +48,7 @@ public class TeacherMonitoringQuery {
                 """, params, (rs, row) -> new TeacherMonitoringOverview.Activity(
                         rs.getLong("id"), rs.getLong("attempt_id"), rs.getLong("exam_id"),
                         rs.getString("title"), rs.getLong("student_id"), rs.getString("full_name"),
-                        rs.getString("username"), rs.getString("rule_code"), rs.getString("severity"),
+                        rs.getString("institutional_id"), rs.getString("rule_code"), rs.getString("severity"),
                         rs.getString("description"), rs.getObject("occurred_at", OffsetDateTime.class),
                         rs.getObject("created_at", OffsetDateTime.class)));
         return new TeacherMonitoringOverview(

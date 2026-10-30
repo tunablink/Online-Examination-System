@@ -46,7 +46,10 @@ class AttemptMessageHandlerTests {
         attemptService = mock(ExamAttemptService.class);
         sessionRegistry = new AuthenticatedSessionRegistry();
         jsonMapper = JsonMapper.builder().build();
-        handler = new AttemptMessageHandler(attemptService, sessionRegistry, jsonMapper);
+        var leases = new vn.edu.hanu.exam.session.AttemptSessionRegistry();
+        leases.acquire(31L, 20L, SESSION_ID, SESSION_ID);
+        handler = new AttemptMessageHandler(attemptService, sessionRegistry, jsonMapper, leases, null);
+        when(attemptService.getAttempt(31L, 20L)).thenReturn(sampleAttempt());
     }
 
     @Test

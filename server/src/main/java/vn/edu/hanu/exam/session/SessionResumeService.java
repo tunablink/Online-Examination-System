@@ -20,7 +20,7 @@ import vn.edu.hanu.exam.service.LoggedInUser;
 /** Opaque, tab-scoped credentials. Raw tokens and passwords are never retained. */
 @Service
 public class SessionResumeService {
-    public record Details(long id, String username, String fullName, String email,
+    public record Details(long id, String institutionalId, String fullName, String email,
             UserRole role, String sessionToken, Instant sessionExpiresAt) { }
     private record Credential(long userId, String passwordHash, Instant expiresAt) { }
     private final ConcurrentHashMap<String, Credential> credentials = new ConcurrentHashMap<>();
@@ -37,6 +37,7 @@ public class SessionResumeService {
         credentials.entrySet().removeIf(entry -> !entry.getValue().expiresAt().isAfter(clock.instant()));
         if (credentials.size() >= 10_000) throw new IllegalStateException("Session capacity reached");
         User user = users.findById(authenticated.id()).filter(User::active)
+                .filter(account -> account.institutionalId() != null && !account.institutionalId().isBlank())
                 .orElseThrow(() -> new IllegalArgumentException("Session is unavailable"));
         byte[] bytes = new byte[32]; random.nextBytes(bytes);
         String token = Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
@@ -55,7 +56,8 @@ public class SessionResumeService {
         if (credential == null || !credential.expiresAt().isAfter(clock.instant())) {
             credentials.remove(digest); throw invalid();
         }
-        User user = users.findById(credential.userId()).filter(User::active).orElse(null);
+        User user = users.findById(credential.userId()).filter(User::active)
+                .filter(account -> account.institutionalId() != null && !account.institutionalId().isBlank()).orElse(null);
         if (user == null || !MessageDigest.isEqual(user.passwordHash().getBytes(StandardCharsets.UTF_8),
                 credential.passwordHash().getBytes(StandardCharsets.UTF_8))) {
             credentials.remove(digest); throw invalid();
@@ -78,8 +80,13 @@ public class SessionResumeService {
         return credential != null && credential.expiresAt().isAfter(clock.instant());
     }
 
+    /** Internal stable credential scope, only for fencing reconnects; never serialize it. */
+    public String credentialScope(String socketId) {
+        return isLive(socketId) ? bindings.get(socketId) : null;
+    }
+
     private static Details details(User user, String token, Instant expires) {
-        return new Details(user.id(), user.username(), user.fullName(), user.email(), user.role(), token, expires);
+        return new Details(user.id(), user.institutionalId(), user.fullName(), user.email(), user.role(), token, expires);
     }
     private static IllegalArgumentException invalid() { return new IllegalArgumentException("Session is unavailable"); }
     private static String digest(String token) {

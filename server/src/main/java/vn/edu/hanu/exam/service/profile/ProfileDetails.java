@@ -7,7 +7,7 @@ import vn.edu.hanu.exam.domain.UserRole;
 
 public record ProfileDetails(
         long id,
-        String username,
+        String institutionalId,
         String fullName,
         String email,
         String department,
@@ -19,7 +19,7 @@ public record ProfileDetails(
     public static ProfileDetails from(User user) {
         return new ProfileDetails(
                 user.id(),
-                user.username(),
+                user.institutionalId(),
                 user.fullName(),
                 user.email(),
                 user.department(),

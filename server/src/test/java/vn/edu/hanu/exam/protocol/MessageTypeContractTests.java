@@ -122,6 +122,8 @@ class MessageTypeContractTests {
 
                 "SAVE_ANSWER",
                 "ANSWER_SAVED",
+                "HEARTBEAT_ATTEMPT", "ATTEMPT_HEARTBEAT",
+                "RELEASE_ATTEMPT", "ATTEMPT_RELEASED",
 
                 "SUBMIT_EXAM",
                 "EXAM_SUBMITTED",
@@ -359,6 +361,8 @@ class MessageTypeContractTests {
                 MessageType.START_EXAM,
                 MessageType.GET_EXAM_ATTEMPT,
                 MessageType.SAVE_ANSWER,
+                MessageType.HEARTBEAT_ATTEMPT,
+                MessageType.RELEASE_ATTEMPT,
                 MessageType.SUBMIT_EXAM,
 
                 MessageType.GET_ATTEMPT_HISTORY,
@@ -438,6 +442,8 @@ class MessageTypeContractTests {
                 MessageType.EXAM_STARTED,
                 MessageType.EXAM_ATTEMPT_DETAILS,
                 MessageType.ANSWER_SAVED,
+                MessageType.ATTEMPT_HEARTBEAT,
+                MessageType.ATTEMPT_RELEASED,
                 MessageType.EXAM_SUBMITTED,
 
                 MessageType.ATTEMPT_HISTORY,

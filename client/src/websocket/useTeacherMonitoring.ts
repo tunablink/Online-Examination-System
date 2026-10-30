@@ -3,7 +3,7 @@ import { useWebSocket } from './useWebSocket';
 
 export interface TeacherActivity {
   id: number; attemptId: number; examId: number; examTitle: string;
-  studentId: number; studentName: string; username: string;
+  studentId: number; studentName: string; institutionalId: string | null;
   rule: string; severity: 'INFO' | 'WARNING'; description: string;
   occurredAt: string; recordedAt: string;
 }
@@ -21,7 +21,8 @@ function isOverview(value: unknown): value is Overview {
       if (typeof value !== 'object' || value === null) return false;
       const event = value as Record<string, unknown>;
       return ['id', 'attemptId', 'examId', 'studentId'].every((key) => count(event[key]))
-        && ['examTitle', 'studentName', 'username', 'rule', 'description', 'occurredAt', 'recordedAt']
+        && (event.institutionalId === null || typeof event.institutionalId === 'string')
+        && ['examTitle', 'studentName', 'rule', 'description', 'occurredAt', 'recordedAt']
           .every((key) => typeof event[key] === 'string')
         && (event.severity === 'INFO' || event.severity === 'WARNING');
     });

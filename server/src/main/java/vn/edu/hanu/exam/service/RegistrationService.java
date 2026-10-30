@@ -17,7 +17,7 @@ import vn.edu.hanu.exam.repository.UserRepository;
 
 @Service 
 public class RegistrationService {
-    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9._-]{3,50}$");
+    private static final Pattern INSTITUTIONAL_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9._-]{3,50}$");
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
@@ -38,13 +38,13 @@ public class RegistrationService {
             throw new RegistrationException("INVALID_REQUEST", "Registration data is required.");
         }
 
-        String username = validateAndNormalizeUsername(command.username());
+        String institutionalId = validateAndNormalizeInstitutionalId(command.institutionalId());
         String fullName = validateAndNormalizeFullName(command.fullName());
         String email = validateAndNormalizeEmail(command.email());
         String password = validatePassword(command.password());
 
-        if (userRepository.existsByUsername(username)) {
-            throw new RegistrationException("USERNAME_ALREADY_EXISTS", "Student ID already exists.");
+        if (userRepository.existsByInstitutionalId(institutionalId)) {
+            throw new RegistrationException("INSTITUTIONAL_ID_ALREADY_EXISTS", "Student ID already exists.");
         }
 
         if (userRepository.existsByEmail(email)){
@@ -53,7 +53,7 @@ public class RegistrationService {
 
         String passwordHash = passwordEncoder.encode(password);
 
-        NewUser newUser = new NewUser(username, passwordHash, fullName, email, UserRole.STUDENT);
+        NewUser newUser = new NewUser(institutionalId, passwordHash, fullName, email, UserRole.STUDENT);
 
         try{
             User createdUser = userRepository.create(newUser);
@@ -64,18 +64,18 @@ public class RegistrationService {
 
     }
 
-    private static String validateAndNormalizeUsername(String value){
+    private static String validateAndNormalizeInstitutionalId(String value){
         if (value == null){
-            throw new RegistrationException( "INVALID_USERNAME", "Student ID is required.");
+            throw new RegistrationException( "INVALID_INSTITUTIONAL_ID", "Student ID is required.");
         }
 
-        String username = value.trim();
+        String institutionalId = value.trim();
 
-        if (!USERNAME_PATTERN.matcher(username).matches()){
-            throw new RegistrationException("INVALID_USERNAME", "Student ID must contain 3 to 50 characters " + "and use only letters, numbers, " + "dot, underscore, or hyphen.");
+        if (!INSTITUTIONAL_ID_PATTERN.matcher(institutionalId).matches()){
+            throw new RegistrationException("INVALID_INSTITUTIONAL_ID", "Student ID must contain 3 to 50 characters " + "and use only letters, numbers, " + "dot, underscore, or hyphen.");
         }
 
-        return username.toLowerCase(Locale.ROOT);
+        return institutionalId.toLowerCase(Locale.ROOT);
     }
 
     private static String validateAndNormalizeFullName(String value){

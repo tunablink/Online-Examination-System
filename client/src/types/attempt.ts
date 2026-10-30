@@ -127,6 +127,19 @@ export function isExamSubmissionResult(value: unknown): value is ExamSubmissionR
     && typeof result.totalQuestions === 'number';
 }
 
+/** Only a matching, terminal server snapshot may trigger result navigation. */
+export function getConfirmedAttemptResult(
+  value: unknown,
+  attemptId: number,
+  examId: number,
+): ExamSubmissionResult | null {
+  if (!isExamAttempt(value) || value.attemptId !== attemptId || value.examId !== examId
+    || value.status === 'IN_PROGRESS' || value.result === null) return null;
+  const result = value.result;
+  return result.attemptId === attemptId && result.examId === examId && result.status === value.status
+    ? result : null;
+}
+
 export function isStudentAttemptResult(value: unknown): value is StudentAttemptResult {
   if (typeof value !== 'object' || value === null) return false;
   const result = value as Record<string, unknown>;

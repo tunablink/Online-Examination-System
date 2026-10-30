@@ -1,5 +1,5 @@
 export interface RegisterFormState{
-    username: string;
+    institutionalId: string;
     fullName: string;
     email: string;
     password: string;
@@ -7,7 +7,7 @@ export interface RegisterFormState{
 }
 
 export const EMPTY_REGISTER_FORM: RegisterFormState = {
-    username: '',
+    institutionalId: '',
     fullName: '',
     email: '',
     password: '',
@@ -15,11 +15,11 @@ export const EMPTY_REGISTER_FORM: RegisterFormState = {
 };
 
 export function validateRegisterForm(form: RegisterFormState): string | null {
-    const normalizedUsername = form.username.trim();
+    const normalizedInstitutionalId = form.institutionalId.trim();
     const normalizedFullName = form.fullName.trim();
     const normalizedEmail = form.email.trim();
 
-    if (!/^[a-zA-Z0-9._-]{3,50}$/.test(normalizedUsername)){
+    if (!/^[a-zA-Z0-9._-]{3,50}$/.test(normalizedInstitutionalId)){
         return 'Student ID must be 3–50 characters long and contain only letters, digits, dots, underscores, or hyphens.';
     }
 

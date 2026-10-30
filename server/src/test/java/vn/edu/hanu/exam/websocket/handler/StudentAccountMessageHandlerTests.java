@@ -39,7 +39,7 @@ class StudentAccountMessageHandlerTests {
 
     @Test
     void anonymousAndStudentCannotCreateOrImport() {
-        Map<String, Object> create = Map.of("username", "student1", "fullName", "Student One",
+        Map<String, Object> create = Map.of("institutionalId", "student1", "fullName", "Student One",
                 "email", "student@example.com", "password", "StrongPassword123");
         assertEquals("AUTHENTICATION_REQUIRED", handler.handleCreate("anonymous", "r1", create).error().code());
         assertEquals("AUTHENTICATION_REQUIRED", handler.handleImport("anonymous", "r2", Map.of("contentBase64", "file")).error().code());
@@ -59,7 +59,7 @@ class StudentAccountMessageHandlerTests {
         when(accounts.importXlsx("file")).thenReturn(new StudentAccountService.ImportResult(2));
 
         ServerMessage created = handler.handleCreate("teacher", "r1", Map.of(
-                "username", "student1", "fullName", "Student One", "email", "student@example.com",
+                "institutionalId", "student1", "fullName", "Student One", "email", "student@example.com",
                 "password", "StrongPassword123", "confirmPassword", "StrongPassword123",
                 "department", "Computer Science"));
         ServerMessage imported = handler.handleImport("teacher", "r2", Map.of("contentBase64", "file"));
@@ -73,12 +73,12 @@ class StudentAccountMessageHandlerTests {
     @Test
     void teacherCannotCreateStudentWithMissingDepartmentOrMismatchedPassword() {
         sessions.authenticate("teacher", user(UserRole.TEACHER));
-        Map<String, Object> base = Map.of("username", "student1", "fullName", "Student One",
+        Map<String, Object> base = Map.of("institutionalId", "student1", "fullName", "Student One",
                 "email", "student@example.com", "password", "StrongPassword123",
                 "confirmPassword", "StrongPassword123", "department", "");
         assertEquals("INVALID_DEPARTMENT", handler.handleCreate("teacher", "r1", base).error().code());
         assertEquals("PASSWORD_MISMATCH", handler.handleCreate("teacher", "r2", Map.of(
-                "username", "student1", "fullName", "Student One", "email", "student@example.com",
+                "institutionalId", "student1", "fullName", "Student One", "email", "student@example.com",
                 "password", "StrongPassword123", "confirmPassword", "DifferentPassword123",
                 "department", "Science")).error().code());
         verify(accounts, never()).create(any(), any());

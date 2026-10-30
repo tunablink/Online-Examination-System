@@ -10,7 +10,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record RegisterPayload(
-        String username,
+        String institutionalId,
         String password,
         String fullName,
         String email) {
@@ -20,7 +20,7 @@ public record RegisterPayload(
      */
     @Override
     public String toString() {
-        return "RegisterPayload[username=" + username
+        return "RegisterPayload[institutionalId=" + institutionalId
                 + ", fullName=" + fullName
                 + ", email=" + email
                 + ", password=***]";

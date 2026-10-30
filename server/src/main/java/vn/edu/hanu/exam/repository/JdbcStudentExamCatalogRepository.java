@@ -82,6 +82,7 @@ public class JdbcStudentExamCatalogRepository implements StudentExamCatalogRepos
     public List<AvailableExamDetails> findAllPublishedForStudent(long studentId) {
         String sql = SELECT_PUBLISHED_EXAM_METADATA + """
                 WHERE e.status = :publishedStatus
+                  AND (e.entry_closes_at IS NULL OR e.entry_closes_at > CURRENT_TIMESTAMP)
                   AND e.course_id IS NOT NULL
                   AND EXISTS (
                     SELECT 1 FROM course_students cs WHERE cs.course_id = e.course_id AND cs.student_id = :studentId)

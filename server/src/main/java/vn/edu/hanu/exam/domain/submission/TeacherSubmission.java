@@ -9,7 +9,7 @@ public record TeacherSubmission(
         long examId,
         String examTitle,
         long studentId,
-        String username,
+        String institutionalId,
         String studentFullName,
         AttemptStatus status,
         OffsetDateTime startedAt,

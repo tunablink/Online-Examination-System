@@ -46,7 +46,7 @@ function LoginPage() {
     if (
       message.type === "LOGGED_IN" &&
       message.data?.id !== undefined &&
-      message.data.username &&
+      message.data.institutionalId &&
       message.data.fullName &&
       message.data.email &&
       message.data.role
@@ -54,7 +54,7 @@ function LoginPage() {
       login(
         {
           id: message.data.id,
-          username: message.data.username,
+          institutionalId: message.data.institutionalId,
           fullName: message.data.fullName,
           email: message.data.email,
           role: message.data.role,
@@ -103,7 +103,7 @@ function LoginPage() {
     setPending(true);
     const requestId = sendMessage(
       "LOGIN",
-      { username: form.loginId.trim(), password: form.password },
+      { institutionalId: form.loginId.trim(), password: form.password },
       handleResponse,
     );
     if (requestId === null) {

@@ -41,10 +41,11 @@ export default function ExistingStudentSearch({ students, enrolledStudentIds, qu
                   <tbody>{matches.map((student) => {
                     const enrolled = enrolledStudentIds.has(student.id);
                     const inactive = student.active === false;
+                    const missingId = !student.institutionalId;
                     return <tr className="border-t border-[#e7edef]" key={student.id}>
                       <td className="px-4 py-3 font-semibold text-[#26353a]">{student.fullName}</td>
-                      <td className="px-4 py-3 text-[#607178]">{student.username}</td>
-                      <td className="px-4 py-3 text-right"><button aria-label={enrolled ? `${student.fullName} is already enrolled` : `Add ${student.fullName} (${student.username}) to course`} className="inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-[#00778b] px-3 text-sm font-semibold text-white hover:bg-[#006273] disabled:cursor-not-allowed disabled:bg-[#edf2f3] disabled:text-[#718087]" disabled={disabled || enrolled || inactive} onClick={() => onAdd(student)} type="button">{addingStudentId === student.id ? 'Adding...' : enrolled ? 'Already enrolled' : inactive ? 'Inactive' : <><Icon name="plus" size={14} />Add</>}</button></td>
+                      <td className="px-4 py-3 text-[#607178]">{student.institutionalId ?? 'Not assigned'}</td>
+                      <td className="px-4 py-3 text-right"><button aria-label={enrolled ? `${student.fullName} is already enrolled` : `Add ${student.fullName} (${student.institutionalId}) to course`} className="inline-flex min-h-10 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-[#00778b] px-3 text-sm font-semibold text-white hover:bg-[#006273] disabled:cursor-not-allowed disabled:bg-[#edf2f3] disabled:text-[#718087]" disabled={disabled || enrolled || inactive || missingId} onClick={() => onAdd(student)} type="button">{addingStudentId === student.id ? 'Adding...' : enrolled ? 'Already enrolled' : inactive ? 'Inactive' : missingId ? 'Assign Student ID first' : <><Icon name="plus" size={14} />Add</>}</button></td>
                     </tr>;
                   })}{matches.length === 0 && <tr><td className="px-4 py-6 text-center text-[#718087]" colSpan={3}>No registered students match this name or student ID.</td></tr>}</tbody>
                 </table>

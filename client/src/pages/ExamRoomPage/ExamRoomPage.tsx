@@ -6,6 +6,7 @@ import StudentPortalHeader from "../../components/layout/StudentPortalHeader";
 import {
   isExamAttempt,
   isExamSubmissionResult,
+  getConfirmedAttemptResult,
   type AnswerMap,
   type ExamAttempt,
   type ExamSubmissionResult,
@@ -15,6 +16,7 @@ import type { MonitoringActivityType } from "../../websocket/protocol";
 import QuestionNavigator from "./components/QuestionNavigator";
 import QuestionPanel from "./components/QuestionPanel";
 import SubmitExamDialog from "./components/SubmitExamDialog";
+import { isAttemptSessionError, useAttemptSession } from './useAttemptSession';
 
 function formatTime(value: number) {
   const safe = Math.max(0, Math.floor(value));
@@ -46,6 +48,8 @@ function ExamRoomPage() {
   const [attempt, setAttempt] = useState<ExamAttempt | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [recoveryVersion, setRecoveryVersion] = useState(0);
   const [submissionNotice, setSubmissionNotice] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
@@ -69,6 +73,12 @@ function ExamRoomPage() {
   );
   const pendingDisconnect = useRef(false);
   const previousConnectionStatus = useRef(connectionStatus);
+  const sessionConflict = useCallback((message: string) => setSessionError(message), []);
+  const restoreAttempt = useCallback(() => setRecoveryVersion((value) => value + 1), []);
+  useAttemptSession(attempt?.attemptId ?? null,
+    !loading && loadError === null && sessionError === null && attempt?.status === 'IN_PROGRESS'
+      && submissionResult === null && remainingSeconds > 0,
+    sessionConflict, restoreAttempt);
 
   useEffect(() => {
     if (
@@ -82,6 +92,7 @@ function ExamRoomPage() {
     const timer = window.setTimeout(() => {
       setLoading(true);
       setLoadError(null);
+      setSessionError(null);
       const requestId = sendMessage(
         "GET_EXAM_ATTEMPT",
         { attemptId: numericAttemptId },
@@ -95,7 +106,19 @@ function ExamRoomPage() {
             data.attemptId === numericAttemptId &&
             data.examId === numericExamId
           ) {
+            if (data.status !== 'IN_PROGRESS') {
+              const result = getConfirmedAttemptResult(data, numericAttemptId, numericExamId);
+              if (result === null) {
+                setLoadError('The server has not returned a valid final result. Please retry.');
+                return;
+              }
+              navigate(`/student/attempts/${result.attemptId}/result`, { replace: true });
+              return;
+            }
             setAttempt(data);
+            setSessionError(null);
+            setSaveError(null);
+            setSaveState('saved');
             setAnswers(
               Object.fromEntries(
                 data.answers.map((answer) => [
@@ -106,6 +129,10 @@ function ExamRoomPage() {
             );
             setSubmissionResult(data.result);
             setCurrentQuestionIndex(0);
+            return;
+          }
+          if (isAttemptSessionError(message.error?.code)) {
+            setSessionError(message.error?.message ?? 'This examination is already open in another tab/session.');
             return;
           }
           setLoadError(
@@ -124,7 +151,7 @@ function ExamRoomPage() {
       disposed = true;
       window.clearTimeout(timer);
     };
-  }, [connectionStatus, numericAttemptId, numericExamId, sendMessage]);
+  }, [connectionStatus, numericAttemptId, numericExamId, sendMessage, recoveryVersion, navigate]);
 
   const deadline = attempt?.deadline;
   useEffect(() => {
@@ -156,30 +183,33 @@ function ExamRoomPage() {
           pending = false;
           if (disposed) return;
           const data: unknown = message.data;
-          if (
-            message.type === "EXAM_ATTEMPT_DETAILS" && isExamAttempt(data) &&
-            data.attemptId === attempt.attemptId && data.examId === attempt.examId &&
-            data.status !== "IN_PROGRESS" && data.result !== null
-          ) {
-            setAttempt(data);
-            setSubmissionResult(data.result);
+          const result = message.type === 'EXAM_ATTEMPT_DETAILS'
+            ? getConfirmedAttemptResult(data, attempt.attemptId, attempt.examId) : null;
+          if (result !== null) {
+            setSubmissionResult(result);
             setSubmissionNotice(false);
+            navigate(`/student/attempts/${result.attemptId}/result`, { replace: true });
           }
         },
       );
       if (requestId === null) pending = false;
     };
+    const first = window.setTimeout(refreshResult, 0);
     const timer = window.setInterval(refreshResult, 2000);
     return () => {
       disposed = true;
+      window.clearTimeout(first);
       window.clearInterval(timer);
     };
-  }, [attempt, remainingSeconds, connectionStatus, submissionResult, sendMessage]);
+  }, [attempt, remainingSeconds, connectionStatus, submissionResult, sendMessage, navigate]);
 
   const monitoringActive =
     attempt !== null &&
     attempt.status === "IN_PROGRESS" &&
     submissionResult === null &&
+    sessionError === null &&
+    loadError === null &&
+    !loading &&
     remainingSeconds > 0;
 
   const reportActivity = useCallback(
@@ -283,17 +313,19 @@ function ExamRoomPage() {
     );
   }
 
-  if (loading || attempt === null) {
+  if (loading || attempt === null || sessionError !== null || loadError !== null) {
     return (
       <main className="grid min-h-screen place-items-center bg-[#f5f9fb] p-6">
         <section className="w-full max-w-lg rounded-xl border border-[#dce7ea] bg-white p-8 text-center">
-          {loadError ? (
+          {sessionError || loadError ? (
             <>
               <Icon className="mx-auto text-[#bd2f35]" name="alert" size={28} />
               <h1 className="mt-4 text-xl font-bold">
-                Examination attempt unavailable
+                {sessionError ? 'Examination session unavailable' : 'Examination attempt unavailable'}
               </h1>
-              <p className="mt-2 text-base text-[#718087]">{loadError}</p>
+              <p className="mt-2 text-base text-[#718087]">{sessionError ?? loadError}</p>
+              {sessionError && <p className="mt-3 text-sm leading-6 text-[#718087]">Return to the original tab, or close it before retrying here. After an unexpected disconnect, another session may need to wait up to 30–45 seconds. Your saved answers and original deadline are kept.</p>}
+              <button className="mt-5 min-h-10 rounded-lg bg-[#00778b] px-5 text-sm font-semibold text-white disabled:opacity-50" disabled={connectionStatus !== 'connected'} onClick={restoreAttempt} type="button">Retry recovery</button>
             </>
           ) : (
             <p className="text-base text-[#718087]">
@@ -317,6 +349,7 @@ function ExamRoomPage() {
   const currentQuestion = questions[currentQuestionIndex];
   const answeredCount = Object.keys(answers).length;
   const interactionDisabled =
+    loading || sessionError !== null || loadError !== null ||
     remainingSeconds <= 0 ||
     connectionStatus !== "connected" ||
     attempt.status !== "IN_PROGRESS" ||
@@ -371,6 +404,7 @@ function ExamRoomPage() {
         }
 
         setSaveState("error");
+        if (isAttemptSessionError(message.error?.code)) setSessionError(message.error?.message ?? 'The exam session must be restored.');
 
         setSaveError(
           message.error?.message ?? "The answer could not be saved.",
@@ -424,7 +458,7 @@ function ExamRoomPage() {
 
   const submitExam = () => {
     if (
-      submitting || submitInFlight.current || saveInFlight.current ||
+      interactionDisabled || submitting || submitInFlight.current || saveInFlight.current ||
       attempt.status !== "IN_PROGRESS" ||
       connectionStatus !== "connected" ||
       secondsUntil(attempt.deadline) <= 0 || submissionResult !== null
@@ -443,7 +477,7 @@ function ExamRoomPage() {
         if (
           message.type === "EXAM_SUBMITTED" &&
           isExamSubmissionResult(data) &&
-          data.attemptId === attempt.attemptId
+          data.attemptId === attempt.attemptId && data.examId === attempt.examId
         ) {
           setSubmissionResult(data);
           setSubmissionNotice(false);
@@ -453,6 +487,7 @@ function ExamRoomPage() {
           navigate(`/student/attempts/${data.attemptId}/result`, { replace: true });
           return;
         }
+        if (isAttemptSessionError(message.error?.code)) setSessionError(message.error?.message ?? 'The exam session must be restored.');
         setSubmissionError(
           message.error?.message ?? "The examination could not be submitted.",
         );

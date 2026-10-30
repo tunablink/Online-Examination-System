@@ -12,7 +12,7 @@ const isStudent = (value: unknown): value is StudentDirectoryData => {
   if (typeof value !== 'object' || value === null) return false;
   const student = value as Partial<StudentDirectoryData>;
   return typeof student.id === 'number'
-    && typeof student.username === 'string'
+    && (student.institutionalId === null || typeof student.institutionalId === 'string')
     && typeof student.fullName === 'string'
     && typeof student.email === 'string'
     && typeof student.active === 'boolean'
@@ -72,7 +72,7 @@ function RegisterPage() {
     if (!department.trim() || department.trim().length > 120) return setFeedback({ type: 'error', message: 'Department is required and must be at most 120 characters.' });
     setPending(true);
     const requestId = sendMessage('CREATE_STUDENT', {
-      username: form.username.trim(),
+      institutionalId: form.institutionalId.trim(),
       fullName: form.fullName.trim(),
       email: form.email.trim(),
       password: form.password,
@@ -129,7 +129,7 @@ function RegisterPage() {
       if (message.type === 'STUDENT_DETAILS' && isStudent(message.data)) {
         const current = message.data;
         setEditingStudent(current);
-        setEditForm({ username: current.username, fullName: current.fullName, email: current.email,
+        setEditForm({ institutionalId: current.institutionalId ?? '', fullName: current.fullName, email: current.email,
           department: current.department?.trim() || student.department?.trim() || '', password: '', confirmPassword: '' });
         setShowEditPassword(false);
       } else {
@@ -142,7 +142,7 @@ function RegisterPage() {
   const saveStudent = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editingStudent || busyStudentId !== null) return;
-    if (!/^[a-zA-Z0-9._-]{3,50}$/.test(editForm.username.trim())) return setFeedback({ type: 'error', message: 'Student ID must be 3 to 50 letters, numbers, dots, underscores or hyphens.' });
+    if (!/^[a-zA-Z0-9._-]{3,50}$/.test(editForm.institutionalId.trim())) return setFeedback({ type: 'error', message: 'Student ID must be 3 to 50 letters, numbers, dots, underscores or hyphens.' });
     if (editForm.fullName.trim().length < 2 || editForm.fullName.trim().length > 100) return setFeedback({ type: 'error', message: 'Full name must be 2 to 100 characters.' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editForm.email.trim())) return setFeedback({ type: 'error', message: 'Enter a valid email address.' });
     if (!editForm.department.trim() || editForm.department.trim().length > 120) return setFeedback({ type: 'error', message: 'Department is required and must be at most 120 characters.' });
@@ -152,7 +152,7 @@ function RegisterPage() {
     setBusyStudentId(editingStudent.id);
     const requestId = sendMessage('UPDATE_STUDENT', {
       studentId: editingStudent.id,
-      username: editForm.username.trim(),
+      institutionalId: editForm.institutionalId.trim(),
       fullName: editForm.fullName.trim(),
       email: editForm.email.trim(),
       department: editForm.department.trim(),
@@ -172,7 +172,7 @@ function RegisterPage() {
   };
 
   const deleteStudent = (student: StudentDirectoryData) => {
-    if (busyStudentId !== null || !window.confirm(`Remove ${student.fullName} (${student.username}) from active student accounts?`)) return;
+    if (busyStudentId !== null || !window.confirm(`Remove ${student.fullName} (${student.institutionalId}) from active student accounts?`)) return;
     if (connectionStatus !== 'connected') return setFeedback({ type: 'error', message: 'The WebSocket connection is not ready.' });
     setBusyStudentId(student.id);
     const requestId = sendMessage('DELETE_STUDENT', { studentId: student.id }, (message) => {
@@ -188,8 +188,8 @@ function RegisterPage() {
   };
 
   const normalizedSearch = search.trim().toLowerCase();
-  const visibleStudents = students.filter((student) => !normalizedSearch || [student.fullName, student.username, student.email]
-    .some((value) => value.toLowerCase().includes(normalizedSearch)));
+  const visibleStudents = students.filter((student) => !normalizedSearch || [student.fullName, student.institutionalId, student.email]
+    .some((value) => (value ?? '').toLowerCase().includes(normalizedSearch)));
 
   return (
     <div className="text-[#172126]">
@@ -215,7 +215,7 @@ function RegisterPage() {
 
       <section className="mt-5 rounded-xl border border-[#dce7ea] bg-white p-6 shadow-[0_18px_50px_rgba(18,55,65,.05)] max-sm:p-5">
         <form className="grid grid-cols-2 gap-x-5 gap-y-4 max-md:grid-cols-1" onSubmit={submit}>
-          {[{ name: 'fullName', label: 'Full name', type: 'text', placeholder: 'Nguyen Van An' }, { name: 'username', label: 'Student ID', type: 'text', placeholder: 'student01' }, { name: 'email', label: 'Institutional email', type: 'email', placeholder: 'student@university.edu' }].map((field) => <label className="grid gap-2" key={field.name}><span className="text-sm font-semibold text-[#405057]">{field.label}</span><input className={inputClass} disabled={pending} name={field.name} onChange={change} placeholder={field.placeholder} type={field.type} value={form[field.name as keyof RegisterFormState]} /></label>)}
+          {[{ name: 'fullName', label: 'Full name', type: 'text', placeholder: 'Nguyen Van An' }, { name: 'institutionalId', label: 'Student ID', type: 'text', placeholder: 'student01' }, { name: 'email', label: 'Institutional email', type: 'email', placeholder: 'student@university.edu' }].map((field) => <label className="grid gap-2" key={field.name}><span className="text-sm font-semibold text-[#405057]">{field.label}</span><input className={inputClass} disabled={pending} name={field.name} onChange={change} placeholder={field.placeholder} type={field.type} value={form[field.name as keyof RegisterFormState]} /></label>)}
           <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Password</span><div className="relative"><input className={`${inputClass} pr-14`} disabled={pending} name="password" onChange={change} placeholder="At least 8 characters" type={showPassword ? 'text' : 'password'} value={form.password} /><button className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#00778b]" onClick={() => setShowPassword((value) => !value)} type="button">{showPassword ? 'Hide' : 'Show'}</button></div></label>
           <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Confirm password</span><input className={inputClass} disabled={pending} name="confirmPassword" onChange={change} placeholder="Repeat password" type={showPassword ? 'text' : 'password'} value={form.confirmPassword} /></label>
           <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Department</span><input className={inputClass} disabled={pending} maxLength={120} onChange={(event) => setDepartment(event.target.value)} placeholder="Computer Science" value={department} /></label>
@@ -229,7 +229,7 @@ function RegisterPage() {
           <table className="w-full min-w-[720px] text-left">
             <thead className="bg-[#f9fbfc] text-xs font-bold uppercase tracking-[.06em] text-[#6f7e83]"><tr><th className="px-5 py-3">Student name</th><th className="px-5 py-3">Student ID</th><th className="px-5 py-3">Email</th><th className="px-5 py-3">Created</th><th className="px-5 py-3 text-right">Modify</th></tr></thead>
             <tbody className="divide-y divide-[#edf1f2]">
-              {visibleStudents.map((student) => <tr className="text-sm text-[#53646a]" key={student.id}><td className="px-5 py-3 font-semibold text-[#26353a]">{student.fullName}</td><td className="px-5 py-3 font-mono text-sm">{student.username}</td><td className="px-5 py-3">{student.email}</td><td className="px-5 py-3">{new Date(student.createdAt).toLocaleDateString('en-US')}</td><td className="px-5 py-3"><div className="flex justify-end gap-2"><button aria-label={`Edit ${student.fullName}`} className="grid h-8 w-8 place-items-center rounded-lg border border-[#b9d8de] text-[#2f9bb1] disabled:opacity-40" disabled={busyStudentId !== null || connectionStatus !== 'connected'} onClick={() => openEdit(student)} title="Edit student" type="button"><Icon name="edit" size={14} /></button><button aria-label={`Remove ${student.fullName}`} className="grid h-8 w-8 place-items-center rounded-lg border border-[#b9d8de] text-[#819096] disabled:opacity-40" disabled={busyStudentId !== null || connectionStatus !== 'connected'} onClick={() => deleteStudent(student)} title="Remove student" type="button"><Icon name="trash" size={14} /></button></div></td></tr>)}
+              {visibleStudents.map((student) => <tr className="text-sm text-[#53646a]" key={student.id}><td className="px-5 py-3 font-semibold text-[#26353a]">{student.fullName}</td><td className="px-5 py-3 font-mono text-sm">{student.institutionalId ?? 'Not assigned — edit to assign'}</td><td className="px-5 py-3">{student.email}</td><td className="px-5 py-3">{new Date(student.createdAt).toLocaleDateString('en-US')}</td><td className="px-5 py-3"><div className="flex justify-end gap-2"><button aria-label={`Edit ${student.fullName}`} className="grid h-8 w-8 place-items-center rounded-lg border border-[#b9d8de] text-[#2f9bb1] disabled:opacity-40" disabled={busyStudentId !== null || connectionStatus !== 'connected'} onClick={() => openEdit(student)} title="Edit student" type="button"><Icon name="edit" size={14} /></button><button aria-label={`Remove ${student.fullName}`} className="grid h-8 w-8 place-items-center rounded-lg border border-[#b9d8de] text-[#819096] disabled:opacity-40" disabled={busyStudentId !== null || connectionStatus !== 'connected'} onClick={() => deleteStudent(student)} title="Remove student" type="button"><Icon name="trash" size={14} /></button></div></td></tr>)}
             </tbody>
           </table>
           {loadingStudents && <p className="py-10 text-center text-sm text-[#7b898e]">Loading students through WebSocket…</p>}
@@ -240,11 +240,11 @@ function RegisterPage() {
       {editingStudent && <div className="fixed inset-0 z-50 grid place-items-center bg-[#172126]/50 p-4">
         <section aria-label="Edit student account" aria-modal="true" className="max-h-[90vh] w-full max-w-[620px] overflow-y-auto rounded-xl border border-[#dce7ea] bg-white p-6 shadow-xl" role="dialog">
           <h2 className="text-base font-bold">Edit student account</h2>
-          <p className="mt-1 text-sm text-[#718087]">Student ID: {editingStudent.username}</p>
+          <p className="mt-1 text-sm text-[#718087]">Student ID: {editingStudent.institutionalId ?? 'Not assigned'}</p>
           {feedback && <div className="mt-4"><FeedbackMessage feedback={feedback} onClose={() => setFeedback(null)} /></div>}
           <form className="mt-5 grid grid-cols-2 gap-4 max-sm:grid-cols-1" onSubmit={saveStudent}>
             <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Full name</span><input className={inputClass} disabled={busyStudentId !== null} onChange={(event) => setEditForm((current) => ({ ...current, fullName: event.target.value }))} required value={editForm.fullName} /></label>
-            <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Student ID</span><input className={inputClass} disabled={busyStudentId !== null} onChange={(event) => setEditForm((current) => ({ ...current, username: event.target.value }))} required value={editForm.username} /></label>
+            <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Student ID</span><input className={inputClass} disabled={busyStudentId !== null} onChange={(event) => setEditForm((current) => ({ ...current, institutionalId: event.target.value }))} required value={editForm.institutionalId} /></label>
             <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Institutional email</span><input className={inputClass} disabled={busyStudentId !== null} onChange={(event) => setEditForm((current) => ({ ...current, email: event.target.value }))} required type="email" value={editForm.email} /></label>
             <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Department</span><input className={inputClass} disabled={busyStudentId !== null} maxLength={120} onChange={(event) => setEditForm((current) => ({ ...current, department: event.target.value }))} required value={editForm.department} /></label>
             <label className="grid gap-2"><span className="text-sm font-semibold text-[#405057]">Password</span><div className="relative"><input autoComplete="new-password" className={`${inputClass} pr-14`} disabled={busyStudentId !== null} onChange={(event) => setEditForm((current) => ({ ...current, password: event.target.value }))} placeholder="Leave blank to keep current password" type={showEditPassword ? 'text' : 'password'} value={editForm.password} /><button className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-semibold text-[#00778b]" onClick={() => setShowEditPassword((value) => !value)} type="button">{showEditPassword ? 'Hide' : 'Show'}</button></div></label>

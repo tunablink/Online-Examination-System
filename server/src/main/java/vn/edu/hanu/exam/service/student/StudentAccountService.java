@@ -33,7 +33,7 @@ import vn.edu.hanu.exam.service.RegistrationService;
 public class StudentAccountService {
     private static final int MAX_FILE_BYTES = 1024 * 1024;
     private static final int MAX_STUDENTS = 500;
-    private static final Pattern USERNAME_PATTERN = Pattern.compile("^[a-zA-Z0-9._-]{3,50}$");
+    private static final Pattern INSTITUTIONAL_ID_PATTERN = Pattern.compile("^[a-zA-Z0-9._-]{3,50}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final RegistrationService registrationService;
@@ -125,18 +125,18 @@ public class StudentAccountService {
                 if (row == null || rowIsEmpty(row)) continue;
                 if (++processed > MAX_STUDENTS) throw invalidFile("Excel file may contain at most 500 students.");
                 try {
-                    String username = value(row, columns, "username");
+                    String institutionalId = value(row, columns, "institutionalId");
                     String password = value(row, columns, "password");
                     String fullName = value(row, columns, "fullName");
                     String email = value(row, columns, "email");
                     String department = columns.containsKey("department") ? value(row, columns, "department") : null;
-                    if (requireCompleteAccount && !validAccountRow(username, fullName, email, password,
+                    if (requireCompleteAccount && !validAccountRow(institutionalId, fullName, email, password,
                             value(row, columns, "confirmPassword"), department)) {
                         skipped++;
                         continue;
                     }
                     rows.add(new NewStudentRow(index + 1,
-                            new RegisterUserCommand(username, password, fullName, email), department));
+                            new RegisterUserCommand(institutionalId, password, fullName, email), department));
                 } catch (RegistrationException exception) {
                     if (!requireCompleteAccount) throw exception;
                     skipped++;
@@ -158,23 +158,23 @@ public class StudentAccountService {
             String name = cell.toString().trim().replace(" ", "").toLowerCase(Locale.ROOT);
             if (name.equals("fullname")) name = "fullName";
             if (name.equals("confirmpassword")) name = "confirmPassword";
-            if (requireCompleteAccount && name.equals("studentid")) name = "username";
+            if (name.equals("studentid") || name.equals("institutionalid")) name = "institutionalId";
             if (columns.putIfAbsent(name, cell.getColumnIndex()) != null) throw invalidFile("Excel headers must be unique.");
         }
         List<String> requiredFields = requireCompleteAccount
-                ? List.of("username", "fullName", "email", "password", "confirmPassword", "department")
-                : List.of("username", "fullName", "email", "password");
+                ? List.of("institutionalId", "fullName", "email", "password", "confirmPassword", "department")
+                : List.of("institutionalId", "fullName", "email", "password");
         for (String required : requiredFields) {
             if (!columns.containsKey(required)) throw invalidFile(requireCompleteAccount
-                    ? "Excel requires studentId (or username), fullName, email, password, confirmPassword, department headers."
-                    : "Excel requires username, fullName, email, password headers.");
+                    ? "Excel requires studentId (or institutionalId), fullName, email, password, confirmPassword, department headers."
+                    : "Excel requires institutionalId, fullName, email, password headers.");
         }
         return columns;
     }
 
-    private static boolean validAccountRow(String username, String fullName, String email, String password,
+    private static boolean validAccountRow(String institutionalId, String fullName, String email, String password,
             String confirmPassword, String department) {
-        return USERNAME_PATTERN.matcher(username).matches()
+        return INSTITUTIONAL_ID_PATTERN.matcher(institutionalId).matches()
                 && fullName.length() >= 2 && fullName.length() <= 100
                 && email.length() <= 255 && EMAIL_PATTERN.matcher(email).matches()
                 && password.length() >= 8 && password.getBytes(StandardCharsets.UTF_8).length <= 72

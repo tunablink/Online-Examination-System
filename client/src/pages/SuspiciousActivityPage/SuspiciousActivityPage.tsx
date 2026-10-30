@@ -15,7 +15,7 @@ function SuspiciousActivityPage() {
         (event) =>
           (examId === "ALL" || String(event.examId) === examId) &&
           (severity === "ALL" || event.severity === severity) &&
-          `${event.studentName} ${event.username} ${event.studentId} ${event.rule}`
+          `${event.studentName} ${event.institutionalId} ${event.studentId} ${event.rule}`
             .toLowerCase()
             .includes(query.trim().toLowerCase()),
       ),
@@ -119,7 +119,7 @@ function SuspiciousActivityPage() {
                   <td className="px-5 py-4">
                     <p className="font-semibold">{event.studentName}</p>
                     <p className="mt-1 text-sm text-[#718087]">
-                      @{event.username} · {event.examTitle}
+                      Student ID: {event.institutionalId ?? 'Not assigned'} · {event.examTitle}
                     </p>
                   </td>
                   <td className="px-5 py-4">

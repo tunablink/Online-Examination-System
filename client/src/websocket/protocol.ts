@@ -40,6 +40,8 @@ export type ClientMessageType =
   | 'START_EXAM'
   | 'GET_EXAM_ATTEMPT'
   | 'SAVE_ANSWER'
+  | 'HEARTBEAT_ATTEMPT'
+  | 'RELEASE_ATTEMPT'
   | 'SUBMIT_EXAM'
   | 'GET_ATTEMPT_HISTORY'
   | 'GET_ATTEMPT_RESULT'
@@ -92,6 +94,8 @@ export type ServerMessageType =
   | 'EXAM_STARTED'
   | 'EXAM_ATTEMPT_DETAILS'
   | 'ANSWER_SAVED'
+  | 'ATTEMPT_HEARTBEAT'
+  | 'ATTEMPT_RELEASED'
   | 'EXAM_SUBMITTED'
   | 'ATTEMPT_HISTORY'
   | 'ATTEMPT_RESULT'
@@ -112,14 +116,14 @@ export type ExamStatus =
   | 'CLOSED';
 
 export interface RegisterPayload {
-  username: string;
+  institutionalId: string;
   password: string;
   fullName: string;
   email: string;
 }
 
 export interface LoginPayload {
-  username: string;
+  institutionalId: string;
   password: string;
 }
 
@@ -277,7 +281,7 @@ export interface SuspiciousActivityData {
 export interface MonitoringAttemptData {
   attemptId: number;
   studentId: number;
-  studentUsername: string;
+  studentInstitutionalId: string | null;
   studentFullName: string;
   attemptStatus: 'IN_PROGRESS' | 'SUBMITTED' | 'EXPIRED';
   deadline: string;
@@ -317,7 +321,7 @@ export interface ExamDetailsData {
 
 export interface ProfileData {
   id: number;
-  username: string;
+  institutionalId: string;
   fullName: string;
   email: string;
   department: string | null;
@@ -329,7 +333,7 @@ export interface ProfileData {
 
 export interface StudentDirectoryData {
   id: number;
-  username: string;
+  institutionalId: string | null;
   fullName: string;
   email: string;
   department?: string | null;
@@ -390,7 +394,7 @@ export interface ServerMessageData {
   serverTime?: string;
 
   id?: number;
-  username?: string;
+  institutionalId?: string;
   fullName?: string;
   email?: string;
   department?: string | null;

@@ -16,7 +16,7 @@ function isProfileData(message: ServerMessage): message is ServerMessage & { dat
   const data = message.data;
   return data !== null
     && typeof data.id === 'number'
-    && typeof data.username === 'string'
+    && typeof data.institutionalId === 'string'
     && typeof data.fullName === 'string'
     && typeof data.email === 'string'
     && (data.department === null || data.department === undefined || typeof data.department === 'string')
@@ -183,7 +183,7 @@ function ProfileWorkspace({ expectedRole }: ProfileWorkspaceProps) {
           <div className="flex items-center gap-3"><span className="grid h-9 w-9 place-items-center rounded-full bg-[#edf7f8] text-[#00778b]"><Icon name="users" size={16} /></span><div><h2 className="text-base font-bold">Institution information</h2>{expectedRole === 'TEACHER' && <p className="mt-1 text-xs text-[#7c898e]">Identity fields are controlled by the institution and cannot be edited here.</p>}</div></div>
           <div className="mt-5 grid grid-cols-2 gap-4 max-md:grid-cols-1">
             <ReadOnlyField label="Full name" value={profile?.fullName ?? ''} />
-            <ReadOnlyField label={identityLabel} value={profile?.username ?? ''} />
+            <ReadOnlyField label={identityLabel} value={profile?.institutionalId ?? ''} />
             <ReadOnlyField label={expectedRole === 'STUDENT' ? 'Institutional email' : 'Institution email'} value={profile?.email ?? ''} />
             {expectedRole === 'STUDENT' ? <ReadOnlyField label="Department" value={profile?.department ?? ''} /> : <ReadOnlyField label="Account role" value={profile?.role ?? expectedRole} />}
           </div>

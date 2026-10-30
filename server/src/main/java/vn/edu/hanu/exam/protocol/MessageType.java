@@ -117,6 +117,10 @@ public enum MessageType {
 
     SAVE_ANSWER(true),
     ANSWER_SAVED(false),
+    HEARTBEAT_ATTEMPT(true),
+    ATTEMPT_HEARTBEAT(false),
+    RELEASE_ATTEMPT(true),
+    ATTEMPT_RELEASED(false),
 
     SUBMIT_EXAM(true),
     EXAM_SUBMITTED(false),

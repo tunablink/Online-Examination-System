@@ -297,12 +297,12 @@ class AttemptServiceIntegrationTests {
     private long insertUser(String role) {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         String sql = """
-                INSERT INTO users (username, password_hash, full_name, email, role)
-                VALUES (:username, 'test-hash', :fullName, :email, :role)
+                INSERT INTO users (institutional_id, password_hash, full_name, email, role)
+                VALUES (:institutionalId, 'test-hash', :fullName, :email, :role)
                 RETURNING id
                 """;
         Long id = jdbcTemplate.queryForObject(sql, Map.of(
-                "username", role.toLowerCase() + "_attempt_" + suffix,
+                "institutionalId", role.toLowerCase() + "_attempt_" + suffix,
                 "fullName", role + " Attempt User",
                 "email", suffix + "@attempt.example.com",
                 "role", role), Long.class);

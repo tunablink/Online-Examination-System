@@ -47,6 +47,76 @@ class ExamEnrollmentKeyIntegrationTests {
     @Autowired private ExamWebSocketHandler router;
     @Autowired private AuthenticatedSessionRegistry sessions;
     @Autowired private SessionResumeService credentials;
+    @Autowired private vn.edu.hanu.exam.session.AttemptSessionRegistry leases;
+
+    @Test
+    void onlyOwningSocketCanReadSaveSubmitOrReportAndExplicitLeaveTransfersOwnership() throws Exception {
+        Fixture f = fixture(); exams.publishExam(f.exam(), f.teacher());
+        var student = new LoggedInUser(f.student(), "student", "Student", "s@example.com", UserRole.STUDENT);
+        var a = mock(WebSocketSession.class); var b = mock(WebSocketSession.class);
+        String aid = UUID.randomUUID().toString(), bid = UUID.randomUUID().toString();
+        when(a.getId()).thenReturn(aid); when(a.isOpen()).thenReturn(true);
+        when(b.getId()).thenReturn(bid); when(b.isOpen()).thenReturn(true);
+        credentials.issue(aid, student); credentials.issue(bid, student);
+        sessions.authenticate(aid, student); sessions.authenticate(bid, student);
+        try {
+            assertEquals("EXAM_STARTED", command(a, Map.of("examId", f.exam(), "enrollmentKey", KEY)).type());
+            var attempt = attempts.startExam(f.exam(), f.student());
+            long id = attempt.attemptId(); var question = attempt.questions().getFirst();
+            var answer = Map.<String,Object>of("attemptId", id, "questionId", question.id(), "choiceId", question.choices().getFirst().id());
+            assertEquals("ATTEMPT_IN_USE", command(b, Map.of("examId", f.exam(), "enrollmentKey", KEY)).error().code());
+            assertEquals("ATTEMPT_IN_USE", wire(b, "GET_EXAM_ATTEMPT", Map.of("attemptId", id)).error().code());
+            assertEquals("ATTEMPT_IN_USE", wire(b, "SAVE_ANSWER", answer).error().code());
+            assertEquals("ATTEMPT_IN_USE", wire(b, "SUBMIT_EXAM", Map.of("attemptId", id)).error().code());
+            assertEquals("ATTEMPT_IN_USE", wire(b, "REPORT_ACTIVITY", Map.of("attemptId", id, "activityType", "TAB_HIDDEN")).error().code());
+            assertEquals("ANSWER_SAVED", wire(a, "SAVE_ANSWER", answer).type());
+            assertEquals("ATTEMPT_RELEASED", wire(a, "RELEASE_ATTEMPT", Map.of("attemptId", id)).type());
+            assertEquals("EXAM_ATTEMPT_DETAILS", wire(b, "GET_EXAM_ATTEMPT", Map.of("attemptId", id)).type());
+            assertEquals("ATTEMPT_IN_USE", wire(a, "SAVE_ANSWER", answer).error().code());
+            assertEquals("ANSWER_SAVED", wire(b, "SAVE_ANSWER", answer).type());
+            assertEquals(attempt.deadline(), attempts.getAttempt(id, f.student()).deadline());
+            assertEquals(1, attemptCount(f.exam()));
+            assertEquals("EXAM_SUBMITTED", wire(b, "SUBMIT_EXAM", Map.of("attemptId", id)).type());
+            assertEquals("EXAM_SUBMITTED", wire(b, "SUBMIT_EXAM", Map.of("attemptId", id)).type());
+        } finally {
+            leases.releaseSession(aid); leases.releaseSession(bid);
+            sessions.remove(aid); sessions.remove(bid); credentials.revoke(aid); credentials.revoke(bid);
+        }
+    }
+
+    @Test
+    void clonedTokenCannotTakeLiveAttemptButClosedSocketCanReconnectWithoutDeadlineReset() throws Exception {
+        Fixture f = fixture(); exams.publishExam(f.exam(), f.teacher());
+        var student = new LoggedInUser(f.student(), "student", "Student", "s@example.com", UserRole.STUDENT);
+        var a = mock(WebSocketSession.class); var b = mock(WebSocketSession.class);
+        String aid = UUID.randomUUID().toString(), bid = UUID.randomUUID().toString();
+        when(a.getId()).thenReturn(aid); when(a.isOpen()).thenReturn(true);
+        when(b.getId()).thenReturn(bid); when(b.isOpen()).thenReturn(true);
+        String token = credentials.issue(aid, student).sessionToken(); sessions.authenticate(aid, student);
+        try {
+            command(a, Map.of("examId", f.exam(), "enrollmentKey", KEY));
+            var original = attempts.startExam(f.exam(), f.student());
+            assertEquals("SESSION_RESUMED", wire(b, "RESUME_SESSION", Map.of("sessionToken", token)).type());
+            assertEquals("ATTEMPT_IN_USE", wire(b, "GET_EXAM_ATTEMPT", Map.of("attemptId", original.attemptId())).error().code());
+            router.afterConnectionClosed(a, org.springframework.web.socket.CloseStatus.NORMAL);
+            assertEquals("EXAM_ATTEMPT_DETAILS", wire(b, "GET_EXAM_ATTEMPT", Map.of("attemptId", original.attemptId())).type());
+            leases.releaseSession(aid); // A late cleanup must not revoke B's ownership.
+            assertEquals("ATTEMPT_HEARTBEAT", wire(b, "HEARTBEAT_ATTEMPT", Map.of("attemptId", original.attemptId())).type());
+            assertEquals(original.deadline(), attempts.getAttempt(original.attemptId(), f.student()).deadline());
+            assertEquals(1, attemptCount(f.exam()));
+        } finally {
+            leases.releaseSession(aid); leases.releaseSession(bid);
+            sessions.remove(aid); sessions.remove(bid); credentials.revoke(bid);
+        }
+    }
+
+    private ServerMessage wire(WebSocketSession socket, String type, Map<String, Object> payload) throws Exception {
+        clearInvocations(socket);
+        router.handleMessage(socket, new TextMessage(mapper.writeValueAsString(new ClientMessage("lease-test", type, payload))));
+        var response = ArgumentCaptor.forClass(TextMessage.class);
+        verify(socket).sendMessage(response.capture());
+        return mapper.readValue(response.getValue().getPayload(), ServerMessage.class);
+    }
 
     @Test
     void missingWrongAndCaseChangedKeysDoNotCreateAttempts() {
@@ -363,6 +433,40 @@ class ExamEnrollmentKeyIntegrationTests {
         assertFalse(json.contains(hash(f.exam())));
     }
 
+    @Test
+    void dashboardHidesExpiredEntryWindowsButKeepsFutureAndLegacyExams() {
+        Fixture f = fixture();
+        exams.publishExam(f.exam(), f.teacher());
+        setClosing(f.exam(), OffsetDateTime.now().plusHours(1));
+        assertTrue(catalog.findAllAvailable(f.student()).exams().stream().anyMatch(item -> item.id() == f.exam()));
+        jdbc.update("UPDATE exams SET entry_closes_at=CURRENT_TIMESTAMP WHERE id=:id", Map.of("id", f.exam()));
+        assertTrue(catalog.findAllAvailable(f.student()).exams().stream().noneMatch(item -> item.id() == f.exam()));
+        jdbc.update("UPDATE exams SET entry_closes_at=NULL WHERE id=:id", Map.of("id", f.exam()));
+        assertTrue(catalog.findAllAvailable(f.student()).exams().stream().anyMatch(item -> item.id() == f.exam()));
+        jdbc.update("UPDATE exams SET scheduled_at=:opens,entry_closes_at=:closes WHERE id=:id",
+                Map.of("id", f.exam(), "opens", OffsetDateTime.now().plusDays(1), "closes", OffsetDateTime.now().plusDays(2)));
+        assertTrue(catalog.findAllAvailable(f.student()).exams().stream().anyMatch(item -> item.id() == f.exam()));
+    }
+
+    @Test
+    void hiddenExamStillAllowsVerifiedAttemptRecoveryAndSubmissionAfterEntryCloses() {
+        Fixture f = fixture();
+        exams.publishExam(f.exam(), f.teacher());
+        setClosing(f.exam(), OffsetDateTime.now().plusMinutes(1));
+        var first = attempts.startExam(f.exam(), f.student(), KEY);
+        jdbc.update("UPDATE exams SET entry_closes_at=CURRENT_TIMESTAMP WHERE id=:id", Map.of("id", f.exam()));
+        assertTrue(catalog.findAllAvailable(f.student()).exams().stream().noneMatch(item -> item.id() == f.exam()));
+        assertEquals(f.exam(), catalog.findAvailableById(f.exam(), f.student()).id());
+        var resumed = attempts.startExam(f.exam(), f.student());
+        assertEquals(first.attemptId(), resumed.attemptId());
+        assertEquals(first.deadline(), resumed.deadline());
+        assertEquals(first.attemptId(), attempts.getAttempt(first.attemptId(), f.student()).attemptId());
+        var question = first.questions().getFirst();
+        attempts.saveAnswer(first.attemptId(), question.id(), question.choices().getFirst().id(), f.student());
+        attempts.submitExam(first.attemptId(), f.student());
+        assertEquals("SUBMITTED", attempts.getAttemptResult(first.attemptId(), f.student()).status().name());
+    }
+
     private void setClosing(long exam, OffsetDateTime closes) {
         jdbc.update("UPDATE exams SET entry_closes_at=:closes WHERE id=:id", Map.of("id", exam, "closes", closes));
     }
@@ -396,7 +500,7 @@ class ExamEnrollmentKeyIntegrationTests {
     private long user(String role) {
         String name = "key_" + UUID.randomUUID().toString().replace("-", "");
         return jdbc.queryForObject("""
-                INSERT INTO users(username,password_hash,full_name,email,role)
+                INSERT INTO users(institutional_id,password_hash,full_name,email,role)
                 VALUES(:name,'test-hash','Key Test User',:email,:role) RETURNING id
                 """, Map.of("name", name, "email", name + "@example.com", "role", role), Long.class);
     }

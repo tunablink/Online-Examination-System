@@ -34,14 +34,14 @@ public class LoginServiceIntegrationTests {
 
     // ── helpers ────────────────────────────────────────────────────────────────
 
-    /** Registers a fresh student and returns their username. */
+    /** Registers a fresh student and returns their institutionalId. */
     private String registerStudent(String rawPassword) {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
-        String username = "student_" + suffix;
-        String email = username + "@example.com";
+        String institutionalId = "student_" + suffix;
+        String email = institutionalId + "@example.com";
         registrationService.registerStudent(
-                new RegisterUserCommand(username, rawPassword, "Test Student", email));
-        return username;
+                new RegisterUserCommand(institutionalId, rawPassword, "Test Student", email));
+        return institutionalId;
     }
 
     // ── tests ──────────────────────────────────────────────────────────────────
@@ -49,21 +49,21 @@ public class LoginServiceIntegrationTests {
     @Test
     void loginWithCorrectCredentialsSucceeds() {
         String rawPassword = "StrongPassword_123!";
-        String username = registerStudent(rawPassword);
+        String institutionalId = registerStudent(rawPassword);
 
-        LoggedInUser loggedIn = loginService.login(new LoginCommand(username, rawPassword));
+        LoggedInUser loggedIn = loginService.login(new LoginCommand(institutionalId, rawPassword));
 
         assertNotNull(loggedIn);
-        assertEquals(username, loggedIn.username());
+        assertEquals(institutionalId, loggedIn.institutionalId());
         assertEquals(UserRole.STUDENT, loggedIn.role());
     }
 
     @Test
     void loginWithWrongPasswordReturnsInvalidCredentials() {
-        String username = registerStudent("StrongPassword_123!");
+        String institutionalId = registerStudent("StrongPassword_123!");
 
         AuthenticationException ex = assertThrows(AuthenticationException.class,
-                () -> loginService.login(new LoginCommand(username, "WrongPassword_456!")));
+                () -> loginService.login(new LoginCommand(institutionalId, "WrongPassword_456!")));
 
         assertEquals("INVALID_CREDENTIALS", ex.code());
         assertEquals("Invalid Student ID / Teacher ID or password.", ex.getMessage());
@@ -74,20 +74,20 @@ public class LoginServiceIntegrationTests {
         String teacherId = "gv_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         String password = "TeacherIdLogin123!";
         long databaseId = jdbc.queryForObject("""
-                INSERT INTO users(username,password_hash,full_name,email,role)
+                INSERT INTO users(institutional_id,password_hash,full_name,email,role)
                 VALUES(:loginId,:hash,'Teacher ID test',:email,'TEACHER') RETURNING id
                 """, java.util.Map.of("loginId", teacherId, "hash", passwords.encode(password),
                 "email", teacherId + "@example.com"), Long.class);
         var authenticated = loginService.login(new LoginCommand(teacherId, password));
         assertEquals(databaseId, authenticated.id());
-        assertEquals(teacherId, authenticated.username());
+        assertEquals(teacherId, authenticated.institutionalId());
         assertEquals(UserRole.TEACHER, authenticated.role());
         assertEquals("INVALID_CREDENTIALS", assertThrows(AuthenticationException.class,
                 () -> loginService.login(new LoginCommand(teacherId, "WrongPassword123!"))).code());
     }
 
     @Test
-    void loginWithUnknownUsernameReturnsInvalidCredentials() {
+    void loginWithUnknownInstitutionalIdReturnsInvalidCredentials() {
         AuthenticationException ex = assertThrows(AuthenticationException.class,
                 () -> loginService.login(new LoginCommand("no_such_user_xyz", "SomePassword_1!")));
 
@@ -97,9 +97,9 @@ public class LoginServiceIntegrationTests {
     @Test
     void loginResultDoesNotContainPasswordHash() {
         String rawPassword = "StrongPassword_123!";
-        String username = registerStudent(rawPassword);
+        String institutionalId = registerStudent(rawPassword);
 
-        LoggedInUser loggedIn = loginService.login(new LoginCommand(username, rawPassword));
+        LoggedInUser loggedIn = loginService.login(new LoginCommand(institutionalId, rawPassword));
 
         // LoggedInUser is a record — toString() lists all fields.
         // Verify neither the raw password nor a BCrypt hash appears.

@@ -98,7 +98,7 @@ class CourseUnenrollmentIntegrationTests {
     private long user(String role) {
         String name = "remove_" + UUID.randomUUID().toString().replace("-", "");
         return jdbc.queryForObject("""
-                INSERT INTO users(username,password_hash,full_name,email,role)
+                INSERT INTO users(institutional_id,password_hash,full_name,email,role)
                 VALUES(:name,'test-hash','Removal test user',:email,:role) RETURNING id
                 """, Map.of("name", name, "email", name + "@example.com", "role", role), Long.class);
     }

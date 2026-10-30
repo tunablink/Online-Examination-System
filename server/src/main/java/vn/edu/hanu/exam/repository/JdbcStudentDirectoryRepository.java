@@ -20,7 +20,7 @@ public class JdbcStudentDirectoryRepository implements StudentDirectoryRepositor
     private static final String STUDENT_ROLE = UserRole.STUDENT.name();
     private static final String SELECT_STUDENT_COLUMNS = """
             SELECT id,
-                   username,
+                   institutional_id,
                    full_name,
                    email,
                    department,
@@ -65,16 +65,16 @@ public class JdbcStudentDirectoryRepository implements StudentDirectoryRepositor
     }
 
     @Override
-    public Optional<StudentDetails> updateStudent(long studentId, String username, String fullName, String email,
+    public Optional<StudentDetails> updateStudent(long studentId, String institutionalId, String fullName, String email,
             String department, String passwordHash) {
         int changed = jdbcTemplate.update("""
-                UPDATE users SET username = :username, full_name = :fullName, email = :email,
+                UPDATE users SET institutional_id = :institutionalId, full_name = :fullName, email = :email,
                     department = :department, password_hash = COALESCE(:passwordHash, password_hash),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE id = :studentId AND role = :studentRole AND active = TRUE
                 """, new MapSqlParameterSource()
                 .addValue("studentId", studentId).addValue("studentRole", STUDENT_ROLE)
-                .addValue("username", username).addValue("fullName", fullName)
+                .addValue("institutionalId", institutionalId).addValue("fullName", fullName)
                 .addValue("email", email).addValue("department", department)
                 .addValue("passwordHash", passwordHash));
         return changed == 1 ? findStudentById(studentId) : Optional.empty();
@@ -91,7 +91,7 @@ public class JdbcStudentDirectoryRepository implements StudentDirectoryRepositor
     private static StudentDetails mapStudent(ResultSet resultSet, int rowNumber) throws SQLException {
         return new StudentDetails(
                 resultSet.getLong("id"),
-                resultSet.getString("username"),
+                resultSet.getString("institutional_id"),
                 resultSet.getString("full_name"),
                 resultSet.getString("email"),
                 resultSet.getString("department"),

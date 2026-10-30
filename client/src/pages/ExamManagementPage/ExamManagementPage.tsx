@@ -102,7 +102,6 @@ function ExamManagementPage() {
   }, [exams, filter, query]);
 
   const count = (status: ExamStatus) => exams.filter((exam) => exam.status === status).length;
-  const actionsDisabled = loading || connectionStatus !== 'connected';
   const pageSize = 8;
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const currentPage = Math.min(page, pageCount);
@@ -116,7 +115,6 @@ function ExamManagementPage() {
           <h1 className="mt-1 text-3xl font-bold tracking-[-.04em] leading-tight">Examinations</h1>
         </div>
         <div className="flex items-center gap-2">
-          <button aria-label={loading ? 'Refreshing exams' : 'Refresh exams'} className="grid h-11 w-11 place-items-center rounded-lg border border-[#d4e0e3] bg-white text-[#526269] hover:bg-[#f2f6f7] disabled:cursor-not-allowed disabled:opacity-50" disabled={actionsDisabled} onClick={loadExams} title="Refresh exams" type="button"><Icon name="refresh" size={18} /></button>
           <Link className="inline-flex h-11 items-center gap-1.5 rounded-lg bg-[#00778b] px-3 text-sm font-semibold text-white" to="/teacher/exams/new"><Icon name="plus" size={16} />Create exam</Link>
         </div>
       </section>

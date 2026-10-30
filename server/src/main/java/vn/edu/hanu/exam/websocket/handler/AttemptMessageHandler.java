@@ -18,6 +18,10 @@ import vn.edu.hanu.exam.protocol.ServerMessage;
 import vn.edu.hanu.exam.service.LoggedInUser;
 import vn.edu.hanu.exam.service.attempt.ExamAttemptService;
 import vn.edu.hanu.exam.session.AuthenticatedSessionRegistry;
+import vn.edu.hanu.exam.session.AttemptSessionRegistry;
+import vn.edu.hanu.exam.session.SessionResumeService;
+import vn.edu.hanu.exam.domain.attempt.AttemptStatus;
+import vn.edu.hanu.exam.service.attempt.ExamAttemptDetails;
 import vn.edu.hanu.exam.websocket.dto.GetAttemptResultPayload;
 import vn.edu.hanu.exam.websocket.dto.GetExamAttemptPayload;
 import vn.edu.hanu.exam.websocket.dto.SaveAnswerPayload;
@@ -42,14 +46,51 @@ public class AttemptMessageHandler {
     private final ExamAttemptService attemptService;
     private final AuthenticatedSessionRegistry sessionRegistry;
     private final JsonMapper jsonMapper;
+    private final AttemptSessionRegistry leases;
+    private final SessionResumeService resume;
 
     public AttemptMessageHandler(
             ExamAttemptService attemptService,
             AuthenticatedSessionRegistry sessionRegistry,
             JsonMapper jsonMapper) {
+        this(attemptService, sessionRegistry, jsonMapper, new AttemptSessionRegistry(), null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AttemptMessageHandler(ExamAttemptService attemptService, AuthenticatedSessionRegistry sessionRegistry,
+            JsonMapper jsonMapper, AttemptSessionRegistry leases, SessionResumeService resume) {
         this.attemptService = attemptService;
         this.sessionRegistry = sessionRegistry;
         this.jsonMapper = jsonMapper;
+        this.leases = leases;
+        this.resume = resume;
+    }
+
+    private ExamAttemptDetails claim(String socketId, LoggedInUser student, ExamAttemptDetails details) {
+        if (details.status() == AttemptStatus.IN_PROGRESS) {
+            String scope = resume == null ? socketId : resume.credentialScope(socketId);
+            if (scope == null) throw new AttemptException("SESSION_INVALID", "Your session expired. Please sign in again.");
+            leases.acquire(details.attemptId(), student.id(), socketId, scope);
+        } else leases.release(details.attemptId(), student.id(), socketId);
+        return details;
+    }
+
+    public void disconnected(String socketId) { leases.disconnected(socketId); }
+    public void releaseSession(String socketId) { leases.releaseSession(socketId); }
+
+    public ServerMessage handleHeartbeat(WebSocketSession session, ClientMessage message) {
+        return withStudent(session.getId(), message.requestId(), student -> {
+            var input = convertGetPayload(message.payload());
+            leases.heartbeat(input.attemptId(), student.id(), session.getId());
+            return ServerMessage.success(message.requestId(), "ATTEMPT_HEARTBEAT", Map.of("attemptId", input.attemptId()));
+        });
+    }
+    public ServerMessage handleRelease(WebSocketSession session, ClientMessage message) {
+        return withStudent(session.getId(), message.requestId(), student -> {
+            var input = convertGetPayload(message.payload());
+            leases.release(input.attemptId(), student.id(), session.getId());
+            return ServerMessage.success(message.requestId(), "ATTEMPT_RELEASED", Map.of("attemptId", input.attemptId()));
+        });
     }
 
     public ServerMessage handleStart(WebSocketSession session, ClientMessage message) {
@@ -82,7 +123,7 @@ public class AttemptMessageHandler {
             return ServerMessage.success(
                     requestId,
                     TYPE_EXAM_STARTED,
-                    attemptService.startExam(input.examId(), student.id(), input.enrollmentKey()));
+                    claim(sessionId, student, attemptService.startExam(input.examId(), student.id(), input.enrollmentKey())));
         });
     }
 
@@ -92,7 +133,7 @@ public class AttemptMessageHandler {
             return ServerMessage.success(
                     requestId,
                     TYPE_EXAM_ATTEMPT_DETAILS,
-                    attemptService.getAttempt(input.attemptId(), student.id()));
+                    claim(sessionId, student, attemptService.getAttempt(input.attemptId(), student.id())));
         });
     }
 
@@ -105,11 +146,11 @@ public class AttemptMessageHandler {
             return ServerMessage.success(
                     requestId,
                     TYPE_ANSWER_SAVED,
-                    attemptService.saveAnswer(
+                    leases.withOwner(input.attemptId(), student.id(), sessionId, () -> attemptService.saveAnswer(
                             input.attemptId(),
                             input.questionId(),
                             input.choiceId(),
-                            student.id()));
+                            student.id()), false));
         });
     }
 
@@ -119,10 +160,15 @@ public class AttemptMessageHandler {
             Map<String, Object> payload) {
         return withStudent(sessionId, requestId, student -> {
             SubmitExamPayload input = convertSubmitPayload(payload);
+            // Completed submissions remain idempotently readable after the writer lease is released.
+            var current = attemptService.getAttempt(input.attemptId(), student.id());
+            if (current.status() != AttemptStatus.IN_PROGRESS) return ServerMessage.success(requestId,
+                    TYPE_EXAM_SUBMITTED, attemptService.submitExam(input.attemptId(), student.id()));
             return ServerMessage.success(
                     requestId,
                     TYPE_EXAM_SUBMITTED,
-                    attemptService.submitExam(input.attemptId(), student.id()));
+                    leases.withOwner(input.attemptId(), student.id(), sessionId,
+                            () -> attemptService.submitExam(input.attemptId(), student.id()), true));
         });
     }
 

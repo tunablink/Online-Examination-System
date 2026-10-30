@@ -82,7 +82,7 @@ function TeacherSubmissionPage() {
     return submissions.filter((submission) => {
       const matchesStatus = filter === 'ALL' || submission.status === filter;
       const matchesStudent = normalized.length === 0
-        || `${submission.studentFullName} ${submission.username} ${submission.studentId}`
+        || `${submission.studentFullName} ${submission.institutionalId} ${submission.studentId}`
           .toLowerCase().includes(normalized);
       return matchesStatus && matchesStudent;
     });
@@ -108,9 +108,6 @@ function TeacherSubmissionPage() {
             <p className="text-xs font-bold uppercase tracking-[.08em] text-[#849197]">Total attempts</p>
             <p className="mt-1 text-xl font-bold text-[#00778b]">{loading ? '—' : submissions.length}</p>
           </article>
-          <button className="h-10 rounded-lg border border-[#d4e0e3] px-4 text-sm font-semibold text-[#526269] disabled:opacity-50" disabled={loading || connectionStatus !== 'connected' || id === null} onClick={loadSubmissions} type="button">
-            {loading ? 'Refreshing…' : 'Refresh'}
-          </button>
         </div>
       </section>
 
@@ -127,7 +124,7 @@ function TeacherSubmissionPage() {
           </div>
           <label className="relative block min-w-[280px] max-sm:min-w-0">
             <Icon className="absolute left-3 top-1/2 -translate-y-1/2 text-[#7d8b90]" name="search" size={14} />
-            <input className="h-10 w-full rounded-lg bg-[#f2f5f6] pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-[#00849a]/20" onChange={(event) => setQuery(event.target.value)} placeholder="Search student name, username or ID…" value={query} />
+            <input className="h-10 w-full rounded-lg bg-[#f2f5f6] pl-9 pr-3 text-sm outline-none focus:ring-2 focus:ring-[#00849a]/20" onChange={(event) => setQuery(event.target.value)} placeholder="Search student name or Student ID…" value={query} />
           </label>
         </div>
 
@@ -143,7 +140,7 @@ function TeacherSubmissionPage() {
                 const terminal = isTerminalSubmission(submission);
                 return (
                   <tr className="border-t border-[#edf1f2]" key={submission.attemptId}>
-                    <td className="px-5 py-4"><p className="text-base font-bold text-[#26353a]">{submission.studentFullName}</p><p className="mt-1 text-sm text-[#819096]">@{submission.username} · Student {submission.studentId} · Attempt {submission.attemptId}</p></td>
+                    <td className="px-5 py-4"><p className="text-base font-bold text-[#26353a]">{submission.studentFullName}</p><p className="mt-1 text-sm text-[#819096]">Student ID: {submission.institutionalId ?? 'Not assigned'} · Attempt {submission.attemptId}</p></td>
                     <td className="px-4 py-4 text-sm text-[#596970]"><p>Started {formatDate(submission.startedAt)}</p><p className="mt-1 text-[#819096]">{terminal ? `Finalized ${formatDate(submission.submittedAt)}` : `Deadline ${formatDate(submission.deadline)}`}</p></td>
                     <td className="px-4 py-4"><span className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${statusClasses(submission.status)}`}>{submission.status.replace('_', ' ')}</span></td>
                     <td className="px-4 py-4">{terminal ? <><p className="text-base font-bold">{submission.score}/{submission.maxScore}</p><p className="mt-1 text-xs text-[#819096]">{submission.correctAnswers}/{submission.totalQuestions} correct</p></> : <><p className="text-sm font-semibold text-[#526269]">Attempt in progress</p><p className="mt-1 text-xs text-[#819096]">Result pending finalization</p></>}</td>

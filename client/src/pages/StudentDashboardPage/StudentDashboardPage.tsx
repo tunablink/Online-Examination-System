@@ -8,6 +8,7 @@ import StudentPortalHeader from '../../components/layout/StudentPortalHeader';
 import StudentPortalNavigation from '../../components/layout/StudentPortalNavigation';
 import type { AvailableExamDetailsData } from '../../websocket/protocol';
 import { useWebSocket } from '../../websocket/useWebSocket';
+import { isExamVisibleOnDashboard, nextExamEntryClosingTime } from '../../utils/examCatalog';
 
 type CatalogExam = Omit<AvailableExamDetailsData, 'assessmentType'> & { assessmentType?: string | null };
 
@@ -19,7 +20,8 @@ function isAvailableExam(value: unknown): value is CatalogExam {
     (exam.assessmentType === undefined || exam.assessmentType === null || typeof exam.assessmentType === 'string') &&
     typeof exam.durationMinutes === 'number' && typeof exam.questionCount === 'number' &&
     typeof exam.totalPoints === 'number' &&
-    (exam.scheduledAt === undefined || typeof exam.scheduledAt === 'string' || exam.scheduledAt === null);
+    (exam.scheduledAt === undefined || typeof exam.scheduledAt === 'string' || exam.scheduledAt === null) &&
+    (exam.entryClosesAt == null || (typeof exam.entryClosesAt === 'string' && Number.isFinite(Date.parse(exam.entryClosesAt))));
 }
 
 const scheduleFormatter = new Intl.DateTimeFormat('en-GB', {
@@ -54,6 +56,7 @@ function StudentDashboardPage() {
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [dashboardOpenedAt] = useState(() => Date.now());
+  const [catalogNow, setCatalogNow] = useState(() => Date.now());
 
   const loadExams = useCallback(() => {
     if (connectionStatus !== 'connected') {
@@ -66,6 +69,7 @@ function StudentDashboardPage() {
       setLoading(false);
       const received = message.data?.exams;
       if (message.type === 'AVAILABLE_EXAMS' && Array.isArray(received) && received.every(isAvailableExam)) {
+        setCatalogNow(Date.now());
         setExams(received.map((exam) => ({ ...exam, assessmentType: exam.assessmentType?.trim() || 'Examination', scheduledAt: exam.scheduledAt ?? null })));
         return;
       }
@@ -83,21 +87,40 @@ function StudentDashboardPage() {
     return () => window.clearTimeout(timer);
   }, [connectionStatus, loadExams]);
 
+  useEffect(() => {
+    const nextClose = nextExamEntryClosingTime(exams, catalogNow);
+    if (nextClose === null) return;
+    const timer = window.setTimeout(() => setCatalogNow(Date.now()),
+      Math.min(2_147_483_647, Math.max(0, nextClose - Date.now())));
+    const updateOnReturn = () => {
+      if (document.visibilityState === 'visible') setCatalogNow(Date.now());
+    };
+    document.addEventListener('visibilitychange', updateOnReturn);
+    window.addEventListener('focus', updateOnReturn);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('visibilitychange', updateOnReturn);
+      window.removeEventListener('focus', updateOnReturn);
+    };
+  }, [exams, catalogNow]);
+
+  const visibleExams = useMemo(() => exams.filter((exam) => isExamVisibleOnDashboard(exam, catalogNow)), [exams, catalogNow]);
+
   const filteredExams = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
-    return exams.filter((exam) =>
+    return visibleExams.filter((exam) =>
       `${exam.title} ${exam.courseName ?? ''} ${exam.id} EX-${String(exam.id).padStart(4, '0')}`
         .toLowerCase()
         .includes(normalizedQuery),
     );
-  }, [exams, query]);
+  }, [visibleExams, query]);
 
   const upcomingExams = useMemo(() => {
-    return exams
+    return visibleExams
       .filter((exam) => exam.scheduledAt !== null && Date.parse(exam.scheduledAt) > dashboardOpenedAt)
       .sort((left, right) => Date.parse(left.scheduledAt ?? '') - Date.parse(right.scheduledAt ?? ''))
       .slice(0, 2);
-  }, [dashboardOpenedAt, exams]);
+  }, [dashboardOpenedAt, visibleExams]);
 
   return (
     <main className="min-h-screen bg-[#f5f9fb] text-[#172126]">
@@ -124,8 +147,8 @@ function StudentDashboardPage() {
               </label>
             </div>
           </div>
-          {loading && exams.length === 0 ? <div className="mt-4 rounded-xl border border-[#dce7ea] bg-white py-14 text-center text-sm text-[#77868b]">Loading published examinations through WebSocket…</div> : exams.length > 0 && <div className="mt-4 rounded-xl border border-[#dce7ea] bg-white p-6">{filteredExams.length > 0 ? <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,320px),1fr))] gap-5">{filteredExams.map((exam) => <ExamCard exam={exam} key={exam.id} />)}</div> : <p className="py-8 text-center text-sm text-[#77868b]" role="status">No examinations match your search.</p>}</div>}
-          {!loading && exams.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-[#cbd9dd] bg-white py-14 text-center text-sm text-[#77868b]">No published examinations are available.</div>}
+          {loading && visibleExams.length === 0 ? <div className="mt-4 rounded-xl border border-[#dce7ea] bg-white py-14 text-center text-sm text-[#77868b]">Loading published examinations through WebSocket…</div> : visibleExams.length > 0 && <div className="mt-4 rounded-xl border border-[#dce7ea] bg-white p-6">{filteredExams.length > 0 ? <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,320px),1fr))] gap-5">{filteredExams.map((exam) => <ExamCard exam={exam} key={exam.id} />)}</div> : <p className="py-8 text-center text-sm text-[#77868b]" role="status">No examinations match your search.</p>}</div>}
+          {!loading && visibleExams.length === 0 && <div className="mt-4 rounded-xl border border-dashed border-[#cbd9dd] bg-white py-14 text-center text-sm text-[#77868b]">No published examinations are available.</div>}
         </section>
 
         <section className="mt-3 rounded-xl border border-[#dce7ea] bg-white px-5 py-4">

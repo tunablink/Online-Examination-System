@@ -275,6 +275,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                 && messageType != MessageType.LOGIN && messageType != MessageType.RESUME_SESSION
                 && messageType != MessageType.LOGOUT && messageType != MessageType.PING) {
             authenticatedSessionRegistry.remove(session.getId());
+            if (attemptMessageHandler != null) attemptMessageHandler.releaseSession(session.getId());
             if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
             sendMessage(session, ServerMessage.error(clientMessage.requestId(), "SESSION_INVALID", "Your session expired. Please sign in again."));
             return;
@@ -284,10 +285,11 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                 try {
                     var details = resumeService.resume(session.getId(), readString(clientMessage.payload(), "sessionToken"));
                     authenticatedSessionRegistry.authenticate(session.getId(), new LoggedInUser(
-                            details.id(), details.username(), details.fullName(), details.email(), details.role()));
+                            details.id(), details.institutionalId(), details.fullName(), details.email(), details.role()));
                     if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
                     sendMessage(session, ServerMessage.success(clientMessage.requestId(), "SESSION_RESUMED", details));
                 } catch (IllegalArgumentException exception) {
+                    if (attemptMessageHandler != null) attemptMessageHandler.releaseSession(session.getId());
                     resumeService.revoke(session.getId());
                     authenticatedSessionRegistry.remove(session.getId());
                     if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
@@ -295,6 +297,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                 }
             }
             case LOGOUT -> {
+                if (attemptMessageHandler != null) attemptMessageHandler.releaseSession(session.getId());
                 if (resumeService != null) resumeService.revoke(session.getId());
                 authenticatedSessionRegistry.remove(session.getId());
                 if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
@@ -498,6 +501,8 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             /*
              * Các message History/Result của main phải được giữ lại.
              */
+            case HEARTBEAT_ATTEMPT -> sendMessage(session, attemptMessageHandler.handleHeartbeat(session, clientMessage));
+            case RELEASE_ATTEMPT -> sendMessage(session, attemptMessageHandler.handleRelease(session, clientMessage));
             case GET_ATTEMPT_HISTORY ->
                     sendMessage(
                             session,
@@ -610,10 +615,10 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             ClientMessage clientMessage)
             throws Exception {
 
-        String username =
+        String institutionalId =
                 readString(
                         clientMessage.payload(),
-                        "username");
+                        "institutionalId");
 
         String password =
                 readString(
@@ -623,13 +628,14 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
         try {
             LoginCommand command =
                     new LoginCommand(
-                            username,
+                            institutionalId,
                             password);
 
             LoggedInUser loggedInUser =
                     loginService.login(command);
 
             Object loginDetails = resumeService == null ? loggedInUser : resumeService.issue(session.getId(), loggedInUser);
+            if (attemptMessageHandler != null) attemptMessageHandler.releaseSession(session.getId());
             authenticatedSessionRegistry.authenticate(
                     session.getId(),
                     loggedInUser);
@@ -659,7 +665,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
                     ServerMessage.error(
                             clientMessage.requestId(),
                             "INVALID_CREDENTIALS",
-                            "Invalid username or password."));
+                            "Invalid Student ID / Teacher ID or password."));
         } catch (AuthenticationException exception) {
             LOGGER.info(
                     "Login rejected: "
@@ -733,6 +739,7 @@ public final class ExamWebSocketHandler extends TextWebSocketHandler {
             CloseStatus status) {
 
         authenticatedSessionRegistry.remove(session.getId());
+        if (attemptMessageHandler != null) attemptMessageHandler.disconnected(session.getId());
         if (monitoringPushHub != null) monitoringPushHub.remove(session.getId());
         if (resumeService != null) resumeService.detach(session.getId());
 

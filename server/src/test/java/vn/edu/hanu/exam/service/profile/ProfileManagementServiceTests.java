@@ -31,7 +31,7 @@ class ProfileManagementServiceTests {
         ProfileDetails profile = new ProfileManagementService(repository, encoder).getProfile(7L);
 
         assertEquals(7L, profile.id());
-        assertEquals("student07", profile.username());
+        assertEquals("student07", profile.institutionalId());
         assertNull(profile.department());
     }
 

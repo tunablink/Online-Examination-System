@@ -202,7 +202,7 @@ class CourseFlowIntegrationTests {
         courses.enroll(first.id(), teacher, existing.id());
         String file = workbook(new String[][] {
                 {"studentId", "fullName", "email", "password", "confirmPassword", "department"},
-                {existing.username(), existing.fullName(), existing.email(), "StrongPassword123", "StrongPassword123", "Math"},
+                {existing.institutionalId(), existing.fullName(), existing.email(), "StrongPassword123", "StrongPassword123", "Math"},
                 {"new_student", "New Student", "new_student@example.com", "StrongPassword123", "StrongPassword123", "Science"}
         });
 
@@ -218,10 +218,10 @@ class CourseFlowIntegrationTests {
     void invalidImportSkipsBadRowAndKeepsValidRow() throws IOException {
         long teacher = insertTeacher();
         var course = courses.create(teacher, "ROLLBACK", "Rollback course");
-        String username = "valid_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
+        String institutionalId = "valid_" + UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         String file = workbook(new String[][] {
                 {"studentId", "fullName", "email", "password", "confirmPassword", "department"},
-                {username, "Valid Student", username + "@example.com", "StrongPassword123", "StrongPassword123", "Science"},
+                {institutionalId, "Valid Student", institutionalId + "@example.com", "StrongPassword123", "StrongPassword123", "Science"},
                 {"bad_student", "Bad Student", "not-an-email", "StrongPassword123", "StrongPassword123", "Science"}
         });
 
@@ -231,13 +231,13 @@ class CourseFlowIntegrationTests {
             assertEquals(1, result.enrolledCount());
             assertEquals(1, result.skippedCount());
             assertEquals(1, courses.students(course.id(), teacher).size());
-            Long count = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE username = :username",
-                    Map.of("username", username), Long.class);
+            Long count = jdbc.queryForObject("SELECT COUNT(*) FROM users WHERE institutional_id = :institutionalId",
+                    Map.of("institutionalId", institutionalId), Long.class);
             assertEquals(1L, count);
         } finally {
             jdbc.update("DELETE FROM course_students WHERE course_id = :id", Map.of("id", course.id()));
             jdbc.update("DELETE FROM courses WHERE id = :id", Map.of("id", course.id()));
-            jdbc.update("DELETE FROM users WHERE username = :username", Map.of("username", username));
+            jdbc.update("DELETE FROM users WHERE institutional_id = :institutionalId", Map.of("institutionalId", institutionalId));
             jdbc.update("DELETE FROM users WHERE id = :id", Map.of("id", teacher));
         }
     }
@@ -245,9 +245,9 @@ class CourseFlowIntegrationTests {
     private long insertTeacher() {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         return jdbc.queryForObject("""
-                INSERT INTO users (username, password_hash, full_name, email, role)
-                VALUES (:username, 'test-hash', 'Teacher', :email, 'TEACHER') RETURNING id
-                """, Map.of("username", "teacher_" + suffix, "email", "teacher_" + suffix + "@example.com"), Long.class);
+                INSERT INTO users (institutional_id, password_hash, full_name, email, role)
+                VALUES (:institutionalId, 'test-hash', 'Teacher', :email, 'TEACHER') RETURNING id
+                """, Map.of("institutionalId", "teacher_" + suffix, "email", "teacher_" + suffix + "@example.com"), Long.class);
     }
 
     private static RegisterUserCommand studentCommand(String suffix) {

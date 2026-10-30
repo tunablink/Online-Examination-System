@@ -36,20 +36,20 @@ public class RegistrationServiceIntegrationTests {
     void registerStudentHashesPasswordAndPersistsUser(){
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
 
-        String username = "student_" + suffix;
-        String email = username + "@example.com";
+        String institutionalId = "student_" + suffix;
+        String email = institutionalId + "@example.com";
         String rawPassword = "StrongPassword_123!";
 
-        RegisterUserCommand command = new RegisterUserCommand(username, rawPassword, "Integration Test Student", email);
+        RegisterUserCommand command = new RegisterUserCommand(institutionalId, rawPassword, "Integration Test Student", email);
 
         RegisteredUser registeredUser = registrationService.registerStudent(command);
 
-        assertEquals(username, registeredUser.username());
+        assertEquals(institutionalId, registeredUser.institutionalId());
         assertEquals(email, registeredUser.email());
         assertEquals(UserRole.STUDENT,registeredUser.role());
         assertTrue(registeredUser.active());
 
-        User storedUser = userRepository.findByUsername(username).orElseThrow();
+        User storedUser = userRepository.findByInstitutionalId(institutionalId).orElseThrow();
 
         assertNotEquals(rawPassword, storedUser.passwordHash());
         assertTrue(passwordEncoder.matches(rawPassword, storedUser.passwordHash()));

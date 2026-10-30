@@ -88,11 +88,11 @@ public class JdbcCourseRepository implements CourseRepository {
     @Override
     public List<StudentDetails> findStudents(long courseId) {
         return jdbc.query("""
-                SELECT u.id, u.username, u.full_name, u.email, u.department, u.active, u.created_at
+                SELECT u.id, u.institutional_id, u.full_name, u.email, u.department, u.active, u.created_at
                 FROM course_students cs JOIN users u ON u.id = cs.student_id
                 WHERE cs.course_id = :courseId AND u.active = TRUE ORDER BY u.full_name, u.id
                 """, Map.of("courseId", courseId), (rs, row) -> new StudentDetails(rs.getLong("id"),
-                rs.getString("username"), rs.getString("full_name"), rs.getString("email"), rs.getString("department"),
+                rs.getString("institutional_id"), rs.getString("full_name"), rs.getString("email"), rs.getString("department"),
                 rs.getBoolean("active"), rs.getObject("created_at", OffsetDateTime.class)));
     }
 

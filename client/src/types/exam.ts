@@ -28,7 +28,7 @@ export interface StudentExam {
 export interface StudentProfile {
   id: number;
   studentId: string;
-  username: string;
+  institutionalId: string;
   fullName: string;
   email: string;
 }

@@ -80,7 +80,7 @@ class StudentManagementMessageHandlerTests {
                 .thenReturn(updated);
 
         ServerMessage update = handler.handleUpdate(SESSION_ID, REQUEST_ID, Map.of(
-                "studentId", 12L, "username", "student01", "fullName", "Nguyen Van A",
+                "studentId", 12L, "institutionalId", "student01", "fullName", "Nguyen Van A",
                 "email", "student01@hanu.edu.vn", "department", "Computer Science",
                 "password", "", "confirmPassword", ""));
         assertSuccess(update, "STUDENT_UPDATED", updated);

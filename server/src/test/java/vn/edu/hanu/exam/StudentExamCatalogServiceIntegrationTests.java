@@ -87,12 +87,12 @@ class StudentExamCatalogServiceIntegrationTests {
     private long insertTeacher() {
         String suffix = UUID.randomUUID().toString().replace("-", "");
         String sql = """
-                INSERT INTO users (username, password_hash, full_name, email, role)
-                VALUES (:username, :passwordHash, :fullName, :email, 'TEACHER')
+                INSERT INTO users (institutional_id, password_hash, full_name, email, role)
+                VALUES (:institutionalId, :passwordHash, :fullName, :email, 'TEACHER')
                 RETURNING id
                 """;
         Long id = jdbcTemplate.queryForObject(sql, Map.of(
-                "username", "catalog_teacher_" + suffix,
+                "institutionalId", "catalog_teacher_" + suffix,
                 "passwordHash", "test-hash",
                 "fullName", "Catalog Teacher",
                 "email", suffix + "@catalog.example.com"), Long.class);

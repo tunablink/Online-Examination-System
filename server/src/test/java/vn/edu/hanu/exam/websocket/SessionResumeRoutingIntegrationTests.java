@@ -46,15 +46,15 @@ class SessionResumeRoutingIntegrationTests {
 
     @Test
     void loginDisconnectResumeAndLogoutRevokeTheCredential() throws Exception {
-        String username = "resume_" + UUID.randomUUID().toString().replace("-", "");
+        String institutionalId = "resume_" + UUID.randomUUID().toString().replace("-", "");
         jdbc.update("""
-                INSERT INTO users(username,password_hash,full_name,email,role)
+                INSERT INTO users(institutional_id,password_hash,full_name,email,role)
                 VALUES(:name,:hash,'Resume User',:email,'STUDENT')
-                """, Map.of("name", username, "hash", passwords.encode("ResumeTest123!"), "email", username + "@example.com"));
+                """, Map.of("name", institutionalId, "hash", passwords.encode("ResumeTest123!"), "email", institutionalId + "@example.com"));
         var first = socket(UUID.randomUUID().toString());
         var second = socket(UUID.randomUUID().toString());
         try {
-            ServerMessage login = command(first, "LOGIN", Map.of("username", username, "password", "ResumeTest123!"));
+            ServerMessage login = command(first, "LOGIN", Map.of("institutionalId", institutionalId, "password", "ResumeTest123!"));
             assertEquals("LOGGED_IN", login.type());
             Map<?, ?> details = (Map<?, ?>) login.data();
             String token = (String) details.get("sessionToken");
@@ -66,7 +66,7 @@ class SessionResumeRoutingIntegrationTests {
             ServerMessage resumed = command(second, "RESUME_SESSION", Map.of("sessionToken", token));
             assertEquals("SESSION_RESUMED", resumed.type());
             assertTrue(auth.isAuthenticated(second.getId()));
-            assertEquals(username, auth.findUser(second.getId()).orElseThrow().username());
+            assertEquals(institutionalId, auth.findUser(second.getId()).orElseThrow().institutionalId());
             assertEquals("LOGGED_OUT", command(second, "LOGOUT", Map.of()).type());
             assertFalse(auth.isAuthenticated(second.getId()));
             assertEquals("SESSION_INVALID", command(first, "RESUME_SESSION", Map.of("sessionToken", token)).error().code());

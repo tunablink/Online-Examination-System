@@ -23,7 +23,7 @@ public class JdbcUserRepository implements UserRepository {
     private static final String SELECT_USER_COLUMNS = """
             SELECT
                 id,
-                username,
+                institutional_id,
                 password_hash,
                 full_name,
                 email,
@@ -47,21 +47,21 @@ public class JdbcUserRepository implements UserRepository {
     public User create(NewUser newUser){
         String sql = """
                 INSERT INTO users (
-                username, 
+                institutional_id,
                 password_hash,
                 full_name,
                 email,
                 role                
                 )
                 VALUES (
-                :username,
+                :institutionalId,
                 :passwordHash,
                 :fullName,
                 :email,
                 :role
                 )
                 """;
-        MapSqlParameterSource parameters = new MapSqlParameterSource().addValue("username", newUser.username())
+        MapSqlParameterSource parameters = new MapSqlParameterSource().addValue("institutionalId", newUser.institutionalId())
         .addValue("passwordHash", newUser.passwordHash()).addValue("fullName", newUser.fullName()).addValue("email", newUser.email()).addValue("role", newUser.role().name());   
 
         KeyHolder keyHolder = new GeneratedKeyHolder();
@@ -94,12 +94,12 @@ public class JdbcUserRepository implements UserRepository {
     }
 
     @Override 
-    public Optional<User> findByUsername(String username){
+    public Optional<User> findByInstitutionalId(String institutionalId){
         String sql = SELECT_USER_COLUMNS + """
-                WHERE LOWER(username) = LOWER(:username)
+                WHERE LOWER(institutional_id) = LOWER(:institutionalId)
                 """;
 
-        return findOne(sql, Map.of("username", username));        
+        return findOne(sql, Map.of("institutionalId", institutionalId));
     }
 
     @Override 
@@ -152,13 +152,13 @@ public class JdbcUserRepository implements UserRepository {
     }
 
     @Override 
-    public boolean existsByUsername(String username){
+    public boolean existsByInstitutionalId(String institutionalId){
         String sql = """
                 SELECT EXISTS (
-                SELECT 1 FROM users WHERE LOWER(username) = LOWER(:username))
+                SELECT 1 FROM users WHERE LOWER(institutional_id) = LOWER(:institutionalId))
                 """;
 
-        Boolean result = jdbcTemplate.queryForObject(sql, Map.of("username", username), Boolean.class);
+        Boolean result = jdbcTemplate.queryForObject(sql, Map.of("institutionalId", institutionalId), Boolean.class);
 
         return Boolean.TRUE.equals(result);
     }
@@ -195,7 +195,7 @@ public class JdbcUserRepository implements UserRepository {
     private static User mapUser(ResultSet resultSet, int rowNumber) throws SQLException{
         return new User(
             resultSet.getLong("id"),
-            resultSet.getString("username"),
+            resultSet.getString("institutional_id"),
             resultSet.getString("password_hash"),
             resultSet.getString("full_name"),
             resultSet.getString("email"),

@@ -5,7 +5,7 @@ export interface TeacherSubmissionData {
   examId: number;
   examTitle: string;
   studentId: number;
-  username: string;
+  institutionalId: string | null;
   studentFullName: string;
   status: SubmissionStatus;
   startedAt: string;
@@ -39,7 +39,7 @@ export function isTeacherSubmissionData(value: unknown): value is TeacherSubmiss
     || !isPositiveInteger(value.examId)
     || typeof value.examTitle !== 'string'
     || !isPositiveInteger(value.studentId)
-    || typeof value.username !== 'string'
+    || !(value.institutionalId === null || typeof value.institutionalId === 'string')
     || typeof value.studentFullName !== 'string'
     || !isStatus(value.status)
     || typeof value.startedAt !== 'string'

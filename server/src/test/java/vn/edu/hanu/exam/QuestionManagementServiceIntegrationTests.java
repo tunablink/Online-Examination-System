@@ -675,14 +675,14 @@ class QuestionManagementServiceIntegrationTests {
 
         String sql = """
                 INSERT INTO users (
-                    username,
+                    institutional_id,
                     password_hash,
                     full_name,
                     email,
                     role
                 )
                 VALUES (
-                    :username,
+                    :institutionalId,
                     :passwordHash,
                     :fullName,
                     :email,
@@ -694,7 +694,7 @@ class QuestionManagementServiceIntegrationTests {
         Long id = namedJdbcTemplate.queryForObject(
                 sql,
                 Map.of(
-                        "username",
+                        "institutionalId",
                     "qt_" + suffix,
                     "passwordHash",
                     "test-password-hash",

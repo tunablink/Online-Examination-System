@@ -1,7 +1,7 @@
 package vn.edu.hanu.exam.domain;
 
 public record NewUser(
-    String username,
+    String institutionalId,
     String passwordHash,
     String fullName,
     String email,

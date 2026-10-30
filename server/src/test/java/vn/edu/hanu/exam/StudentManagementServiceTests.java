@@ -84,7 +84,7 @@ class StudentManagementServiceTests {
 
         assertEquals(Set.of(
                 "id",
-                "username",
+                "institutionalId",
                 "fullName",
                 "email",
                 "department",
